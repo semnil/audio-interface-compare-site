@@ -1,0 +1,16 @@
+{
+  "name": "audio-interface-compare",
+  "version": "1.0.0",
+  "description": "Static site generator for audio interface spec comparison",
+  "type": "module",
+  "scripts": {
+    "build": "node src/build.js",
+    "preview": "npx serve dist -l 3000"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

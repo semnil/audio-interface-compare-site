@@ -1,0 +1,61 @@
+name: Build & Deploy to GitHub Pages
+
+on:
+  # 月初の月曜 10:00 JST (01:00 UTC) に自動実行
+  schedule:
+    - cron: "0 1 1-7 * 1"
+  # 手動トリガー
+  workflow_dispatch:
+  # xlsx 更新時にも自動ビルド
+  push:
+    paths:
+      - "data/audio_interfaces.xlsx"
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - run: npm ci
+
+      # BASE_PATH を渡してビルド
+      # カスタムドメインなら "/" 、repo pages なら "/repo-name/" になる
+      - run: npm run build
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
