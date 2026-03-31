@@ -170,11 +170,11 @@ async function readXlsx() {
 
 function htmlHead(title, extra = "") {
   return `<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[内容精査中] ${escapeHtml(title)}</title>
+<title>[Under Review] ${escapeHtml(title)}</title>
 <link rel="stylesheet" href="${BASE_PATH}style.css">
 ${extra}
 </head>`;
@@ -434,11 +434,11 @@ function indexPage(products, buildDate) {
 
   return `${htmlHead("Audio Interface Comparator")}
 <body>
-<div class="wip-banner">内容精査中</div>
+<div class="wip-banner" data-i18n="wip">Under Review</div>
 <header>
   <div class="container">
     <h1>Audio Interface Comparator</h1>
-    <div class="subtitle">全 ${products.length} 製品 — 2つ選んで詳細スペックを比較</div>
+    <div class="subtitle" data-i18n="subtitle">${products.length} products — Select two to compare specs</div>
   </div>
 </header>
 <main>
@@ -446,32 +446,53 @@ function indexPage(products, buildDate) {
     <div class="selector-section">
       <div class="selector-grid">
         <div class="selector-col" id="col-a">
-          <label>製品 A</label>
-          <input type="text" class="search-input" id="search-a" placeholder="ブランド名・モデル名で検索…" autocomplete="off">
+          <label data-i18n="productA">Product A</label>
+          <input type="text" class="search-input" id="search-a" data-i18n-placeholder="searchPlaceholder" placeholder="Search by brand or model…" autocomplete="off">
           <div class="product-list" id="list-a"></div>
         </div>
         <div class="vs">VS</div>
         <div class="selector-col" id="col-b">
-          <label>製品 B</label>
-          <input type="text" class="search-input" id="search-b" placeholder="ブランド名・モデル名で検索…" autocomplete="off">
+          <label data-i18n="productB">Product B</label>
+          <input type="text" class="search-input" id="search-b" data-i18n-placeholder="searchPlaceholder" placeholder="Search by brand or model…" autocomplete="off">
           <div class="product-list" id="list-b"></div>
         </div>
       </div>
       <div class="compare-btn-wrap">
-        <button class="compare-btn" id="compare-btn" disabled>比較する</button>
+        <button class="compare-btn" id="compare-btn" disabled data-i18n="compareBtn">Compare</button>
       </div>
     </div>
   </div>
 </main>
 <footer>
-  <div class="container">
-    最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様
+  <div class="container" data-i18n="footer">
+    Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs
   </div>
 </footer>
 <script>
 (function(){
   const BASE_PATH = ${JSON.stringify(BASE_PATH)};
   const PRODUCTS = ${productJson};
+  const isJa = /^ja\\b/.test(navigator.language);
+  if (isJa) {
+    document.documentElement.lang = 'ja';
+    var ja = {
+      wip: '内容精査中',
+      subtitle: '全 ' + PRODUCTS.length + ' 製品 — 2つ選んで詳細スペックを比較',
+      productA: '製品 A', productB: '製品 B',
+      searchPlaceholder: 'ブランド名・モデル名で検索…',
+      compareBtn: '比較する',
+      footer: '最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'
+    };
+    document.title = document.title.replace('[Under Review]', '[内容精査中]');
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n');
+      if (ja[key]) el.textContent = ja[key];
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n-placeholder');
+      if (ja[key]) el.placeholder = ja[key];
+    });
+  }
 
   // Lightweight search: split query into tokens, match all tokens against brand+model
   function search(query) {
@@ -488,7 +509,7 @@ function indexPage(products, buildDate) {
   function renderList(containerId, results, side) {
     const el = document.getElementById(containerId);
     if (results.length === 0) {
-      el.innerHTML = '<div style="padding:16px;color:#94a3b8;font-size:0.9rem">該当なし</div>';
+      el.innerHTML = '<div style="padding:16px;color:#94a3b8;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
       return;
     }
     el.innerHTML = results.map(p => {
@@ -578,33 +599,49 @@ function comparePage(a, b, buildDate, totalProducts) {
   }
 
   const title = `${a.displayName} vs ${b.displayName} — Audio Interface Comparator`;
-  const description = `${a.displayName} と ${b.displayName} の詳細仕様を比較。入出力数・オーディオ性能・価格をひと目で確認。`;
+  const descEn = `Compare ${a.displayName} and ${b.displayName} specs side by side. I/O count, audio performance, and price at a glance.`;
+  const descJa = `${a.displayName} と ${b.displayName} の詳細仕様を比較。入出力数・オーディオ性能・価格をひと目で確認。`;
 
-  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(description)}">\n<link rel="canonical" href="${BASE_PATH}compare/${a.slug}-vs-${b.slug}/">`)}
+  function productJsonLd(p) {
+    const obj = { "@type": "Product", name: p.displayName };
+    if (p.brand) obj.brand = { "@type": "Brand", name: p.brand };
+    if (p.url) obj.url = p.url;
+    if (p.price) obj.offers = { "@type": "Offer", price: p.price, priceCurrency: "USD" };
+    return obj;
+  }
+  const jsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title,
+    description: descEn,
+    about: [productJsonLd(a), productJsonLd(b)],
+  });
+
+  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${BASE_PATH}compare/${a.slug}-vs-${b.slug}/">\n<script type="application/ld+json">${jsonLd}</script>`)}
 <body>
-<div class="wip-banner">内容精査中</div>
+<div class="wip-banner" data-i18n="wip">Under Review</div>
 <header>
   <div class="container">
-    <h1><a href="${BASE_PATH}">Audio Interface Comparator</a></h1>
-    <div class="subtitle">${totalProducts} 製品を網羅</div>
+    <h1>${escapeHtml(a.displayName)} vs ${escapeHtml(b.displayName)}</h1>
+    <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleCompare">${totalProducts} products covered</span></div>
   </div>
 </header>
 <main>
   <div class="container">
-    <a class="back-link" href="${BASE_PATH}">← 製品選択に戻る</a>
+    <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
 
     <div class="compare-header">
       <div class="product-card">
         <h2>${escapeHtml(a.displayName)}</h2>
         <div class="cat">${escapeHtml(a.category || "")}</div>
-        ${a.price ? `<div class="price">$${Number(a.price).toLocaleString()}</div>` : '<div class="price no-price">価格情報なし</div>'}
-        ${a.url ? `<a class="ext-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener">公式製品ページ →</a>` : ""}
+        ${a.price ? `<div class="price">$${Number(a.price).toLocaleString()}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
+        ${a.url ? `<a class="ext-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener" data-i18n="productPage">Official product page →</a>` : ""}
       </div>
       <div class="product-card">
         <h2>${escapeHtml(b.displayName)}</h2>
         <div class="cat">${escapeHtml(b.category || "")}</div>
-        ${b.price ? `<div class="price">$${Number(b.price).toLocaleString()}</div>` : '<div class="price no-price">価格情報なし</div>'}
-        ${b.url ? `<a class="ext-link" href="${escapeHtml(b.url)}" target="_blank" rel="noopener">公式製品ページ →</a>` : ""}
+        ${b.price ? `<div class="price">$${Number(b.price).toLocaleString()}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
+        ${b.url ? `<a class="ext-link" href="${escapeHtml(b.url)}" target="_blank" rel="noopener" data-i18n="productPage">Official product page →</a>` : ""}
       </div>
     </div>
 
@@ -612,7 +649,7 @@ function comparePage(a, b, buildDate, totalProducts) {
       <table class="spec-table">
         <thead>
           <tr>
-            <td class="label-col" style="font-weight:700">スペック項目</td>
+            <td class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</td>
             <td class="val-col" style="font-weight:700">${escapeHtml(a.displayName)}</td>
             <td class="val-col" style="font-weight:700">${escapeHtml(b.displayName)}</td>
           </tr>
@@ -625,10 +662,35 @@ ${tableRows}
   </div>
 </main>
 <footer>
-  <div class="container">
-    最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様
+  <div class="container" data-i18n="footer">
+    Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs
   </div>
 </footer>
+<script>
+(function(){
+  if (/^ja\\b/.test(navigator.language)) {
+    document.documentElement.lang = 'ja';
+    var ja = {
+      wip: '内容精査中',
+      subtitleCompare: '${totalProducts} 製品を網羅',
+      backLink: '← 製品選択に戻る',
+      noPrice: '価格情報なし',
+      productPage: '公式製品ページ →',
+      specLabel: 'スペック項目',
+      footer: '最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'
+    };
+    document.title = document.title.replace('[Under Review]', '[内容精査中]');
+    document.querySelectorAll('[data-i18n]').forEach(function(el) {
+      var key = el.getAttribute('data-i18n');
+      if (ja[key]) el.textContent = ja[key];
+    });
+    document.querySelectorAll('[data-i18n-content]').forEach(function(el) {
+      var val = el.getAttribute('data-i18n-val');
+      if (val) el.setAttribute('content', val);
+    });
+  }
+})();
+</script>
 </body>
 </html>`;
 }
