@@ -159,8 +159,6 @@ function htmlHead(title, extra = "") {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>[データ確認中] ${escapeHtml(title)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="${BASE_PATH}style.css">
 ${extra}
 </head>`;
@@ -181,7 +179,7 @@ const CSS = `
 }
 *, *::before, *::after { box-sizing: border-box; }
 body {
-  font-family: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
   margin: 0;
