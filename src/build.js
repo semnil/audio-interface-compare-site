@@ -543,19 +543,19 @@ function comparePage(a, b, buildDate, totalProducts) {
   for (const col of COLUMNS) keyToLabel[col.key] = col.label;
 
   function diffClass(key, valA, valB) {
-    // Numeric higher-is-better keys
     const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "spdifIn",
       "mainOut", "lineOut", "hpOut", "adatOut", "spdifOut",
       "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
-    // Numeric lower-is-better keys  (THD+N percentages – but they are strings with dB)
+    const lowerBetter = ["thdnMic", "thdnOut", "thdnUnknown"];
     // Price: not highlighted (preference depends on buyer)
-    if (!higherBetter.includes(key)) return ["", ""];
+    if (!higherBetter.includes(key) && !lowerBetter.includes(key)) return ["", ""];
     const nA = parseFloat(valA), nB = parseFloat(valB);
     if (isNaN(nA) && isNaN(nB)) return ["", ""];
     if (isNaN(nA)) return ["", " highlight"];
     if (isNaN(nB)) return [" highlight", ""];
     if (nA === nB) return ["", ""];
-    return nA > nB ? [" highlight", ""] : ["", " highlight"];
+    const aWins = lowerBetter.includes(key) ? nA < nB : nA > nB;
+    return aWins ? [" highlight", ""] : ["", " highlight"];
   }
 
   let tableRows = "";
