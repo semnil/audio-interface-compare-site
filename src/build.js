@@ -8,13 +8,10 @@
  * 4. dist/compare/{slugA}-vs-{slugB}/index.html を全組合せ分出力
  */
 
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const XLSX = require("xlsx");
+import ExcelJS from "exceljs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -127,27 +124,35 @@ function displayValue(val) {
 }
 
 // ─── Read xlsx ──────────────────────────────────────────────────────────
-function readXlsx() {
-  const wb = XLSX.readFile(DATA_FILE);
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: null });
+async function readXlsx() {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(DATA_FILE);
+  const ws = wb.worksheets[0];
 
-  // Map JP header names → internal keys
-  const headerMap = {};
-  for (const col of COLUMNS) {
-    headerMap[col.label] = col.key;
-  }
+  // 1行目をヘッダーとして読み取り
+  const headerRow = ws.getRow(1);
+  const headerMap = {}; // colNumber → internal key
+  headerRow.eachCell((cell, colNumber) => {
+    const label = String(cell.value).trim();
+    const col = COLUMNS.find((c) => c.label === label);
+    if (col) headerMap[colNumber] = col.key;
+  });
 
-  return raw.map((row) => {
+  // 2行目以降をデータとして読み取り
+  const products = [];
+  ws.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
     const obj = {};
-    for (const [header, value] of Object.entries(row)) {
-      const key = headerMap[header];
-      if (key) obj[key] = value;
-    }
+    row.eachCell((cell, colNumber) => {
+      const key = headerMap[colNumber];
+      if (key) obj[key] = cell.value;
+    });
+    if (!obj.brand || !obj.model) return;
     obj.slug = slugify(obj.brand, obj.model);
     obj.displayName = `${obj.brand} ${obj.model}`;
-    return obj;
+    products.push(obj);
   });
+  return products;
 }
 
 // ─── Templates ──────────────────────────────────────────────────────────
@@ -608,19 +613,27 @@ ${tableRows}
 }
 
 // ─── Main build ─────────────────────────────────────────────────────────
-function build() {
+async function build() {
   console.time("build");
-  const products = readXlsx();
+  const products = await readXlsx();
   console.log(`Read ${products.length} products`);
 
   const buildDate = new Date().toISOString().split("T")[0];
 
-  // Clean dist (既存ファイルを削除。rmSync が EPERM で失敗する環境ではスキップ)
-  try {
-    if (existsSync(DIST)) rmSync(DIST, { recursive: true });
-  } catch (e) {
-    if (e.code !== "EPERM") throw e;
-    console.warn("Warning: could not clean dist/ (EPERM). Building in-place.");
+  // Clean dist (既存ファイルを削除。OneDrive 等でロックされる場合はリトライ/スキップ)
+  if (existsSync(DIST)) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        rmSync(DIST, { recursive: true, force: true });
+        break;
+      } catch (e) {
+        if (attempt === 2) {
+          console.warn("Warning: could not clean dist/. Building in-place.");
+        } else {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
+      }
+    }
   }
   mkdirSync(DIST, { recursive: true });
 
