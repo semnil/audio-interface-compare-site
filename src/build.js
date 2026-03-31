@@ -758,6 +758,23 @@ async function build() {
   }
 
   console.log(`Generated ${pageCount} comparison pages`);
+
+  // 4. sitemap.xml (canonical pages only: index + alphabetically ordered comparisons)
+  const siteUrl = process.env.SITE_URL || `https://semnil.github.io/audio-interface-compare-site`;
+  let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+  sitemap += `  <url><loc>${siteUrl}${BASE_PATH}</loc><changefreq>monthly</changefreq></url>\n`;
+  for (let i = 0; i < products.length; i++) {
+    for (let j = i + 1; j < products.length; j++) {
+      const [sa, sb] = products[i].slug < products[j].slug
+        ? [products[i].slug, products[j].slug]
+        : [products[j].slug, products[i].slug];
+      sitemap += `  <url><loc>${siteUrl}${BASE_PATH}compare/${sa}-vs-${sb}/</loc></url>\n`;
+    }
+  }
+  sitemap += `</urlset>\n`;
+  writeFileSync(join(DIST, "sitemap.xml"), sitemap);
+  console.log(`Wrote sitemap.xml (${products.length * (products.length - 1) / 2 + 1} URLs)`);
+
   console.timeEnd("build");
 }
 
