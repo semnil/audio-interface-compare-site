@@ -411,11 +411,11 @@ function indexPage(products, buildDate) {
 
   return `${htmlHead("Audio Interface Comparator")}
 <body>
-<div class="wip-banner">データ確認中</div>
+<div class="wip-banner">データ精査中</div>
 <header>
   <div class="container">
     <h1>Audio Interface Comparator</h1>
-    <div class="subtitle">${products.length} 製品を網羅 — 2つ選んで詳細スペックを比較</div>
+    <div class="subtitle">全 ${products.length} 製品 — 2つ選んで詳細スペックを比較</div>
   </div>
 </header>
 <main>
