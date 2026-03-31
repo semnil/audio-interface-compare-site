@@ -288,10 +288,14 @@ main { padding: 32px 0 64px; }
   transition: background 0.1s;
 }
 .product-item:last-child { border-bottom: none; }
-.product-item:hover { background: var(--accent-light); }
+.product-item:hover:not(.disabled) { background: var(--accent-light); }
 .product-item.selected {
   background: var(--accent);
   color: #fff;
+}
+.product-item.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 .product-item .brand { font-weight: 600; }
 .product-item .meta {
@@ -512,22 +516,20 @@ function indexPage(products, buildDate) {
       el.innerHTML = '<div style="padding:16px;color:#94a3b8;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
       return;
     }
+    var otherSide = side === 'a' ? 'b' : 'a';
     el.innerHTML = results.map(p => {
-      const sel = state[side] === p.slug ? ' selected' : '';
-      const priceStr = p.price ? '$' + Number(p.price).toLocaleString() : '';
-      return '<div class="product-item' + sel + '" data-slug="' + p.slug + '">'
+      var sel = state[side] === p.slug ? ' selected' : '';
+      var dis = state[otherSide] === p.slug ? ' disabled' : '';
+      var priceStr = p.price ? '$' + Number(p.price).toLocaleString() : '';
+      return '<div class="product-item' + sel + dis + '" data-slug="' + p.slug + '">'
         + '<span class="brand">' + esc(p.brand) + '</span> ' + esc(p.model)
         + '<div class="meta">' + esc(p.category) + (priceStr ? ' · ' + priceStr : '') + '</div>'
         + '</div>';
     }).join('');
 
-    el.querySelectorAll('.product-item').forEach(item => {
+    el.querySelectorAll('.product-item:not(.disabled)').forEach(item => {
       item.addEventListener('click', () => {
         state[side] = item.dataset.slug;
-        // Re-render both to clear opposite if same slug selected
-        if (state.a && state.a === state.b) {
-          state[side === 'a' ? 'b' : 'a'] = null;
-        }
         renderList('list-a', search(document.getElementById('search-a').value), 'a');
         renderList('list-b', search(document.getElementById('search-b').value), 'b');
         updateBtn();
