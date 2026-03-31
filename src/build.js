@@ -732,6 +732,13 @@ async function build() {
   writeFileSync(join(DIST, "style.css"), CSS);
   console.log("Wrote style.css");
 
+  // CNAME file for custom domain (GitHub Pages)
+  const customDomain = process.env.CUSTOM_DOMAIN;
+  if (customDomain) {
+    writeFileSync(join(DIST, "CNAME"), customDomain);
+    console.log(`Wrote CNAME (${customDomain})`);
+  }
+
   const jsonPath = join(DIST, "products.json");
   writeFileSync(jsonPath, JSON.stringify(products, null, 2));
   console.log("Wrote products.json");
