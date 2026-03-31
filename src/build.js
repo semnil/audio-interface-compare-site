@@ -39,74 +39,74 @@ console.log(`BASE_PATH = "${BASE_PATH}"`);
 
 // ─── Column mapping ────────────────────────────────────────────────────
 const COLUMNS = [
-  { key: "brand",            label: "ブランド" },
-  { key: "model",            label: "モデル名" },
-  { key: "category",         label: "カテゴリ" },
-  { key: "price",            label: "参考価格 (USD)" },
-  { key: "micPre",           label: "マイクプリアンプ数" },
-  { key: "comboIn",          label: "Combo入力 (XLR/TRS)" },
-  { key: "lineIn",           label: "ライン入力" },
-  { key: "hiZ",              label: "Hi-Z入力" },
-  { key: "adatIn",           label: "ADAT入力 (ch@48kHz)" },
-  { key: "spdifIn",          label: "S/PDIF入力" },
-  { key: "mainOut",          label: "アナログメイン出力" },
-  { key: "lineOut",          label: "アナログライン出力" },
-  { key: "hpOut",            label: "ヘッドフォン出力" },
-  { key: "adatOut",          label: "ADAT出力 (ch@48kHz)" },
-  { key: "spdifOut",         label: "S/PDIF出力" },
-  { key: "phantom",          label: "ファンタム電源 (48V)" },
-  { key: "sampleRate",       label: "最大サンプリングレート (kHz)" },
-  { key: "bitDepth",         label: "最大ビット深度 (bit)" },
-  { key: "usb",              label: "USB規格" },
-  { key: "midi",             label: "MIDI I/O" },
-  { key: "loopback",         label: "ループバック" },
-  { key: "dsp",              label: "DSPエフェクト" },
-  { key: "directMon",        label: "ダイレクトモニタリング" },
-  { key: "gainRange",        label: "プリアンプゲインレンジ (dB)" },
-  { key: "drIn",             label: "DR 入力 (dB, A-weighted)" },
-  { key: "drOut",            label: "DR 出力 (dB, A-weighted)" },
-  { key: "drUnknown",        label: "DR (条件不明/設計値)" },
-  { key: "thdnMic",          label: "THD+N マイク入力 (%, 1kHz)" },
-  { key: "thdnOut",          label: "THD+N 出力 (%, 1kHz)" },
-  { key: "thdnUnknown",      label: "THD+N (条件不明)" },
-  { key: "einA",             label: "EIN (dBu, A-weighted)" },
-  { key: "einUnknown",       label: "EIN (dBu, 条件不明)" },
-  { key: "os",               label: "対応OS" },
-  { key: "bundle",           label: "バンドルソフト" },
-  { key: "notes",            label: "特記事項" },
-  { key: "url",              label: "製品ページURL" },
+  { key: "brand",            label: "Brand",                       labelJa: "ブランド" },
+  { key: "model",            label: "Model",                       labelJa: "モデル名" },
+  { key: "category",         label: "Category",                    labelJa: "カテゴリ" },
+  { key: "price",            label: "Price (USD)",                  labelJa: "参考価格 (USD)" },
+  { key: "micPre",           label: "Mic Preamps",                  labelJa: "マイクプリアンプ数" },
+  { key: "comboIn",          label: "Combo In (XLR/TRS)",           labelJa: "Combo入力 (XLR/TRS)" },
+  { key: "lineIn",           label: "Line In",                      labelJa: "ライン入力" },
+  { key: "hiZ",              label: "Hi-Z In",                      labelJa: "Hi-Z入力" },
+  { key: "adatIn",           label: "ADAT In (ch@48kHz)",           labelJa: "ADAT入力 (ch@48kHz)" },
+  { key: "spdifIn",          label: "S/PDIF In",                    labelJa: "S/PDIF入力" },
+  { key: "mainOut",          label: "Main Out",                     labelJa: "メイン出力" },
+  { key: "lineOut",          label: "Line Out",                     labelJa: "ライン出力" },
+  { key: "hpOut",            label: "Headphone Out",                labelJa: "ヘッドフォン出力" },
+  { key: "adatOut",          label: "ADAT Out (ch@48kHz)",          labelJa: "ADAT出力 (ch@48kHz)" },
+  { key: "spdifOut",         label: "S/PDIF Out",                   labelJa: "S/PDIF出力" },
+  { key: "phantom",          label: "Phantom Power (48V)",          labelJa: "ファンタム電源 (48V)" },
+  { key: "sampleRate",       label: "Max Sample Rate (kHz)",        labelJa: "最大サンプリングレート (kHz)" },
+  { key: "bitDepth",         label: "Max Bit Depth (bit)",          labelJa: "最大ビット深度 (bit)" },
+  { key: "usb",              label: "Connection",                   labelJa: "接続規格" },
+  { key: "midi",             label: "MIDI I/O",                     labelJa: "MIDI I/O" },
+  { key: "loopback",         label: "Loopback",                     labelJa: "ループバック" },
+  { key: "dsp",              label: "DSP Effects",                  labelJa: "DSPエフェクト" },
+  { key: "directMon",        label: "Direct Monitoring",            labelJa: "ダイレクトモニタリング" },
+  { key: "gainRange",        label: "Preamp Gain Range (dB)",       labelJa: "プリアンプゲインレンジ (dB)" },
+  { key: "drIn",             label: "DR Input (dB, A-weighted)",    labelJa: "DR 入力 (dB, A-weighted)" },
+  { key: "drOut",            label: "DR Output (dB, A-weighted)",   labelJa: "DR 出力 (dB, A-weighted)" },
+  { key: "drUnknown",        label: "DR (Unspecified/Design)",      labelJa: "DR (条件不明/設計値)" },
+  { key: "thdnMic",          label: "THD+N Mic In (%, 1kHz)",       labelJa: "THD+N マイク入力 (%, 1kHz)" },
+  { key: "thdnOut",          label: "THD+N Out (%, 1kHz)",          labelJa: "THD+N 出力 (%, 1kHz)" },
+  { key: "thdnUnknown",      label: "THD+N (Unspecified)",          labelJa: "THD+N (条件不明)" },
+  { key: "einA",             label: "EIN (dBu, A-weighted)",        labelJa: "EIN (dBu, A-weighted)" },
+  { key: "einUnknown",       label: "EIN (dBu, Unspecified)",       labelJa: "EIN (dBu, 条件不明)" },
+  { key: "os",               label: "OS Support",                   labelJa: "対応OS" },
+  { key: "bundle",           label: "Bundled Software",             labelJa: "バンドルソフト" },
+  { key: "notes",            label: "Notes",                        labelJa: "特記事項" },
+  { key: "url",              label: "Product Page URL",             labelJa: "製品ページURL" },
 ];
 
 // Spec groups for comparison page layout
 const SPEC_GROUPS = [
   {
     id: "basic",
-    title: "基本情報",
+    title: "General",       titleJa: "基本情報",
     keys: ["category", "price", "os", "usb"],
   },
   {
     id: "input",
-    title: "入力",
+    title: "Inputs",        titleJa: "入力",
     keys: ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "spdifIn"],
   },
   {
     id: "output",
-    title: "出力",
+    title: "Outputs",       titleJa: "出力",
     keys: ["mainOut", "lineOut", "hpOut", "adatOut", "spdifOut"],
   },
   {
     id: "features",
-    title: "機能",
+    title: "Features",      titleJa: "機能",
     keys: ["phantom", "midi", "loopback", "dsp", "directMon"],
   },
   {
     id: "performance",
-    title: "オーディオ性能",
+    title: "Audio Performance", titleJa: "オーディオ性能",
     keys: ["sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown", "thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown"],
   },
   {
     id: "software",
-    title: "ソフトウェア・その他",
+    title: "Software & Other", titleJa: "ソフトウェア・その他",
     keys: ["bundle", "notes"],
   },
 ];
@@ -566,7 +566,11 @@ function indexPage(products, buildDate) {
 
 function comparePage(a, b, buildDate, totalProducts) {
   const keyToLabel = {};
-  for (const col of COLUMNS) keyToLabel[col.key] = col.label;
+  const keyToLabelJa = {};
+  for (const col of COLUMNS) {
+    keyToLabel[col.key] = col.label;
+    keyToLabelJa[col.key] = col.labelJa;
+  }
 
   function diffClass(key, valA, valB) {
     const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "spdifIn",
@@ -586,12 +590,13 @@ function comparePage(a, b, buildDate, totalProducts) {
 
   let tableRows = "";
   for (const group of SPEC_GROUPS) {
-    tableRows += `<tr class="group-header" id="${group.id}"><td colspan="3"><a href="#${group.id}">${escapeHtml(group.title)}</a></td></tr>\n`;
+    tableRows += `<tr class="group-header" id="${group.id}"><td colspan="3"><a href="#${group.id}" data-i18n-label="${escapeHtml(group.titleJa)}">${escapeHtml(group.title)}</a></td></tr>\n`;
     for (const key of group.keys) {
       const label = keyToLabel[key] || key;
+      const labelJa = keyToLabelJa[key] || label;
       const [clsA, clsB] = diffClass(key, a[key], b[key]);
       tableRows += `<tr>
-  <td class="label-col">${escapeHtml(label)}</td>
+  <td class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</td>
   <td class="val-col${clsA}">${displayValue(a[key])}</td>
   <td class="val-col${clsB}">${displayValue(b[key])}</td>
 </tr>\n`;
@@ -687,6 +692,9 @@ ${tableRows}
     document.querySelectorAll('[data-i18n-content]').forEach(function(el) {
       var val = el.getAttribute('data-i18n-val');
       if (val) el.setAttribute('content', val);
+    });
+    document.querySelectorAll('[data-i18n-label]').forEach(function(el) {
+      el.textContent = el.getAttribute('data-i18n-label');
     });
   }
 })();
