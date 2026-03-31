@@ -11,7 +11,12 @@
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setPriority, constants } from "node:os";
 import ExcelJS from "exceljs";
+
+// ビルドプロセスの CPU 優先度を下げ、他のアプリケーションへの影響を軽減
+try { setPriority(constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
+
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
