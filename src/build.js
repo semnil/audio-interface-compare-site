@@ -75,26 +75,32 @@ const COLUMNS = [
 // Spec groups for comparison page layout
 const SPEC_GROUPS = [
   {
+    id: "basic",
     title: "基本情報",
     keys: ["category", "price", "os", "usb"],
   },
   {
+    id: "input",
     title: "入力",
     keys: ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "spdifIn"],
   },
   {
+    id: "output",
     title: "出力",
     keys: ["mainOut", "lineOut", "hpOut", "adatOut", "spdifOut"],
   },
   {
+    id: "features",
     title: "機能",
     keys: ["phantom", "midi", "loopback", "dsp", "directMon"],
   },
   {
+    id: "performance",
     title: "オーディオ性能",
     keys: ["sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown", "thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown"],
   },
   {
+    id: "software",
     title: "ソフトウェア・その他",
     keys: ["bundle", "notes"],
   },
@@ -360,6 +366,13 @@ main { padding: 32px 0 64px; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+.spec-table .group-header a {
+  color: inherit;
+  text-decoration: none;
+}
+.spec-table .group-header a:hover {
+  text-decoration: underline;
+}
 .spec-table td {
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
@@ -538,13 +551,16 @@ function comparePage(a, b, buildDate, totalProducts) {
     // Price: not highlighted (preference depends on buyer)
     if (!higherBetter.includes(key)) return ["", ""];
     const nA = parseFloat(valA), nB = parseFloat(valB);
-    if (isNaN(nA) || isNaN(nB) || nA === nB) return ["", ""];
+    if (isNaN(nA) && isNaN(nB)) return ["", ""];
+    if (isNaN(nA)) return ["", " highlight"];
+    if (isNaN(nB)) return [" highlight", ""];
+    if (nA === nB) return ["", ""];
     return nA > nB ? [" highlight", ""] : ["", " highlight"];
   }
 
   let tableRows = "";
   for (const group of SPEC_GROUPS) {
-    tableRows += `<tr class="group-header"><td colspan="3">${escapeHtml(group.title)}</td></tr>\n`;
+    tableRows += `<tr class="group-header" id="${group.id}"><td colspan="3"><a href="#${group.id}">${escapeHtml(group.title)}</a></td></tr>\n`;
     for (const key of group.keys) {
       const label = keyToLabel[key] || key;
       const [clsA, clsB] = diffClass(key, a[key], b[key]);
