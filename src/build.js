@@ -169,7 +169,7 @@ function htmlHead(title, extra = "") {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[データ確認中] ${escapeHtml(title)}</title>
+<title>[内容精査中] ${escapeHtml(title)}</title>
 <link rel="stylesheet" href="${BASE_PATH}style.css">
 ${extra}
 </head>`;
@@ -429,7 +429,7 @@ function indexPage(products, buildDate) {
 
   return `${htmlHead("Audio Interface Comparator")}
 <body>
-<div class="wip-banner">データ精査中</div>
+<div class="wip-banner">内容精査中</div>
 <header>
   <div class="container">
     <h1>Audio Interface Comparator</h1>
@@ -577,7 +577,7 @@ function comparePage(a, b, buildDate, totalProducts) {
 
   return `${htmlHead(title, `<meta name="description" content="${escapeHtml(description)}">\n<link rel="canonical" href="${BASE_PATH}compare/${a.slug}-vs-${b.slug}/">`)}
 <body>
-<div class="wip-banner">データ確認中</div>
+<div class="wip-banner">内容精査中</div>
 <header>
   <div class="container">
     <h1><a href="${BASE_PATH}">Audio Interface Comparator</a></h1>
