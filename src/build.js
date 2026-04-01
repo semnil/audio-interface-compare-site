@@ -761,6 +761,10 @@ async function build() {
         );
         pageCount++;
       }
+      if (pageCount % 100 === 0) {
+        // 100 ページごとに CPU を明け渡し、他プロセスの応答性を確保
+        await new Promise((r) => setTimeout(r, 0));
+      }
       if (pageCount % 4000 === 0) {
         console.log(`  ${pageCount} pages generated…`);
       }
