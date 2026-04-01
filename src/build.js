@@ -233,6 +233,14 @@ main { padding: 32px 0 64px; }
   font-weight: 700;
   letter-spacing: 0.1em;
 }
+.ai-disclaimer {
+  background: #fef3c7;
+  color: #92400e;
+  text-align: center;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
 
 /* ─ Index page ─ */
 .selector-section {
@@ -439,6 +447,7 @@ function indexPage(products, buildDate) {
   return `${htmlHead("Audio Interface Comparator")}
 <body>
 <div class="wip-banner" data-i18n="wip">Under Review</div>
+<div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
   <div class="container">
     <h1>Audio Interface Comparator</h1>
@@ -481,6 +490,7 @@ function indexPage(products, buildDate) {
     document.documentElement.lang = 'ja';
     var ja = {
       wip: '内容精査中',
+      aiDisclaimer: 'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',
       subtitle: '全 ' + PRODUCTS.length + ' 製品 — 2つ選んで詳細スペックを比較',
       productA: '製品 A', productB: '製品 B',
       searchPlaceholder: 'ブランド名・モデル名で検索…',
@@ -627,6 +637,7 @@ function comparePage(a, b, buildDate, totalProducts) {
   return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${BASE_PATH}compare/${a.slug}-vs-${b.slug}/">\n<script type="application/ld+json">${jsonLd}</script>`)}
 <body>
 <div class="wip-banner" data-i18n="wip">Under Review</div>
+<div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
   <div class="container">
     <h1>${escapeHtml(a.displayName)} vs ${escapeHtml(b.displayName)}</h1>
@@ -679,6 +690,7 @@ ${tableRows}
     document.documentElement.lang = 'ja';
     var ja = {
       wip: '内容精査中',
+      aiDisclaimer: 'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',
       subtitleCompare: '${totalProducts} 製品を網羅',
       backLink: '← 製品選択に戻る',
       noPrice: '価格情報なし',
