@@ -134,6 +134,14 @@ function displayValue(val) {
   return escapeHtml(String(val));
 }
 
+function minifyHtml(html) {
+  return html
+    .replace(/\n\s*/g, "\n")       // collapse indentation
+    .replace(/>\s*\n\s*</g, "><")  // remove whitespace between tags
+    .replace(/\n+/g, "\n")         // collapse multiple newlines
+    .trim();
+}
+
 // ─── Read xlsx ──────────────────────────────────────────────────────────
 async function readXlsx() {
   const wb = new ExcelJS.Workbook();
@@ -179,6 +187,19 @@ function htmlHead(title, extra = "") {
 ${extra}
 </head>`;
 }
+
+// Shared i18n script (written to dist/i18n.js)
+// PAGE_JA is expected to be set by each page before loading this script
+const I18N_JS = `(function(){
+if(!/^ja\\b/.test(navigator.language))return;
+document.documentElement.lang='ja';
+var ja=Object.assign({wip:'内容精査中',aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
+document.title=document.title.replace('[Under Review]','[内容精査中]');
+document.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');if(ja[k])el.textContent=ja[k];});
+document.querySelectorAll('[data-i18n-content]').forEach(function(el){var v=el.getAttribute('data-i18n-val');if(v)el.setAttribute('content',v);});
+document.querySelectorAll('[data-i18n-label]').forEach(function(el){el.textContent=el.getAttribute('data-i18n-label');});
+document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){var k=el.getAttribute('data-i18n-placeholder');if(ja[k])el.placeholder=ja[k];});
+})();`;
 
 const CSS = `
 :root {
@@ -486,27 +507,6 @@ function indexPage(products, buildDate) {
   const BASE_PATH = ${JSON.stringify(BASE_PATH)};
   const PRODUCTS = ${productJson};
   const isJa = /^ja\\b/.test(navigator.language);
-  if (isJa) {
-    document.documentElement.lang = 'ja';
-    var ja = {
-      wip: '内容精査中',
-      aiDisclaimer: 'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',
-      subtitle: '全 ' + PRODUCTS.length + ' 製品 — 2つ選んで詳細スペックを比較',
-      productA: '製品 A', productB: '製品 B',
-      searchPlaceholder: 'ブランド名・モデル名で検索…',
-      compareBtn: '比較する',
-      footer: '最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'
-    };
-    document.title = document.title.replace('[Under Review]', '[内容精査中]');
-    document.querySelectorAll('[data-i18n]').forEach(function(el) {
-      var key = el.getAttribute('data-i18n');
-      if (ja[key]) el.textContent = ja[key];
-    });
-    document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el) {
-      var key = el.getAttribute('data-i18n-placeholder');
-      if (ja[key]) el.placeholder = ja[key];
-    });
-  }
 
   // Lightweight search: split query into tokens, match all tokens against brand+model
   function search(query) {
@@ -572,6 +572,8 @@ function indexPage(products, buildDate) {
   });
 })();
 </script>
+<script>var PAGE_JA={subtitle:'全 ${products.length} 製品 — 2つ選んで詳細スペックを比較',productA:'製品 A',productB:'製品 B',searchPlaceholder:'ブランド名・モデル名で検索…',compareBtn:'比較する',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
+<script src="${BASE_PATH}i18n.js"></script>
 </body>
 </html>`;
 }
@@ -622,15 +624,12 @@ function comparePage(a, b, buildDate, totalProducts) {
   function productJsonLd(p) {
     const obj = { "@type": "Product", name: p.displayName };
     if (p.brand) obj.brand = { "@type": "Brand", name: p.brand };
-    if (p.url) obj.url = p.url;
-    if (p.price) obj.offers = { "@type": "Offer", price: p.price, priceCurrency: "USD" };
     return obj;
   }
   const jsonLd = JSON.stringify({
     "@context": "https://schema.org",
     "@type": "WebPage",
     name: title,
-    description: descEn,
     about: [productJsonLd(a), productJsonLd(b)],
   });
 
@@ -684,35 +683,8 @@ ${tableRows}
     Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs
   </div>
 </footer>
-<script>
-(function(){
-  if (/^ja\\b/.test(navigator.language)) {
-    document.documentElement.lang = 'ja';
-    var ja = {
-      wip: '内容精査中',
-      aiDisclaimer: 'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',
-      subtitleCompare: '${totalProducts} 製品を網羅',
-      backLink: '← 製品選択に戻る',
-      noPrice: '価格情報なし',
-      productPage: '公式製品ページ →',
-      specLabel: 'スペック項目',
-      footer: '最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'
-    };
-    document.title = document.title.replace('[Under Review]', '[内容精査中]');
-    document.querySelectorAll('[data-i18n]').forEach(function(el) {
-      var key = el.getAttribute('data-i18n');
-      if (ja[key]) el.textContent = ja[key];
-    });
-    document.querySelectorAll('[data-i18n-content]').forEach(function(el) {
-      var val = el.getAttribute('data-i18n-val');
-      if (val) el.setAttribute('content', val);
-    });
-    document.querySelectorAll('[data-i18n-label]').forEach(function(el) {
-      el.textContent = el.getAttribute('data-i18n-label');
-    });
-  }
-})();
-</script>
+<script>var PAGE_JA={subtitleCompare:'${totalProducts} 製品を網羅',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
+<script src="${BASE_PATH}i18n.js"></script>
 </body>
 </html>`;
 }
@@ -746,6 +718,9 @@ async function build() {
   writeFileSync(join(DIST, "style.css"), CSS);
   console.log("Wrote style.css");
 
+  writeFileSync(join(DIST, "i18n.js"), I18N_JS);
+  console.log("Wrote i18n.js");
+
   // CNAME file for custom domain (GitHub Pages)
   const customDomain = process.env.CUSTOM_DOMAIN;
   if (customDomain) {
@@ -758,7 +733,7 @@ async function build() {
   console.log("Wrote products.json");
 
   // 2. Index page
-  writeFileSync(join(DIST, "index.html"), indexPage(products, buildDate));
+  writeFileSync(join(DIST, "index.html"), minifyHtml(indexPage(products, buildDate)));
   console.log("Wrote index.html");
 
   // 3. Comparison pages (all C(n,2) combinations)
@@ -776,7 +751,7 @@ async function build() {
         mkdirSync(dir, { recursive: true });
         writeFileSync(
           join(dir, "index.html"),
-          comparePage(left, right, buildDate, products.length)
+          minifyHtml(comparePage(left, right, buildDate, products.length))
         );
         pageCount++;
       }
