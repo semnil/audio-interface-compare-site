@@ -148,6 +148,154 @@ function minifyHtml(html) {
     .trim();
 }
 
+// ─── Favicon ICO generation ─────────────────────────────────────────────
+function generateFaviconIco() {
+  // Rasterize the D4 design at 32x32 and 16x16, pack into ICO (BMP format)
+  function hexToRgb(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function lerpColor(c1, c2, t) {
+    return [lerp(c1[0], c2[0], t), lerp(c1[1], c2[1], t), lerp(c1[2], c2[2], t)];
+  }
+
+  const bgTL = hexToRgb("#1e1b4b");
+  const bgBR = hexToRgb("#0f172a");
+  const bars = [
+    { x: 10, y: 16, w: 10, h: 32, r: 3, color: hexToRgb("#3b82f6") },
+    { x: 24, y: 24, w: 10, h: 24, r: 3, color: hexToRgb("#818cf8") },
+    { x: 38, y: 12, w: 10, h: 36, r: 3, color: hexToRgb("#a855f7") },
+  ];
+
+  function rasterize(size) {
+    const s = size / 64;
+    const pixels = Buffer.alloc(size * size * 4);
+    const bgRx = 14 * s;
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const i = (y * size + x) * 4;
+        // Gradient background
+        const t = (x + y) / (2 * (size - 1));
+        let [r, g, b] = lerpColor(bgTL, bgBR, t);
+        let a = 255;
+
+        // Rounded rect mask for background
+        const inBg = isInRoundedRect(x, y, 0, 0, size, size, bgRx);
+        if (!inBg) { a = 0; r = g = b = 0; }
+
+        // Draw bars
+        if (inBg) {
+          for (const bar of bars) {
+            const bx = bar.x * s, by = bar.y * s;
+            const bw = bar.w * s, bh = bar.h * s;
+            const br = bar.r * s;
+            if (isInRoundedRect(x, y, bx, by, bw, bh, br)) {
+              [r, g, b] = bar.color;
+            }
+          }
+        }
+
+        pixels[i]     = Math.round(r);
+        pixels[i + 1] = Math.round(g);
+        pixels[i + 2] = Math.round(b);
+        pixels[i + 3] = a;
+      }
+    }
+    return pixels;
+  }
+
+  function isInRoundedRect(px, py, rx, ry, rw, rh, rr) {
+    if (px < rx || px >= rx + rw || py < ry || py >= ry + rh) return false;
+    // Check corners
+    const corners = [
+      [rx + rr, ry + rr],
+      [rx + rw - rr, ry + rr],
+      [rx + rr, ry + rh - rr],
+      [rx + rw - rr, ry + rh - rr],
+    ];
+    for (const [cx, cy] of corners) {
+      const inCornerZone =
+        (px < rx + rr || px >= rx + rw - rr) &&
+        (py < ry + rr || py >= ry + rh - rr);
+      if (inCornerZone) {
+        const dx = px - cx, dy = py - cy;
+        if (dx * dx + dy * dy > rr * rr) return false;
+      }
+    }
+    return true;
+  }
+
+  function makeBmpEntry(size, pixels) {
+    // BITMAPINFOHEADER (40 bytes) + pixel data (bottom-up BGRA) + AND mask
+    const rowBytes = size * 4;
+    const andRowBytes = Math.ceil(size / 32) * 4;
+    const andSize = andRowBytes * size;
+    const dataSize = 40 + rowBytes * size + andSize;
+    const buf = Buffer.alloc(dataSize);
+
+    // BITMAPINFOHEADER
+    buf.writeUInt32LE(40, 0);             // biSize
+    buf.writeInt32LE(size, 4);            // biWidth
+    buf.writeInt32LE(size * 2, 8);        // biHeight (doubled for ICO)
+    buf.writeUInt16LE(1, 12);             // biPlanes
+    buf.writeUInt16LE(32, 14);            // biBitCount
+    buf.writeUInt32LE(0, 16);             // biCompression
+    buf.writeUInt32LE(rowBytes * size + andSize, 20); // biSizeImage
+
+    // Pixel data (bottom-up, BGRA)
+    for (let y = 0; y < size; y++) {
+      const srcRow = (size - 1 - y) * size * 4;
+      const dstRow = 40 + y * rowBytes;
+      for (let x = 0; x < size; x++) {
+        const si = srcRow + x * 4;
+        const di = dstRow + x * 4;
+        buf[di]     = pixels[si + 2]; // B
+        buf[di + 1] = pixels[si + 1]; // G
+        buf[di + 2] = pixels[si];     // R
+        buf[di + 3] = pixels[si + 3]; // A
+      }
+    }
+
+    // AND mask (all 0 = fully opaque, alpha channel handles transparency)
+    // Already zero-filled by Buffer.alloc
+
+    return buf;
+  }
+
+  const sizes = [16, 32, 48];
+  const entries = sizes.map(sz => ({ size: sz, data: makeBmpEntry(sz, rasterize(sz)) }));
+
+  // ICO file: header + directory + image data
+  const headerSize = 6;
+  const dirSize = 16 * entries.length;
+  let offset = headerSize + dirSize;
+  const parts = [Buffer.alloc(headerSize + dirSize)];
+  const header = parts[0];
+
+  // ICONDIR
+  header.writeUInt16LE(0, 0);               // reserved
+  header.writeUInt16LE(1, 2);               // type (1=ICO)
+  header.writeUInt16LE(entries.length, 4);  // count
+
+  entries.forEach((entry, i) => {
+    const pos = 6 + i * 16;
+    header[pos]     = entry.size < 256 ? entry.size : 0; // width
+    header[pos + 1] = entry.size < 256 ? entry.size : 0; // height
+    header[pos + 2] = 0;   // color palette
+    header[pos + 3] = 0;   // reserved
+    header.writeUInt16LE(1, pos + 4);   // color planes
+    header.writeUInt16LE(32, pos + 6);  // bits per pixel
+    header.writeUInt32LE(entry.data.length, pos + 8);  // data size
+    header.writeUInt32LE(offset, pos + 12);            // data offset
+    offset += entry.data.length;
+    parts.push(entry.data);
+  });
+
+  return Buffer.concat(parts);
+}
+
 // ─── Read xlsx ──────────────────────────────────────────────────────────
 async function readXlsx() {
   const wb = new ExcelJS.Workbook();
@@ -191,6 +339,7 @@ function htmlHead(title, extra = "") {
 <title>${escapeHtml(title)}</title>
 <meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />
 <link rel="icon" href="${BASE_PATH}favicon.svg" type="image/svg+xml">
+<link rel="icon" href="${BASE_PATH}favicon.ico" sizes="48x48">
 <link rel="stylesheet" href="${BASE_PATH}style.css">
 ${extra}
 </head>`;
@@ -718,7 +867,8 @@ async function build() {
 
   const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e1b4b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#g)"/><rect x="10" y="16" width="10" height="32" rx="3" fill="#3b82f6"/><rect x="24" y="24" width="10" height="24" rx="3" fill="#818cf8"/><rect x="38" y="12" width="10" height="36" rx="3" fill="#a855f7"/></svg>`;
   writeFileSync(join(DIST, "favicon.svg"), FAVICON_SVG);
-  console.log("Wrote favicon.svg");
+  writeFileSync(join(DIST, "favicon.ico"), generateFaviconIco());
+  console.log("Wrote favicon.svg, favicon.ico");
 
   // CNAME file for custom domain (GitHub Pages)
   const customDomain = process.env.CUSTOM_DOMAIN;
