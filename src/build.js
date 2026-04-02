@@ -735,7 +735,7 @@ function comparePage(a, b, buildDate, totalProducts) {
     const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
       "mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
       "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
-    const lowerBetter = ["thdnMic", "thdnOut", "thdnUnknown"];
+    const lowerBetter = ["thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown"];
     // Price: not highlighted (preference depends on buyer)
     if (!higherBetter.includes(key) && !lowerBetter.includes(key)) return ["", ""];
     const nA = parseFloat(valA), nB = parseFloat(valB);
