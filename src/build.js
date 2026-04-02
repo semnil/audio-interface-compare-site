@@ -188,7 +188,8 @@ function htmlHead(title, extra = "") {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[Under Review] ${escapeHtml(title)}</title>
+<title>${escapeHtml(title)}</title>
+<meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />
 <link rel="stylesheet" href="${BASE_PATH}style.css">
 ${extra}
 </head>`;
@@ -199,8 +200,7 @@ ${extra}
 const I18N_JS = `(function(){
 if(!/^ja\\b/.test(navigator.language))return;
 document.documentElement.lang='ja';
-var ja=Object.assign({wip:'内容精査中',aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
-document.title=document.title.replace('[Under Review]','[内容精査中]');
+var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
 document.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');if(ja[k])el.textContent=ja[k];});
 document.querySelectorAll('[data-i18n-content]').forEach(function(el){var v=el.getAttribute('data-i18n-val');if(v)el.setAttribute('content',v);});
 document.querySelectorAll('[data-i18n-label]').forEach(function(el){el.textContent=el.getAttribute('data-i18n-label');});
@@ -250,16 +250,6 @@ header .subtitle {
 }
 main { padding: 32px 0 64px; }
 
-/* ─ WIP banner ─ */
-.wip-banner {
-  background: #dc2626;
-  color: #fff;
-  text-align: center;
-  padding: 10px 16px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
 .ai-disclaimer {
   background: #fef3c7;
   color: #92400e;
@@ -473,7 +463,6 @@ function indexPage(products, buildDate) {
 
   return `${htmlHead("Audio Interface Comparator")}
 <body>
-<div class="wip-banner" data-i18n="wip">Under Review</div>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
   <div class="container">
@@ -641,7 +630,6 @@ function comparePage(a, b, buildDate, totalProducts) {
 
   return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${BASE_PATH}compare/${a.slug}-vs-${b.slug}/">\n<script type="application/ld+json">${jsonLd}</script>`)}
 <body>
-<div class="wip-banner" data-i18n="wip">Under Review</div>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
   <div class="container">
