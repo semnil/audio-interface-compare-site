@@ -190,6 +190,7 @@ function htmlHead(title, extra = "") {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />
+<link rel="icon" href="${BASE_PATH}favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="${BASE_PATH}style.css">
 ${extra}
 </head>`;
@@ -714,6 +715,10 @@ async function build() {
 
   writeFileSync(join(DIST, "i18n.js"), I18N_JS);
   console.log("Wrote i18n.js");
+
+  const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1e1b4b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#g)"/><rect x="10" y="16" width="10" height="32" rx="3" fill="#3b82f6"/><rect x="24" y="24" width="10" height="24" rx="3" fill="#818cf8"/><rect x="38" y="12" width="10" height="36" rx="3" fill="#a855f7"/></svg>`;
+  writeFileSync(join(DIST, "favicon.svg"), FAVICON_SVG);
+  console.log("Wrote favicon.svg");
 
   // CNAME file for custom domain (GitHub Pages)
   const customDomain = process.env.CUSTOM_DOMAIN;
