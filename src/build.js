@@ -350,7 +350,7 @@ ${extra}
 const I18N_JS = `(function(){
 if(!/^ja\\b/.test(navigator.language))return;
 document.documentElement.lang='ja';
-var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
+var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
 document.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');if(ja[k])el.textContent=ja[k];});
 document.querySelectorAll('[data-i18n-content]').forEach(function(el){var v=el.getAttribute('data-i18n-val');if(v)el.setAttribute('content',v);});
 document.querySelectorAll('[data-i18n-label]').forEach(function(el){el.textContent=el.getAttribute('data-i18n-label');});
@@ -589,6 +589,8 @@ footer {
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
+footer a { color: var(--text-secondary); }
+footer a:hover { color: var(--accent); }
 
 @media (max-width: 768px) {
   .selector-grid { grid-template-columns: 1fr; }
@@ -643,8 +645,9 @@ function indexPage(products, buildDate) {
   </div>
 </main>
 <footer>
-  <div class="container" data-i18n="footer">
-    Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs
+  <div class="container">
+    <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
+    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener" data-i18n="reportIssue">Report an issue</a>
   </div>
 </footer>
 <script>
@@ -823,8 +826,9 @@ ${tableRows}
   </div>
 </main>
 <footer>
-  <div class="container" data-i18n="footer">
-    Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs
+  <div class="container">
+    <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
+    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener" data-i18n="reportIssue">Report an issue</a>
   </div>
 </footer>
 <script>var PAGE_JA={subtitleCompare:'${totalProducts} 製品を網羅',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
