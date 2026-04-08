@@ -334,15 +334,20 @@ async function readXlsx() {
 // ─── Templates ──────────────────────────────────────────────────────────
 
 function htmlHead(title, extra = "", ogp = null) {
-  const ogpTags = ogp ? `
+  const ogpTags = ogp ? (() => {
+    const t = escapeHtml(ogp.title || title);
+    const d = escapeHtml(ogp.description || "");
+    const u = escapeHtml(ogp.url || SITE_URL + BASE_PATH);
+    return `
 <meta property="og:type" content="${ogp.type || "website"}">
-<meta property="og:title" content="${escapeHtml(ogp.title || title)}">
-<meta property="og:description" content="${escapeHtml(ogp.description || "")}">
-<meta property="og:url" content="${escapeHtml(ogp.url || SITE_URL + BASE_PATH)}">
+<meta property="og:title" content="${t}">
+<meta property="og:description" content="${d}">
+<meta property="og:url" content="${u}">
 <meta property="og:site_name" content="Audio Interface Comparator">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="${escapeHtml(ogp.title || title)}">
-<meta name="twitter:description" content="${escapeHtml(ogp.description || "")}">` : "";
+<meta name="twitter:title" content="${t}">
+<meta name="twitter:description" content="${d}">`;
+  })() : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -799,7 +804,9 @@ function comparePage(a, b, buildDate, totalProducts) {
     about: [productJsonLd(a), productJsonLd(b)],
   });
 
-  const compareUrl = `${SITE_URL}${BASE_PATH}compare/${a.slug}-vs-${b.slug}/`;
+  // canonical / og:url は正規順 (アルファベット順) に統一し、逆順ページも同一 URL を指す
+  const [canonSlugA, canonSlugB] = a.slug < b.slug ? [a.slug, b.slug] : [b.slug, a.slug];
+  const compareUrl = `${SITE_URL}${BASE_PATH}compare/${canonSlugA}-vs-${canonSlugB}/`;
   const ogp = {
     type: "article",
     title: `${a.displayName} vs ${b.displayName}`,

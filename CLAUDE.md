@@ -75,8 +75,9 @@ xlsx のヘッダー名が変わるとビルドが壊れるため、将来的に
 
 ### 4. SEO / OGP
 - meta description は比較ページのみ設定済み
-- OGP (og:title, og:description, og:image) 未実装
-- sitemap.xml 未生成 (21,736 URL のサイトマップが必要)
+- OGP (og:type, og:title, og:description, og:url, og:site_name) + Twitter Card 実装済み
+- og:image 未実装 (OGP 画像の自動生成は未対応)
+- sitemap.xml 実装済み (正規順の比較ページ + index)
 
 ## ビルドコマンド
 
