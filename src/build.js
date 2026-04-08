@@ -37,6 +37,9 @@ const BASE_PATH = (() => {
 })();
 console.log(`BASE_PATH = "${BASE_PATH}"`);
 
+// サイト URL: OGP / canonical 用の絶対 URL ベース
+const SITE_URL = process.env.SITE_URL || "https://semnil.github.io/audio-interface-compare-site";
+
 // ─── Column mapping ────────────────────────────────────────────────────
 const COLUMNS = [
   { key: "brand",            label: "Brand",                        labelJa: "ブランド" },
@@ -330,14 +333,23 @@ async function readXlsx() {
 
 // ─── Templates ──────────────────────────────────────────────────────────
 
-function htmlHead(title, extra = "") {
+function htmlHead(title, extra = "", ogp = null) {
+  const ogpTags = ogp ? `
+<meta property="og:type" content="${ogp.type || "website"}">
+<meta property="og:title" content="${escapeHtml(ogp.title || title)}">
+<meta property="og:description" content="${escapeHtml(ogp.description || "")}">
+<meta property="og:url" content="${escapeHtml(ogp.url || SITE_URL + BASE_PATH)}">
+<meta property="og:site_name" content="Audio Interface Comparator">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${escapeHtml(ogp.title || title)}">
+<meta name="twitter:description" content="${escapeHtml(ogp.description || "")}">` : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />
+<meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />${ogpTags}
 <link rel="icon" href="${BASE_PATH}favicon.svg" type="image/svg+xml">
 <link rel="icon" href="${BASE_PATH}favicon.ico" sizes="48x48">
 <link rel="stylesheet" href="${BASE_PATH}style.css">
@@ -613,7 +625,13 @@ function indexPage(products, buildDate) {
     }))
   );
 
-  return `${htmlHead("Audio Interface Comparator")}
+  const ogp = {
+    type: "website",
+    title: "Audio Interface Comparator",
+    description: `Compare specs of ${products.length} audio interfaces side by side — inputs, outputs, audio performance, and price.`,
+    url: `${SITE_URL}${BASE_PATH}`,
+  };
+  return `${htmlHead("Audio Interface Comparator", "", ogp)}
 <body>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
@@ -781,7 +799,15 @@ function comparePage(a, b, buildDate, totalProducts) {
     about: [productJsonLd(a), productJsonLd(b)],
   });
 
-  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${BASE_PATH}compare/${a.slug}-vs-${b.slug}/">\n<script type="application/ld+json">${jsonLd}</script>`)}
+  const compareUrl = `${SITE_URL}${BASE_PATH}compare/${a.slug}-vs-${b.slug}/`;
+  const ogp = {
+    type: "article",
+    title: `${a.displayName} vs ${b.displayName}`,
+    description: descEn,
+    url: compareUrl,
+  };
+
+  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${compareUrl}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp)}
 <body>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
@@ -921,15 +947,14 @@ async function build() {
   console.log(`Generated ${pageCount} comparison pages`);
 
   // 4. sitemap.xml (canonical pages only: index + alphabetically ordered comparisons)
-  const siteUrl = process.env.SITE_URL || `https://semnil.github.io/audio-interface-compare-site`;
   let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
-  sitemap += `  <url><loc>${siteUrl}${BASE_PATH}</loc><changefreq>monthly</changefreq></url>\n`;
+  sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}</loc><changefreq>monthly</changefreq></url>\n`;
   for (let i = 0; i < products.length; i++) {
     for (let j = i + 1; j < products.length; j++) {
       const [sa, sb] = products[i].slug < products[j].slug
         ? [products[i].slug, products[j].slug]
         : [products[j].slug, products[i].slug];
-      sitemap += `  <url><loc>${siteUrl}${BASE_PATH}compare/${sa}-vs-${sb}/</loc></url>\n`;
+      sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}compare/${sa}-vs-${sb}/</loc></url>\n`;
     }
   }
   sitemap += `</urlset>\n`;
