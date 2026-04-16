@@ -464,7 +464,9 @@ main { padding: 32px 0 64px; }
   outline: none;
   font-family: inherit;
 }
-.search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.4); }
+.compare-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.product-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -2px; }
 .product-list {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -486,7 +488,7 @@ main { padding: 32px 0 64px; }
   color: #fff;
 }
 .product-item.disabled {
-  opacity: 0.35;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .product-item .brand { font-weight: 600; }
@@ -554,7 +556,8 @@ main { padding: 32px 0 64px; }
 .spec-table-wrap {
   background: var(--surface);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: clip;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 .spec-table { width: 100%; border-collapse: collapse; }
@@ -588,6 +591,7 @@ main { padding: 32px 0 64px; }
   white-space: nowrap;
 }
 .spec-table .val-col { width: 36%; }
+.spec-table thead th { position: sticky; top: 0; z-index: 1; background: #f8fafc; }
 .spec-table .na { color: #cbd5e1; }
 .spec-table .highlight { background: var(--accent-light); font-weight: 600; }
 
@@ -615,6 +619,7 @@ footer a:hover { color: var(--accent); }
   .compare-header { grid-template-columns: 1fr; }
   .spec-table .label-col { width: auto; }
   .spec-table .val-col { width: auto; }
+  .spec-table-wrap { overflow-x: auto; overflow-y: clip; }
 }
 `;
 
@@ -757,20 +762,27 @@ function comparePage(a, b, buildDate, totalProducts) {
     keyToLabelJa[col.key] = col.labelJa;
   }
 
+  // Parse numeric value; for range strings like "0-65" returns the max value
+  function parseNumeric(val) {
+    const s = String(val);
+    const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*[-\u2013]\s*(\d+(?:\.\d+)?)$/);
+    if (rangeMatch) return parseFloat(rangeMatch[2]);
+    return parseFloat(s);
+  }
+
   function diffClass(key, valA, valB) {
     const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
       "mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
       "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
-    const lowerBetter = ["thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown"];
+    // THD+N and EIN are lower-is-better but use string formats; skip highlighting
     // Price: not highlighted (preference depends on buyer)
-    if (!higherBetter.includes(key) && !lowerBetter.includes(key)) return ["", ""];
-    const nA = parseFloat(valA), nB = parseFloat(valB);
+    if (!higherBetter.includes(key)) return ["", ""];
+    const nA = parseNumeric(valA), nB = parseNumeric(valB);
     if (isNaN(nA) && isNaN(nB)) return ["", ""];
     if (isNaN(nA)) return ["", " highlight"];
     if (isNaN(nB)) return [" highlight", ""];
     if (nA === nB) return ["", ""];
-    const aWins = lowerBetter.includes(key) ? nA < nB : nA > nB;
-    return aWins ? [" highlight", ""] : ["", " highlight"];
+    return nA > nB ? [" highlight", ""] : ["", " highlight"];
   }
 
   let tableRows = "";
@@ -780,10 +792,15 @@ function comparePage(a, b, buildDate, totalProducts) {
       const label = keyToLabel[key] || key;
       const labelJa = keyToLabelJa[key] || label;
       const [clsA, clsB] = diffClass(key, a[key], b[key]);
+      const fmtVal = (val) => key === "price" && val != null && val !== ""
+        ? '$' + Number(val).toLocaleString('en-US')
+        : null;
+      const cellA = fmtVal(a[key]) ?? displayValue(a[key]);
+      const cellB = fmtVal(b[key]) ?? displayValue(b[key]);
       tableRows += `<tr>
   <td class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</td>
-  <td class="val-col${clsA}">${displayValue(a[key])}</td>
-  <td class="val-col${clsB}">${displayValue(b[key])}</td>
+  <td class="val-col${clsA}">${cellA}</td>
+  <td class="val-col${clsB}">${cellB}</td>
 </tr>\n`;
     }
   }
@@ -802,7 +819,7 @@ function comparePage(a, b, buildDate, totalProducts) {
     "@type": "WebPage",
     name: title,
     about: [productJsonLd(a), productJsonLd(b)],
-  });
+  }).replace(/&/g, '\\u0026');
 
   // canonical / og:url は正規順 (アルファベット順) に統一し、逆順ページも同一 URL を指す
   const [canonSlugA, canonSlugB] = a.slug < b.slug ? [a.slug, b.slug] : [b.slug, a.slug];
@@ -846,9 +863,9 @@ function comparePage(a, b, buildDate, totalProducts) {
       <table class="spec-table">
         <thead>
           <tr>
-            <td class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</td>
-            <td class="val-col" style="font-weight:700">${escapeHtml(a.displayName)}</td>
-            <td class="val-col" style="font-weight:700">${escapeHtml(b.displayName)}</td>
+            <th class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
+            <th class="val-col" style="font-weight:700">${escapeHtml(a.displayName)}</th>
+            <th class="val-col" style="font-weight:700">${escapeHtml(b.displayName)}</th>
           </tr>
         </thead>
         <tbody>
@@ -972,3 +989,30 @@ async function build() {
 }
 
 build();
+
+// テスト用エクスポート (本番ビルドには影響しない)
+// diffClass は comparePage のクロージャ内に定義されているため、ここで同等実装を export する
+export function _slugify(brand, model) { return slugify(brand, model); }
+export function _escapeHtml(str) { return escapeHtml(str); }
+export { COLUMNS };
+
+// diffClass は comparePage 内のクロージャだが、テスト用に同等ロジックを再公開する
+function _parseNumeric(val) {
+  const s = String(val);
+  const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*[-\u2013]\s*(\d+(?:\.\d+)?)$/);
+  if (rangeMatch) return parseFloat(rangeMatch[2]);
+  return parseFloat(s);
+}
+export function _diffClass(key, valA, valB) {
+  const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
+    "mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
+    "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
+  // THD+N and EIN are lower-is-better but use string formats; skip highlighting
+  if (!higherBetter.includes(key)) return ["", ""];
+  const nA = _parseNumeric(valA), nB = _parseNumeric(valB);
+  if (isNaN(nA) && isNaN(nB)) return ["", ""];
+  if (isNaN(nA)) return ["", " highlight"];
+  if (isNaN(nB)) return [" highlight", ""];
+  if (nA === nB) return ["", ""];
+  return nA > nB ? [" highlight", ""] : ["", " highlight"];
+}
