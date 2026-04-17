@@ -21,12 +21,12 @@ describe("diffClass: higherBetter 系", () => {
     assert.deepEqual(diffClass("gainRange", 65, 47), [" highlight", ""]);
   });
 
-  // gainRange の範囲文字列対応 (parseNumeric で上限値を使用)
-  test("gainRange: 範囲文字列 '0-65' vs 47 → 上限 65 > 47 で A がハイライト", () => {
-    assert.deepEqual(diffClass("gainRange", "0-65", 47), [" highlight", ""]);
+  // gainRange の範囲文字列対応 (parseNumeric で範囲の平均値を使用)
+  test("gainRange: 範囲文字列 '0-65' (平均 32.5) vs 47 → B がハイライト", () => {
+    assert.deepEqual(diffClass("gainRange", "0-65", 47), ["", " highlight"]);
   });
 
-  test("gainRange: 範囲文字列 '0-75' vs '0-65' → 上限 75 > 65 で A がハイライト", () => {
+  test("gainRange: 範囲文字列 '0-75' (平均 37.5) vs '0-65' (平均 32.5) → A がハイライト", () => {
     assert.deepEqual(diffClass("gainRange", "0-75", "0-65"), [" highlight", ""]);
   });
 
@@ -38,12 +38,12 @@ describe("diffClass: higherBetter 系", () => {
     assert.deepEqual(diffClass("gainRange", -18, 65), ["", " highlight"]);
   });
 
-  test("gainRange: 負値 vs null", () => {
-    assert.deepEqual(diffClass("gainRange", -18, null), [" highlight", ""]);
+  test("gainRange: 負値 vs null は片側 NaN なので比較しない", () => {
+    assert.deepEqual(diffClass("gainRange", -18, null), ["", ""]);
   });
 
-  test("gainRange: 非ゼロ下限範囲 '10-65' vs '0-75' → 上限比較", () => {
-    assert.deepEqual(diffClass("gainRange", "10-65", "0-75"), ["", " highlight"]);
+  test("gainRange: 非ゼロ下限範囲 '10-65' (平均 37.5) vs '0-75' (平均 37.5) → 同値", () => {
+    assert.deepEqual(diffClass("gainRange", "10-65", "0-75"), ["", ""]);
   });
 });
 
@@ -76,17 +76,17 @@ describe("diffClass: THD+N / EIN はハイライト対象外", () => {
   });
 });
 
-describe("diffClass: 片側が null/undefined", () => {
-  test("A が null → B がハイライト", () => {
-    assert.deepEqual(diffClass("micPre", null, 2), ["", " highlight"]);
+describe("diffClass: 片側が null/undefined (欠損は比較しない)", () => {
+  test("A が null → ハイライトしない", () => {
+    assert.deepEqual(diffClass("micPre", null, 2), ["", ""]);
   });
 
-  test("B が null → A がハイライト", () => {
-    assert.deepEqual(diffClass("micPre", 4, null), [" highlight", ""]);
+  test("B が null → ハイライトしない", () => {
+    assert.deepEqual(diffClass("micPre", 4, null), ["", ""]);
   });
 
-  test("A が undefined → B がハイライト", () => {
-    assert.deepEqual(diffClass("drIn", undefined, 120), ["", " highlight"]);
+  test("A が undefined → ハイライトしない", () => {
+    assert.deepEqual(diffClass("drIn", undefined, 120), ["", ""]);
   });
 
   test("両方 null: どちらもハイライトしない", () => {
@@ -97,8 +97,8 @@ describe("diffClass: 片側が null/undefined", () => {
     assert.deepEqual(diffClass("drIn", undefined, undefined), ["", ""]);
   });
 
-  test("片側が空文字 → もう一方がハイライト", () => {
-    assert.deepEqual(diffClass("sampleRate", "", 192), ["", " highlight"]);
+  test("片側が空文字 → ハイライトしない", () => {
+    assert.deepEqual(diffClass("sampleRate", "", 192), ["", ""]);
   });
 });
 

@@ -10,7 +10,7 @@
 
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { setPriority, constants } from "node:os";
 import ExcelJS from "exceljs";
 
@@ -28,11 +28,13 @@ const DIST = process.env.DIST_DIR
 
 // ベースパス: GitHub Pages のサブディレクトリ対応
 // カスタムドメイン → "/"、repo pages → "/repo-name/"
-// 末尾スラッシュを保証
+// 末尾スラッシュを保証 + 前後空白除去 + 連続スラッシュ畳み込み
 const BASE_PATH = (() => {
-  let bp = process.env.BASE_PATH || "/";
+  let bp = (process.env.BASE_PATH || "/").trim();
+  if (bp === "") bp = "/";
   if (!bp.endsWith("/")) bp += "/";
   if (!bp.startsWith("/")) bp = "/" + bp;
+  bp = bp.replace(/\/+/g, "/");
   return bp;
 })();
 console.log(`BASE_PATH = "${BASE_PATH}"`);
@@ -139,8 +141,35 @@ function escapeHtml(str) {
 }
 
 function displayValue(val) {
-  if (val == null || val === "") return '<span class="na">—</span>';
+  if (val == null || val === "") return '<span class="na" aria-label="No data">—</span>';
   return escapeHtml(String(val));
+}
+
+// <script> タグ内への JSON 埋め込み向けに、</script> 脱出と U+2028/U+2029 をエスケープ
+function safeJsonForScript(obj) {
+  return JSON.stringify(obj)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+// JSON-LD (application/ld+json) 埋め込み向け。上記に加え & も \u0026 にエスケープする
+function safeJsonForScriptLD(obj) {
+  return safeJsonForScript(obj).replace(/&/g, "\\u0026");
+}
+
+// 外部 URL を http(s) スキームに限定してサニタイズ。不正なら空文字を返す
+function sanitizeUrl(u) {
+  if (u == null) return "";
+  const s = String(u).trim();
+  if (!s) return "";
+  try {
+    const parsed = new URL(s);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
+    return "";
+  } catch (_) {
+    return "";
+  }
 }
 
 function minifyHtml(html) {
@@ -395,6 +424,39 @@ body {
   margin: 0;
   line-height: 1.6;
 }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+.skip-link:focus {
+  left: 8px;
+  top: 8px;
+  background: #fff;
+  padding: 8px 12px;
+  z-index: 100;
+  border: 2px solid var(--accent);
+  text-decoration: none;
+  color: var(--text);
+}
+.noscript-warning {
+  padding: 16px;
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
 .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
 header {
   background: var(--surface);
@@ -460,13 +522,18 @@ main { padding: 32px 0 64px; }
   padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 1rem;
   outline: none;
   font-family: inherit;
 }
 .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.4); }
 .compare-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .product-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -2px; }
+/* 選択済み項目は accent 背景なので、白い内リングで focus ring を可視化する */
+.product-item.selected:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #fff, 0 0 0 3px var(--accent);
+}
 .product-list {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -475,33 +542,42 @@ main { padding: 32px 0 64px; }
   margin-top: 8px;
 }
 .product-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: inherit;
   padding: 10px 14px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
+  font-family: inherit;
   transition: background 0.1s;
 }
 .product-item:last-child { border-bottom: none; }
-.product-item:hover:not(.disabled) { background: var(--accent-light); }
+.product-item:hover:not(:disabled) { background: var(--accent-light); }
 .product-item.selected {
   background: var(--accent);
   color: #fff;
 }
-.product-item.disabled {
+.product-item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .product-item .brand { font-weight: 600; }
 .product-item .meta {
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  /* accent-light hover 背景 (#eff6ff) 上 5.6:1 / 白地 6.53:1 のコントラストを確保 */
+  color: #475569;
   margin-top: 2px;
 }
-.product-item.selected .meta { color: rgba(255,255,255,0.8); }
+.product-item.selected .meta { color: rgba(255,255,255,0.85); }
 .compare-btn-wrap { text-align: center; margin-top: 24px; }
 .compare-btn {
   display: inline-block;
-  padding: 12px 40px;
+  padding: 14px 40px;
+  min-height: 44px;
   background: var(--accent);
   color: #fff;
   border: none;
@@ -514,7 +590,12 @@ main { padding: 32px 0 64px; }
   transition: background 0.15s;
 }
 .compare-btn:hover { background: #1d4ed8; }
-.compare-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+.compare-btn:disabled { background: #64748b; cursor: not-allowed; }
+.compare-hint {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
 
 /* ─ Comparison page ─ */
 .compare-header {
@@ -556,7 +637,7 @@ main { padding: 32px 0 64px; }
 .spec-table-wrap {
   background: var(--surface);
   border-radius: 12px;
-  overflow: clip;
+  overflow: hidden;
   -webkit-overflow-scrolling: touch;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
@@ -566,7 +647,7 @@ main { padding: 32px 0 64px; }
   font-weight: 700;
   font-size: 0.85rem;
   padding: 10px 16px;
-  color: var(--text-secondary);
+  color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -577,23 +658,36 @@ main { padding: 32px 0 64px; }
 .spec-table .group-header a:hover {
   text-decoration: underline;
 }
-.spec-table td {
+.spec-table .group-header a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.spec-table td,
+.spec-table th.label-col {
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
   vertical-align: top;
 }
-.spec-table tr:last-child td { border-bottom: none; }
+.spec-table tr:last-child td,
+.spec-table tr:last-child th.label-col { border-bottom: none; }
 .spec-table .label-col {
   width: 28%;
   font-weight: 500;
   color: var(--text-secondary);
+  text-align: left;
   white-space: nowrap;
 }
 .spec-table .val-col { width: 36%; }
-.spec-table thead th { position: sticky; top: 0; z-index: 1; background: #f8fafc; }
-.spec-table .na { color: #cbd5e1; }
+.spec-table thead th { background: #f8fafc; }
+/* #94a3b8 は白地に対して 3.03:1 — 装飾用途として十分な可読性 */
+.spec-table .na { color: #94a3b8; }
 .spec-table .highlight { background: var(--accent-light); font-weight: 600; }
+.spec-table .highlight .hl-mark {
+  margin-left: 6px;
+  color: var(--green);
+  font-weight: 700;
+}
 
 .back-link {
   display: inline-block;
@@ -608,9 +702,10 @@ footer {
   text-align: center;
   padding: 32px 0;
   font-size: 0.8rem;
-  color: var(--text-secondary);
+  /* body bg (#f8f9fa) 上で 6.16:1 のコントラスト (WCAG AA 準拠) */
+  color: #475569;
 }
-footer a { color: var(--text-secondary); }
+footer a { color: #475569; }
 footer a:hover { color: var(--accent); }
 
 @media (max-width: 768px) {
@@ -619,12 +714,31 @@ footer a:hover { color: var(--accent); }
   .compare-header { grid-template-columns: 1fr; }
   .spec-table .label-col { width: auto; }
   .spec-table .val-col { width: auto; }
-  .spec-table-wrap { overflow-x: auto; overflow-y: clip; }
+  .spec-table-wrap {
+    overflow-x: auto;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), inset -12px 0 8px -8px rgba(0,0,0,0.12);
+  }
+  .spec-table th.label-col,
+  .spec-table thead th:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--surface);
+    z-index: 1;
+  }
+}
+
+/* 減速モーションを好むユーザーのために transition / animation を最小化 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 `;
 
 function indexPage(products, buildDate) {
-  const productJson = JSON.stringify(
+  const productJson = safeJsonForScript(
     products.map((p) => ({
       slug: p.slug,
       brand: p.brand,
@@ -641,8 +755,10 @@ function indexPage(products, buildDate) {
     description: `Compare specs of ${products.length} audio interfaces side by side — inputs, outputs, audio performance, and price.`,
     url: `${SITE_URL}${BASE_PATH}`,
   };
-  return `${htmlHead("Audio Interface Comparator", "", ogp)}
+  const canonicalTag = `<link rel="canonical" href="${SITE_URL}${BASE_PATH}">`;
+  return `${htmlHead("Audio Interface Comparator", canonicalTag, ogp)}
 <body>
+<a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
   <div class="container">
@@ -650,24 +766,28 @@ function indexPage(products, buildDate) {
     <div class="subtitle" data-i18n="subtitle">${products.length} products — Select two to compare specs</div>
   </div>
 </header>
-<main>
+<main id="main">
   <div class="container">
+    <noscript><p class="noscript-warning">JavaScript is required to select products. Browse the <a href="${BASE_PATH}sitemap.xml">sitemap</a> to reach specific comparisons.</p></noscript>
     <div class="selector-section">
       <div class="selector-grid">
         <div class="selector-col" id="col-a">
-          <label data-i18n="productA">Product A</label>
-          <input type="text" class="search-input" id="search-a" data-i18n-placeholder="searchPlaceholder" placeholder="Search by brand or model…" autocomplete="off">
-          <div class="product-list" id="list-a"></div>
+          <label for="search-a" data-i18n="productA">Product A</label>
+          <input type="search" class="search-input" id="search-a" role="combobox" aria-controls="list-a" aria-autocomplete="list" aria-expanded="true" data-i18n-placeholder="searchPlaceholder" placeholder="Search by brand or model…" autocomplete="off">
+          <div class="product-list" id="list-a" role="listbox" aria-label="Product A" tabindex="-1"></div>
         </div>
-        <div class="vs">VS</div>
+        <div class="vs" aria-hidden="true">VS</div>
         <div class="selector-col" id="col-b">
-          <label data-i18n="productB">Product B</label>
-          <input type="text" class="search-input" id="search-b" data-i18n-placeholder="searchPlaceholder" placeholder="Search by brand or model…" autocomplete="off">
-          <div class="product-list" id="list-b"></div>
+          <label for="search-b" data-i18n="productB">Product B</label>
+          <input type="search" class="search-input" id="search-b" role="combobox" aria-controls="list-b" aria-autocomplete="list" aria-expanded="true" data-i18n-placeholder="searchPlaceholder" placeholder="Search by brand or model…" autocomplete="off">
+          <div class="product-list" id="list-b" role="listbox" aria-label="Product B" tabindex="-1"></div>
         </div>
       </div>
+      <div aria-live="polite" class="sr-only" id="selection-status"></div>
+      <div aria-live="polite" class="sr-only" id="search-results-status"></div>
       <div class="compare-btn-wrap">
         <button class="compare-btn" id="compare-btn" disabled data-i18n="compareBtn">Compare</button>
+        <p class="compare-hint" id="compare-hint" data-i18n="compareHint">Select Product A and Product B</p>
       </div>
     </div>
   </div>
@@ -675,7 +795,7 @@ function indexPage(products, buildDate) {
 <footer>
   <div class="container">
     <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
-    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener" data-i18n="reportIssue">Report an issue</a>
+    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
   </div>
 </footer>
 <script>
@@ -695,37 +815,178 @@ function indexPage(products, buildDate) {
   }
 
   const state = { a: null, b: null };
+  // listbox ごとの現在フォーカス中 option (aria-activedescendant 管理)
+  const activeIdx = { a: -1, b: -1 };
+  const lastResults = { a: [], b: [] };
+
+  function optionId(side, slug) {
+    return 'opt-' + side + '-' + slug;
+  }
 
   function renderList(containerId, results, side) {
     const el = document.getElementById(containerId);
+    // 再描画前のアクティブ slug を保持し、絞り込み後に同一製品を追跡して idx を振り直す
+    const prevResults = lastResults[side];
+    const prevIdx = activeIdx[side];
+    const prevSlug = (prevIdx >= 0 && prevResults && prevResults[prevIdx]) ? prevResults[prevIdx].slug : null;
+    lastResults[side] = results;
     if (results.length === 0) {
-      el.innerHTML = '<div style="padding:16px;color:#94a3b8;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
+      // role="presentation" にして listbox の option 数から除外 (aria-live で別途 0 件アナウンス)
+      el.innerHTML = '<div role="presentation" style="padding:16px;color:#64748b;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
+      activeIdx[side] = -1;
+      syncActiveDescendant(side);
       return;
     }
     var otherSide = side === 'a' ? 'b' : 'a';
     el.innerHTML = results.map(p => {
       var sel = state[side] === p.slug ? ' selected' : '';
-      var dis = state[otherSide] === p.slug ? ' disabled' : '';
-      var priceStr = p.price ? '$' + Number(p.price).toLocaleString() : '';
-      return '<div class="product-item' + sel + dis + '" data-slug="' + p.slug + '">'
+      var isDisabled = state[otherSide] === p.slug;
+      // button 要素の disabled 属性があれば SR は disabled 状態を正しく読むため aria-disabled は重複
+      var ariaSel = sel ? ' aria-selected="true"' : ' aria-selected="false"';
+      var priceStr = p.price ? '$' + Number(p.price).toLocaleString('en-US') : '';
+      return '<button type="button" role="option" class="product-item' + sel + '" id="' + optionId(side, p.slug) + '" tabindex="-1"' + (isDisabled ? ' disabled' : '') + ariaSel + ' data-slug="' + p.slug + '">'
         + '<span class="brand">' + esc(p.brand) + '</span> ' + esc(p.model)
         + '<div class="meta">' + esc(p.category) + (priceStr ? ' · ' + priceStr : '') + '</div>'
-        + '</div>';
+        + '</button>';
     }).join('');
 
-    el.querySelectorAll('.product-item:not(.disabled)').forEach(item => {
-      item.addEventListener('click', () => {
-        state[side] = item.dataset.slug;
-        renderList('list-a', search(document.getElementById('search-a').value), 'a');
-        renderList('list-b', search(document.getElementById('search-b').value), 'b');
-        updateBtn();
-      });
+    el.querySelectorAll('.product-item:not(:disabled)').forEach(item => {
+      item.addEventListener('click', () => selectItem(item, side));
     });
+    // 絞り込み後も以前のアクティブ製品が残っていればその新 idx を追跡、なければクリア
+    if (prevSlug) {
+      var newIdx = -1;
+      for (var i = 0; i < results.length; i++) {
+        if (results[i].slug === prevSlug) { newIdx = i; break; }
+      }
+      activeIdx[side] = newIdx;
+    } else if (activeIdx[side] >= results.length) {
+      activeIdx[side] = -1;
+    }
+    syncActiveDescendant(side);
+  }
+
+  function syncActiveDescendant(side) {
+    // WAI-ARIA APG Combobox パターン準拠: aria-activedescendant は focusable な input 側に付ける
+    const inputEl = document.getElementById('search-' + side);
+    const idx = activeIdx[side];
+    const results = lastResults[side];
+    if (idx >= 0 && idx < results.length) {
+      inputEl.setAttribute('aria-activedescendant', optionId(side, results[idx].slug));
+    } else {
+      inputEl.removeAttribute('aria-activedescendant');
+    }
+  }
+
+  function isOptionDisabled(side, idx) {
+    const results = lastResults[side];
+    if (idx < 0 || idx >= results.length) return true;
+    const otherSide = side === 'a' ? 'b' : 'a';
+    return state[otherSide] === results[idx].slug;
+  }
+
+  function moveActive(side, delta) {
+    const results = lastResults[side];
+    if (results.length === 0) return;
+    const step = delta > 0 ? 1 : -1;
+    let idx = activeIdx[side];
+    if (idx < 0) {
+      idx = step > 0 ? 0 : results.length - 1;
+    } else {
+      idx = idx + step;
+    }
+    // 端まで disabled だけが続く場合は wrap せずに停止する
+    while (idx >= 0 && idx < results.length && isOptionDisabled(side, idx)) {
+      idx += step;
+    }
+    if (idx < 0 || idx >= results.length) return; // 有効な option が見つからなければ現状維持
+    activeIdx[side] = idx;
+    syncActiveDescendant(side);
+    scrollActiveIntoView(side);
+  }
+
+  function setActive(side, idx) {
+    const results = lastResults[side];
+    if (idx < 0 || idx >= results.length) return;
+    // disabled 先頭/末尾を飛ばして最初の有効 option を選ぶ
+    if (isOptionDisabled(side, idx)) {
+      const step = idx === 0 ? 1 : -1;
+      let i = idx + step;
+      while (i >= 0 && i < results.length && isOptionDisabled(side, i)) i += step;
+      if (i < 0 || i >= results.length) return;
+      idx = i;
+    }
+    activeIdx[side] = idx;
+    syncActiveDescendant(side);
+    scrollActiveIntoView(side);
+  }
+
+  function scrollActiveIntoView(side) {
+    const idx = activeIdx[side];
+    const results = lastResults[side];
+    if (idx < 0 || idx >= results.length) return;
+    const id = optionId(side, results[idx].slug);
+    const opt = document.getElementById(id);
+    if (opt && opt.scrollIntoView) opt.scrollIntoView({ block: 'nearest' });
+  }
+
+  function activateCurrent(side) {
+    const idx = activeIdx[side];
+    const results = lastResults[side];
+    if (idx < 0 || idx >= results.length) return;
+    const slug = results[idx].slug;
+    const otherSide = side === 'a' ? 'b' : 'a';
+    if (state[otherSide] === slug) return; // 他方で選択済みなら無視
+    const opt = document.getElementById(optionId(side, slug));
+    if (opt) selectItem(opt, side);
+  }
+
+  function selectItem(item, side) {
+    state[side] = item.dataset.slug;
+    var p = PRODUCTS.find(x => x.slug === state[side]);
+    var status = document.getElementById('selection-status');
+    if (status && p) {
+      var sideLabel = isJa ? (side === 'a' ? '製品 A' : '製品 B')
+                           : (side === 'a' ? 'Product A' : 'Product B');
+      status.textContent = sideLabel + ': ' + p.displayName + (isJa ? ' を選択' : ' selected');
+    }
+    renderList('list-a', search(document.getElementById('search-a').value), 'a');
+    renderList('list-b', search(document.getElementById('search-b').value), 'b');
+    updateBtn();
+    // innerHTML 再描画で click 元 button が消えるため、combobox パターンに従って input にフォーカスを戻す
+    const inputEl = document.getElementById('search-' + side);
+    if (inputEl) inputEl.focus();
   }
 
   function updateBtn() {
     const btn = document.getElementById('compare-btn');
-    btn.disabled = !(state.a && state.b && state.a !== state.b);
+    const ready = !!(state.a && state.b && state.a !== state.b);
+    btn.disabled = !ready;
+    const hint = document.getElementById('compare-hint');
+    if (hint) hint.style.display = ready ? 'none' : '';
+    if (ready) {
+      var pa = PRODUCTS.find(x => x.slug === state.a);
+      var pb = PRODUCTS.find(x => x.slug === state.b);
+      if (pa && pb) {
+        btn.setAttribute('aria-label',
+          isJa ? (pa.displayName + ' と ' + pb.displayName + ' を比較')
+               : ('Compare ' + pa.displayName + ' and ' + pb.displayName));
+      }
+    } else {
+      btn.removeAttribute('aria-label');
+    }
+  }
+
+  function announceResultCount(side, count) {
+    const status = document.getElementById('search-results-status');
+    if (!status) return;
+    const sideLabel = isJa ? (side === 'a' ? '製品 A' : '製品 B')
+                           : (side === 'a' ? 'Product A' : 'Product B');
+    if (count === 0) {
+      status.textContent = sideLabel + ': ' + (isJa ? '該当なし' : 'No results');
+    } else {
+      status.textContent = sideLabel + ': ' + (isJa ? (count + ' 件') : (count + ' results'));
+    }
   }
 
   function esc(s) {
@@ -734,12 +995,73 @@ function indexPage(products, buildDate) {
     return d.innerHTML;
   }
 
+  function clearActive(side) {
+    activeIdx[side] = -1;
+    syncActiveDescendant(side);
+  }
+
+  function bindListKeyboard(side) {
+    const inputEl = document.getElementById('search-' + side);
+    // Combobox パターン: キーボード操作は input に集約 (listbox は非 focusable)
+    // テキスト編集を優先し、listbox ナビゲーションキーのみ捕捉する
+    inputEl.addEventListener('keydown', function(e) {
+      // 日本語 IME 変換確定中の Enter / 矢印キーでハンドラが誤発火するのを防ぐ
+      if (e.isComposing || e.keyCode === 229) return;
+      const results = lastResults[side];
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          moveActive(side, 1);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          moveActive(side, -1);
+          break;
+        case 'Home':
+          // キャレット先頭移動よりも listbox 先頭ハイライトを優先
+          if (results.length > 0) {
+            e.preventDefault();
+            setActive(side, 0);
+          }
+          break;
+        case 'End':
+          if (results.length > 0) {
+            e.preventDefault();
+            setActive(side, results.length - 1);
+          }
+          break;
+        case 'Enter':
+          if (activeIdx[side] >= 0) {
+            e.preventDefault();
+            activateCurrent(side);
+          }
+          break;
+        case 'Escape':
+          // type=search のブラウザデフォルトクリアを上書きし、常に検索ワードもリセットする
+          e.preventDefault();
+          clearActive(side);
+          if (inputEl.value !== '') {
+            inputEl.value = '';
+            const cleared = search('');
+            renderList('list-' + side, cleared, side);
+            announceResultCount(side, cleared.length);
+          }
+          break;
+      }
+    });
+  }
+
   // Init
   ['a', 'b'].forEach(side => {
     const input = document.getElementById('search-' + side);
     const listId = 'list-' + side;
-    input.addEventListener('input', () => renderList(listId, search(input.value), side));
+    input.addEventListener('input', () => {
+      const results = search(input.value);
+      renderList(listId, results, side);
+      announceResultCount(side, results.length);
+    });
     renderList(listId, PRODUCTS, side);
+    bindListKeyboard(side);
   });
 
   document.getElementById('compare-btn').addEventListener('click', () => {
@@ -748,7 +1070,7 @@ function indexPage(products, buildDate) {
   });
 })();
 </script>
-<script>var PAGE_JA={subtitle:'全 ${products.length} 製品 — 2つ選んで詳細スペックを比較',productA:'製品 A',productB:'製品 B',searchPlaceholder:'ブランド名・モデル名で検索…',compareBtn:'比較する',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
+<script>var PAGE_JA={subtitle:'全 ${products.length} 製品 — 2つ選んで詳細スペックを比較',productA:'製品 A',productB:'製品 B',searchPlaceholder:'ブランド名・モデル名で検索…',compareBtn:'比較する',compareHint:'Product A と Product B を選択',skipToMain:'メインコンテンツへスキップ',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
 <script src="${BASE_PATH}i18n.js"></script>
 </body>
 </html>`;
@@ -762,11 +1084,11 @@ function comparePage(a, b, buildDate, totalProducts) {
     keyToLabelJa[col.key] = col.labelJa;
   }
 
-  // Parse numeric value; for range strings like "0-65" returns the max value
+  // Parse numeric value; for range strings like "0-65" or "-18-65" returns the mean of both ends
   function parseNumeric(val) {
-    const s = String(val);
-    const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*[-\u2013]\s*(\d+(?:\.\d+)?)$/);
-    if (rangeMatch) return parseFloat(rangeMatch[2]);
+    const s = String(val).trim();
+    const rangeMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[-\u2013]\s*(-?\d+(?:\.\d+)?)$/);
+    if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
     return parseFloat(s);
   }
 
@@ -778,11 +1100,15 @@ function comparePage(a, b, buildDate, totalProducts) {
     // Price: not highlighted (preference depends on buyer)
     if (!higherBetter.includes(key)) return ["", ""];
     const nA = parseNumeric(valA), nB = parseNumeric(valB);
-    if (isNaN(nA) && isNaN(nB)) return ["", ""];
-    if (isNaN(nA)) return ["", " highlight"];
-    if (isNaN(nB)) return [" highlight", ""];
+    // 片側でも NaN なら比較対象外 (欠損を「優位」とは見なさない)
+    if (isNaN(nA) || isNaN(nB)) return ["", ""];
     if (nA === nB) return ["", ""];
     return nA > nB ? [" highlight", ""] : ["", " highlight"];
+  }
+
+  function withMark(cell, cls) {
+    if (!cls) return cell;
+    return cell + '<span class="hl-mark" aria-hidden="true"> ✓</span><span class="sr-only"> Better value</span>';
   }
 
   let tableRows = "";
@@ -798,9 +1124,9 @@ function comparePage(a, b, buildDate, totalProducts) {
       const cellA = fmtVal(a[key]) ?? displayValue(a[key]);
       const cellB = fmtVal(b[key]) ?? displayValue(b[key]);
       tableRows += `<tr>
-  <td class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</td>
-  <td class="val-col${clsA}">${cellA}</td>
-  <td class="val-col${clsB}">${cellB}</td>
+  <th scope="row" class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</th>
+  <td class="val-col${clsA}">${withMark(cellA, clsA)}</td>
+  <td class="val-col${clsB}">${withMark(cellB, clsB)}</td>
 </tr>\n`;
     }
   }
@@ -814,15 +1140,19 @@ function comparePage(a, b, buildDate, totalProducts) {
     if (p.brand) obj.brand = { "@type": "Brand", name: p.brand };
     return obj;
   }
-  const jsonLd = JSON.stringify({
+  // canonical / og:url は正規順 (アルファベット順) に統一し、逆順ページも同一 URL を指す
+  // JSON-LD の name / about も canonical と同じ正規順に固定する (逆順ページの SEO 同一性担保)
+  const [canonA, canonB] = a.slug < b.slug ? [a, b] : [b, a];
+  const canonSlugA = canonA.slug;
+  const canonSlugB = canonB.slug;
+  const canonTitle = `${canonA.displayName} vs ${canonB.displayName} — Audio Interface Comparator`;
+  const jsonLd = safeJsonForScriptLD({
     "@context": "https://schema.org",
     "@type": "WebPage",
-    name: title,
-    about: [productJsonLd(a), productJsonLd(b)],
-  }).replace(/&/g, '\\u0026');
+    name: canonTitle,
+    about: [productJsonLd(canonA), productJsonLd(canonB)],
+  });
 
-  // canonical / og:url は正規順 (アルファベット順) に統一し、逆順ページも同一 URL を指す
-  const [canonSlugA, canonSlugB] = a.slug < b.slug ? [a.slug, b.slug] : [b.slug, a.slug];
   const compareUrl = `${SITE_URL}${BASE_PATH}compare/${canonSlugA}-vs-${canonSlugB}/`;
   const ogp = {
     type: "article",
@@ -831,8 +1161,11 @@ function comparePage(a, b, buildDate, totalProducts) {
     url: compareUrl,
   };
 
+  const aUrl = sanitizeUrl(a.url);
+  const bUrl = sanitizeUrl(b.url);
   return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${compareUrl}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp)}
 <body>
+<a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
   <div class="container">
@@ -840,7 +1173,7 @@ function comparePage(a, b, buildDate, totalProducts) {
     <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleCompare">${totalProducts} products covered</span></div>
   </div>
 </header>
-<main>
+<main id="main">
   <div class="container">
     <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
 
@@ -848,24 +1181,25 @@ function comparePage(a, b, buildDate, totalProducts) {
       <div class="product-card">
         <h2>${escapeHtml(a.displayName)}</h2>
         <div class="cat">${escapeHtml(a.category || "")}</div>
-        ${a.price ? `<div class="price">$${Number(a.price).toLocaleString()}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
-        ${a.url ? `<a class="ext-link" href="${escapeHtml(a.url)}" target="_blank" rel="noopener" data-i18n="productPage">Official product page →</a>` : ""}
+        ${a.price ? `<div class="price">$${Number(a.price).toLocaleString('en-US')}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
+        ${aUrl ? `<a class="ext-link" href="${escapeHtml(aUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
       </div>
       <div class="product-card">
         <h2>${escapeHtml(b.displayName)}</h2>
         <div class="cat">${escapeHtml(b.category || "")}</div>
-        ${b.price ? `<div class="price">$${Number(b.price).toLocaleString()}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
-        ${b.url ? `<a class="ext-link" href="${escapeHtml(b.url)}" target="_blank" rel="noopener" data-i18n="productPage">Official product page →</a>` : ""}
+        ${b.price ? `<div class="price">$${Number(b.price).toLocaleString('en-US')}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
+        ${bUrl ? `<a class="ext-link" href="${escapeHtml(bUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
       </div>
     </div>
 
     <div class="spec-table-wrap">
       <table class="spec-table">
+        <caption class="sr-only">Audio interface spec comparison: ${escapeHtml(a.displayName)} vs ${escapeHtml(b.displayName)}</caption>
         <thead>
           <tr>
-            <th class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
-            <th class="val-col" style="font-weight:700">${escapeHtml(a.displayName)}</th>
-            <th class="val-col" style="font-weight:700">${escapeHtml(b.displayName)}</th>
+            <th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
+            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(a.displayName)}</th>
+            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(b.displayName)}</th>
           </tr>
         </thead>
         <tbody>
@@ -878,10 +1212,10 @@ ${tableRows}
 <footer>
   <div class="container">
     <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
-    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener" data-i18n="reportIssue">Report an issue</a>
+    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
   </div>
 </footer>
-<script>var PAGE_JA={subtitleCompare:'${totalProducts} 製品を網羅',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
+<script>var PAGE_JA={subtitleCompare:'${totalProducts} 製品を網羅',skipToMain:'メインコンテンツへスキップ',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
 <script src="${BASE_PATH}i18n.js"></script>
 </body>
 </html>`;
@@ -941,7 +1275,12 @@ async function build() {
 
   // 3. Comparison pages (all C(n,2) combinations)
   const slugMap = new Map();
-  for (const p of products) slugMap.set(p.slug, p);
+  for (const p of products) {
+    if (slugMap.has(p.slug)) {
+      throw new Error(`Slug collision: ${p.slug} from ${p.brand} ${p.model}`);
+    }
+    slugMap.set(p.slug, p);
+  }
 
   let pageCount = 0;
   for (let i = 0; i < products.length; i++) {
@@ -988,7 +1327,12 @@ async function build() {
   console.timeEnd("build");
 }
 
-build();
+// エントリポイントとして直接実行された場合のみビルドを起動
+// (テストから import したときに副作用で xlsx 読み込みが走るのを防ぐ)
+// pathToFileURL を使い Windows (C:\\path\\to\\build.js) でも正しく一致させる
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  build();
+}
 
 // テスト用エクスポート (本番ビルドには影響しない)
 // diffClass は comparePage のクロージャ内に定義されているため、ここで同等実装を export する
@@ -998,9 +1342,9 @@ export { COLUMNS };
 
 // diffClass は comparePage 内のクロージャだが、テスト用に同等ロジックを再公開する
 function _parseNumeric(val) {
-  const s = String(val);
-  const rangeMatch = s.match(/^(\d+(?:\.\d+)?)\s*[-\u2013]\s*(\d+(?:\.\d+)?)$/);
-  if (rangeMatch) return parseFloat(rangeMatch[2]);
+  const s = String(val).trim();
+  const rangeMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[-\u2013]\s*(-?\d+(?:\.\d+)?)$/);
+  if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
   return parseFloat(s);
 }
 export function _diffClass(key, valA, valB) {
@@ -1010,9 +1354,8 @@ export function _diffClass(key, valA, valB) {
   // THD+N and EIN are lower-is-better but use string formats; skip highlighting
   if (!higherBetter.includes(key)) return ["", ""];
   const nA = _parseNumeric(valA), nB = _parseNumeric(valB);
-  if (isNaN(nA) && isNaN(nB)) return ["", ""];
-  if (isNaN(nA)) return ["", " highlight"];
-  if (isNaN(nB)) return [" highlight", ""];
+  // 片側でも NaN なら比較対象外 (欠損を「優位」とは見なさない)
+  if (isNaN(nA) || isNaN(nB)) return ["", ""];
   if (nA === nB) return ["", ""];
   return nA > nB ? [" highlight", ""] : ["", " highlight"];
 }
