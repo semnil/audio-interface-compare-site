@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-オーディオインターフェースの仕様比較サイト。xlsx スプレッドシートから 21,736 の静的比較ページを生成し、GitHub Pages で無料配信する。
+オーディオインターフェースの仕様比較サイト。xlsx スプレッドシートから全組合せの静的比較ページを生成し、GitHub Pages で無料配信する。
 
 ## アーキテクチャ
 
@@ -10,23 +10,26 @@
 audio-interface-compare-site/
 ├── .github/workflows/build-deploy.yml  ← GitHub Actions (月次自動ビルド→GitHub Pages デプロイ)
 ├── .gitignore                          ← node_modules/, dist/
-├── package.json                        ← Node >=18, 依存: xlsx
-├── data/audio_interfaces.xlsx          ← 209製品×36列のスペックデータ (ソース)
+├── package.json                        ← Node >=18, 依存: exceljs
+├── data/audio_interfaces.xlsx          ← スペックデータ (ソース、36列)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML)
+├── tests/                              ← node:test ベースのテストスイート
 └── dist/                               ← 生成物 (gitignore 対象)
     ├── index.html                      ← トップページ (製品選択UI + クライアント検索)
+    ├── style.css / i18n.js             ← 共通 CSS・多言語 (ja/en)
     ├── products.json                   ← 全製品データ JSON
-    └── compare/{slug-a}-vs-{slug-b}/   ← 比較ページ (21,736 ディレクトリ)
+    ├── sitemap.xml                     ← 正規順のみ
+    └── compare/{slug-a}-vs-{slug-b}/   ← 比較ページ (双方向生成)
         └── index.html
 ```
 
 ## 主要な設計判断
 
 ### 静的サイト生成
-- `node src/build.js` で xlsx → 全 HTML を一括生成 (約3.5秒)
-- フレームワーク不使用。Node.js + xlsx ライブラリのみ
-- C(209,2) = 21,736 の比較ページを全組合せ事前生成
-- 全体サイズ約 427MB (1ページ平均 20KB)
+- `node src/build.js` で xlsx → 全 HTML を一括生成
+- フレームワーク不使用。Node.js + exceljs ライブラリのみ (外部依存ゼロ方針)
+- 比較ページは双方向 (n×(n-1)) で生成。canonical はアルファベット順の正規順に統一し、逆順ページも正規順 URL を指す
+- HTML minify + 共通 CSS/JS の外部参照化でページあたりのサイズを圧縮
 
 ### クライアント検索
 - 製品一覧 JSON を index.html 内にインライン埋め込み
@@ -44,40 +47,70 @@ audio-interface-compare-site/
 - 正規順序: slug のアルファベット順 (slug-a < slug-b)
 - 例: `/compare/focusrite-scarlett-2i2-4th-gen-vs-universal-audio-volt-2/`
 
+### セキュリティ / エスケープ
+- `safeJsonForScript(obj)` — PRODUCTS インライン JSON 用 (`<` / U+2028 / U+2029 をエスケープ)
+- `safeJsonForScriptLD(obj)` — JSON-LD 用 (上記 + `&` → `\u0026`)
+- `sanitizeUrl(s)` — WHATWG URL パーサで http/https のみ通過。外部製品リンクのスキーム検証
+- `escapeHtml` は `htmlHead` 内で 1 回だけ呼ぶ設計で二重エスケープを避けている
+- 副作用防止: `src/build.js` は `import.meta.url === pathToFileURL(process.argv[1]).href` ガードで、import 時にビルドが走らないようにしている
+
+### アクセシビリティ (UI)
+- 製品選択 UI は WAI-ARIA 1.2 Combobox (Editable with List Autocomplete) パターン準拠
+  - input が `role="combobox"` + `aria-controls/autocomplete/expanded/activedescendant`
+  - listbox は `tabindex="-1"` (Chromium のスクロールコンテナ暗黙フォーカス抑制)
+  - 各 option は `<button role="option">` + `disabled` 属性のみ (aria-disabled は冗長なので付与しない)
+  - キーボード: ArrowUp/Down/Home/End/Enter/Escape を input に集約。IME composition 中 (`e.isComposing`) は無視
+  - 検索絞り込み後は slug ベースで active option を復元
+- skip-link、`<main id="main">`、テーブルの `<caption class="sr-only">` + `scope="col"/"row"`、ハイライトセルには ✓ + `<span class="sr-only">Better value</span>`
+- `prefers-reduced-motion` 対応
+
+### ビルドの不変条件
+- slug 衝突は build 時に `Error('Slug collision: ...')` で fail fast
+- `BASE_PATH` は trim + 連続スラッシュ畳み込みで正規化
+- `diffClass` は両辺が数値でない限りハイライトを抑止 (片側欠損での誤優劣表示を防ぐ)
+- 数値範囲文字列 (`"0-65"` / `"-18-65"` など) は両端の平均値で比較
+
 ### ホスティング: GitHub Pages
 - リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
 - AWS (S3, CloudFront, IAM) 一切不要
-- 制約: サイトサイズ上限 1GB (現在 427MB)、帯域 100GB/月
+- 制約: サイトサイズ上限 1GB、帯域 100GB/月。双方向ページ生成のため製品数が増えるとサイズは O(n²) で増加する点に注意
 
 ### ビルドトリガー (GitHub Actions)
 - 月初月曜 10:00 JST (cron: `0 1 1-7 * 1`)
 - 手動 (`workflow_dispatch`)
-- `data/audio_interfaces.xlsx` への push
+- main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
+  - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
+
+### テスト基盤
+- `node:test` + `node:assert` (外部依存ゼロ) で `tests/*.test.js` を実行
+- `package.json` の test スクリプトは `--test-concurrency=1` でシリアル実行 (build.js import 時副作用ガード併用)
+- `src/build.js` は末尾で `_slugify` / `_escapeHtml` / `_diffClass` / `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` / `COLUMNS` などを export
+- 監査由来のテスト多数: a11y 契約、JSON-LD エスケープ、canonical URL 契約、script 読込順序、slug 衝突、sanitize URL probe など
 
 ## 未解決・要対応
 
-### 1. ローカルプレビュー
-`npm run build && npx serve dist` でプレビュー可能だが、ユーザーが試した際に
-`Index of dist/` (ディレクトリ一覧) しか表示されない事象が報告されている。
-原因候補:
-- Cowork 環境では dist/ が空のまま残存 (ビルドが DIST_DIR で別パスに出力されたため)
-- ユーザーのローカル PC では `npm run build` が正常に dist/ を生成するはずだが未検証
-- `serve` のバージョンや挙動差の可能性 → `npx serve dist -s` (SPA モード) で clean URL 対応が必要か確認
-
-### 2. xlsx のカラムマッピング
+### 1. xlsx のカラムマッピング
 build.js 内の `COLUMNS` 配列が xlsx ヘッダーの日本語名とハードコーディングで紐付いている。
 xlsx のヘッダー名が変わるとビルドが壊れるため、将来的にはヘッダー自動検出 or マッピング設定ファイル化を検討。
 
-### 3. 比較ページのハイライトロジック
+### 2. 比較ページのハイライトロジック
 - 「数値が大きい方が優位」な項目 (入出力数、DR 等) のみハイライト
 - THD+N・EIN (低い方が良い) は文字列フォーマット (例: "-88.0dB (0.0040%)") のため未対応
 - 価格は買い手の価値観次第なのでハイライト対象外
+- 片側のみ数値で他方が欠損のときは `diffClass` 側でハイライトを抑止 (誤優劣防止)
 
-### 4. SEO / OGP
-- meta description は比較ページのみ設定済み
-- OGP (og:type, og:title, og:description, og:url, og:site_name) + Twitter Card 実装済み
-- og:image 未実装 (OGP 画像の自動生成は未対応)
-- sitemap.xml 実装済み (正規順の比較ページ + index)
+### 3. SEO / OGP
+- meta description は全ページ設定済み
+- OGP (og:type/og:title/og:description/og:url/og:site_name) + Twitter Card 実装済み
+- canonical は正規順に統一。逆順ページも正規順 URL を指す
+- sitemap.xml は正規順のみ登録 (index + 比較ページ)
+- JSON-LD `WebPage.about[Product]` の `name`/`about` も canonical 順で固定
+- og:image 未実装 (将来の拡張候補)
+
+### 4. 多言語 / ダークモード (保留)
+- 初期 HTML は `lang="en"` 固定、`i18n.js` がブラウザ言語を検出して JS で en/ja 切替
+- SEO 観点の hreflang / 言語別 URL (`/en/` `/ja/`) は未対応
+- ダークモード (`prefers-color-scheme: dark`) 未対応
 
 ## ビルドコマンド
 
