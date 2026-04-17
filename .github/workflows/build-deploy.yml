@@ -6,10 +6,14 @@ on:
     - cron: "0 1 1-7 * 1"
   # 手動トリガー
   workflow_dispatch:
-  # xlsx 更新時にも自動ビルド
+  # ビルド結果に影響するファイル更新時に自動ビルド
   push:
     paths:
       - "data/audio_interfaces.xlsx"
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/build-deploy.yml"
     branches: [main]
 
 permissions:
