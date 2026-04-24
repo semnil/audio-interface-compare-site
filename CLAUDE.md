@@ -18,7 +18,7 @@ audio-interface-compare-site/
     ├── index.html                      ← トップページ (製品選択UI + クライアント検索)
     ├── style.css / i18n.js             ← 共通 CSS・多言語 (ja/en)
     ├── products.json                   ← 全製品データ JSON
-    ├── sitemap.xml                     ← 正規順のみ
+    ├── sitemap.xml                     ← 同一ブランド内の正規順ペアのみ
     └── compare/{slug-a}-vs-{slug-b}/   ← 比較ページ (双方向生成)
         └── index.html
 ```
@@ -103,7 +103,7 @@ xlsx のヘッダー名が変わるとビルドが壊れるため、将来的に
 - meta description は全ページ設定済み
 - OGP (og:type/og:title/og:description/og:url/og:site_name) + Twitter Card 実装済み
 - canonical は正規順に統一。逆順ページも正規順 URL を指す
-- sitemap.xml は正規順のみ登録 (index + 比較ページ)
+- sitemap.xml は同一ブランド内の正規順ペアのみ登録 (index + 同ブランド比較ページ)。異ブランド間ページは内部リンク経由でクロールさせる
 - JSON-LD `WebPage.about[Product]` の `name`/`about` も canonical 順で固定
 - og:image 未実装 (将来の拡張候補)
 

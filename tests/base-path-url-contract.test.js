@@ -112,19 +112,24 @@ describe("canonical URL の構造契約", { skip: !distExists ? "dist/ が未生
 });
 
 describe("sitemap.xml と canonical URL の整合", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("compare ページの canonical URL が sitemap.xml 内に存在する (10 件サンプル)", () => {
+  test("同一ブランド compare ページの canonical URL が sitemap.xml 内に存在する (10 件サンプル)", () => {
     const sitemap = readFileSync(SITEMAP_PATH, "utf8");
     const sitemapUrls = new Set(
       (sitemap.match(/<loc>([^<]+)<\/loc>/g) || []).map(m => m.replace(/<\/?loc>/g, ""))
     );
     const dirs = readdirSync(COMPARE_DIR);
-    // 正規順 (canonical = 自己参照) ディレクトリのみサンプリング
     const canonDirs = dirs.filter(d => {
       const idx = d.indexOf("-vs-");
       if (idx < 0) return false;
       return d.slice(0, idx) < d.slice(idx + 4);
     });
-    const sample = sampleDirs(canonDirs, 10);
+    // sitemap は同一ブランドペアのみ掲載するため、sitemap に含まれるディレクトリからサンプリング
+    const sitemapDirs = canonDirs.filter(d => {
+      const html = readFileSync(join(COMPARE_DIR, d, "index.html"), "utf8");
+      const canonical = html.match(/rel="canonical" href="([^"]+)"/)?.[1];
+      return sitemapUrls.has(canonical);
+    });
+    const sample = sampleDirs(sitemapDirs, 10);
     const missing = [];
     for (const d of sample) {
       const html = readFileSync(join(COMPARE_DIR, d, "index.html"), "utf8");

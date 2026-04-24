@@ -1309,20 +1309,23 @@ async function build() {
 
   console.log(`Generated ${pageCount} comparison pages`);
 
-  // 4. sitemap.xml (canonical pages only: index + alphabetically ordered comparisons)
+  // 4. sitemap.xml (index + same-brand canonical comparisons only)
   let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
   sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}</loc><changefreq>monthly</changefreq></url>\n`;
+  let sitemapCount = 1;
   for (let i = 0; i < products.length; i++) {
     for (let j = i + 1; j < products.length; j++) {
+      if (products[i].brand !== products[j].brand) continue;
       const [sa, sb] = products[i].slug < products[j].slug
         ? [products[i].slug, products[j].slug]
         : [products[j].slug, products[i].slug];
       sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}compare/${sa}-vs-${sb}/</loc></url>\n`;
+      sitemapCount++;
     }
   }
   sitemap += `</urlset>\n`;
   writeFileSync(join(DIST, "sitemap.xml"), sitemap);
-  console.log(`Wrote sitemap.xml (${products.length * (products.length - 1) / 2 + 1} URLs)`);
+  console.log(`Wrote sitemap.xml (${sitemapCount} URLs, same-brand only)`);
 
   console.timeEnd("build");
 }
