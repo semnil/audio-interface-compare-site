@@ -11,6 +11,9 @@
   "dependencies": {
     "exceljs": "^4.4.0"
   },
+  "overrides": {
+    "uuid": "^14.0.0"
+  },
   "engines": {
     "node": ">=18"
   }
