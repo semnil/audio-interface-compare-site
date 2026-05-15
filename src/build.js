@@ -727,6 +727,35 @@ footer a:hover { color: var(--accent); }
   }
 }
 
+/* ─ Product page ─ */
+.compare-links-heading {
+  font-size: 1.1rem;
+  margin: 48px 0 16px;
+}
+.compare-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+}
+.compare-links li a {
+  display: block;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--accent);
+  font-size: 0.9rem;
+  transition: border-color 0.1s, background 0.1s;
+}
+.compare-links li a:hover { border-color: var(--accent); background: var(--accent-light); }
+.compare-links li a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.compare-links .brand { font-weight: 600; }
+.compare-links .meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+
 /* 減速モーションを好むユーザーのために transition / animation を最小化 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -1221,6 +1250,141 @@ ${tableRows}
 </html>`;
 }
 
+// ─── Product page ────────────────────────────────────────────────────────
+function productPage(product, allProducts, buildDate) {
+  const keyToLabel = {};
+  const keyToLabelJa = {};
+  for (const col of COLUMNS) {
+    keyToLabel[col.key] = col.label;
+    keyToLabelJa[col.key] = col.labelJa;
+  }
+
+  const pageUrl = `${SITE_URL}${BASE_PATH}products/${product.slug}/`;
+
+  // Key specs for meta description
+  const specParts = [];
+  if (product.micPre != null && product.micPre !== "") {
+    specParts.push(`${product.micPre} mic preamp${product.micPre === 1 ? "" : "s"}`);
+  }
+  if (product.sampleRate != null && product.sampleRate !== "") {
+    specParts.push(`${product.sampleRate}kHz`);
+  }
+  if (product.usb != null && product.usb !== "") {
+    specParts.push(String(product.usb));
+  }
+  const priceStr = product.price ? `$${Number(product.price).toLocaleString("en-US")}` : "";
+  const specSuffix = specParts.length ? `: ${specParts.join(", ")}${priceStr ? `, ${priceStr}` : ""}` : (priceStr ? `: ${priceStr}` : "");
+  const descEn = `${product.displayName} full specs${specSuffix}. Compare with ${allProducts.length - 1} other audio interfaces on Audio Interface Comparator.`;
+  const descJa = `${product.displayName} の詳細スペック${specSuffix ? "（" + specParts.join("、") + (priceStr ? "、" + priceStr : "") + "）" : ""}。他 ${allProducts.length - 1} 製品と比較できます。`;
+
+  // JSON-LD
+  const jsonLdObj = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.displayName,
+    brand: { "@type": "Brand", name: product.brand },
+  };
+  if (product.category) jsonLdObj.category = product.category;
+  if (product.price) jsonLdObj.offers = { "@type": "Offer", price: String(product.price), priceCurrency: "USD" };
+  const extUrl = sanitizeUrl(product.url);
+  if (extUrl) jsonLdObj.url = extUrl;
+  const jsonLd = safeJsonForScriptLD(jsonLdObj);
+
+  // Spec table (2-column: label | value)
+  let tableRows = "";
+  for (const group of SPEC_GROUPS) {
+    tableRows += `<tr class="group-header" id="${group.id}"><td colspan="2"><a href="#${group.id}" data-i18n-label="${escapeHtml(group.titleJa)}">${escapeHtml(group.title)}</a></td></tr>\n`;
+    for (const key of group.keys) {
+      const label = keyToLabel[key] || key;
+      const labelJa = keyToLabelJa[key] || label;
+      const cell = key === "price" && product[key] != null && product[key] !== ""
+        ? `$${Number(product[key]).toLocaleString("en-US")}`
+        : displayValue(product[key]);
+      tableRows += `<tr>
+  <th scope="row" class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</th>
+  <td class="val-col">${cell}</td>
+</tr>\n`;
+    }
+  }
+
+  // Compare links: same brand first, then others, both alphabetical
+  const sameBrand = [];
+  const otherBrand = [];
+  for (const other of allProducts) {
+    if (other.slug === product.slug) continue;
+    (other.brand === product.brand ? sameBrand : otherBrand).push(other);
+  }
+  sameBrand.sort((x, y) => x.displayName.localeCompare(y.displayName));
+  otherBrand.sort((x, y) => x.displayName.localeCompare(y.displayName));
+
+  function compareHref(other) {
+    const [sa, sb] = product.slug < other.slug
+      ? [product.slug, other.slug]
+      : [other.slug, product.slug];
+    return `${BASE_PATH}compare/${sa}-vs-${sb}/`;
+  }
+
+  const compareLinkItems = [...sameBrand, ...otherBrand].map((other) => {
+    const otherPrice = other.price ? ` · $${Number(other.price).toLocaleString("en-US")}` : "";
+    return `<li><a href="${escapeHtml(compareHref(other))}"><span class="brand">${escapeHtml(other.brand)}</span> ${escapeHtml(other.model)}<div class="meta">${escapeHtml(other.category || "")}${escapeHtml(otherPrice)}</div></a></li>`;
+  }).join("\n");
+
+  const title = `${product.displayName} Specs — Audio Interface Comparator`;
+  const ogp = { type: "article", title: product.displayName, description: descEn, url: pageUrl };
+
+  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp)}
+<body>
+<a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
+<div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
+<header>
+  <div class="container">
+    <h1>${escapeHtml(product.displayName)} Specs</h1>
+    <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
+  </div>
+</header>
+<main id="main">
+  <div class="container">
+    <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
+
+    <div class="product-card" style="margin-bottom:32px">
+      <div class="cat">${escapeHtml(product.category || "")}</div>
+      ${priceStr ? `<div class="price">${escapeHtml(priceStr)}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
+      ${extUrl ? `<a class="ext-link" href="${escapeHtml(extUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
+    </div>
+
+    <div class="spec-table-wrap">
+      <table class="spec-table">
+        <caption class="sr-only">Audio interface specs: ${escapeHtml(product.displayName)}</caption>
+        <thead>
+          <tr>
+            <th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
+            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(product.displayName)}</th>
+          </tr>
+        </thead>
+        <tbody>
+${tableRows}
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="compare-links-heading">Compare ${escapeHtml(product.displayName)} with...</h2>
+    <ul class="compare-links">
+${compareLinkItems}
+    </ul>
+  </div>
+</main>
+<footer>
+  <div class="container">
+    <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
+    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
+  </div>
+</footer>
+<script>var PAGE_JA={subtitleProduct:'全 ${allProducts.length} 製品を収録',skipToMain:'メインコンテンツへスキップ',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
+<script src="${BASE_PATH}i18n.js"></script>
+</body>
+</html>`;
+}
+
 // ─── Main build ─────────────────────────────────────────────────────────
 async function build() {
   console.time("build");
@@ -1309,10 +1473,25 @@ async function build() {
 
   console.log(`Generated ${pageCount} comparison pages`);
 
-  // 4. sitemap.xml (index + same-brand canonical comparisons only)
+  // 4. Product pages (one per product)
+  for (const product of products) {
+    const dir = join(DIST, "products", product.slug);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "index.html"),
+      minifyHtml(productPage(product, products, buildDate))
+    );
+  }
+  console.log(`Generated ${products.length} product pages`);
+
+  // 5. sitemap.xml (index + all product pages + same-brand canonical comparisons)
   let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
   sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}</loc><changefreq>monthly</changefreq></url>\n`;
   let sitemapCount = 1;
+  for (const product of products) {
+    sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}products/${product.slug}/</loc><changefreq>monthly</changefreq></url>\n`;
+    sitemapCount++;
+  }
   for (let i = 0; i < products.length; i++) {
     for (let j = i + 1; j < products.length; j++) {
       if (products[i].brand !== products[j].brand) continue;
@@ -1325,7 +1504,7 @@ async function build() {
   }
   sitemap += `</urlset>\n`;
   writeFileSync(join(DIST, "sitemap.xml"), sitemap);
-  console.log(`Wrote sitemap.xml (${sitemapCount} URLs, same-brand only)`);
+  console.log(`Wrote sitemap.xml (${sitemapCount} URLs: 1 index + ${products.length} product pages + same-brand comparisons)`);
 
   console.timeEnd("build");
 }
