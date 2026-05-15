@@ -18,7 +18,9 @@ audio-interface-compare-site/
     ├── index.html                      ← トップページ (製品選択UI + クライアント検索)
     ├── style.css / i18n.js             ← 共通 CSS・多言語 (ja/en)
     ├── products.json                   ← 全製品データ JSON
-    ├── sitemap.xml                     ← 同一ブランド内の正規順ペアのみ
+    ├── sitemap.xml                     ← index + 全製品ページ + 同一ブランド内正規順ペア
+    ├── products/{slug}/                ← 個別製品ページ (製品数分)
+    │   └── index.html
     └── compare/{slug-a}-vs-{slug-b}/   ← 比較ページ (双方向生成)
         └── index.html
 ```
@@ -59,6 +61,7 @@ audio-interface-compare-site/
   - input が `role="combobox"` + `aria-controls/autocomplete/expanded/activedescendant`
   - listbox は `tabindex="-1"` (Chromium のスクロールコンテナ暗黙フォーカス抑制)
   - 各 option は `<button role="option">` + `disabled` 属性のみ (aria-disabled は冗長なので付与しない)
+  - 各アイテムは `.product-item-wrap` でラップし、右端に「Specs ↗」リンクを絶対配置 (`tabindex="-1"`, `stopPropagation` で選択動作と分離)
   - キーボード: ArrowUp/Down/Home/End/Enter/Escape を input に集約。IME composition 中 (`e.isComposing`) は無視
   - 検索絞り込み後は slug ベースで active option を復元
 - skip-link、`<main id="main">`、テーブルの `<caption class="sr-only">` + `scope="col"/"row"`、ハイライトセルには ✓ + `<span class="sr-only">Better value</span>`
@@ -103,7 +106,9 @@ xlsx のヘッダー名が変わるとビルドが壊れるため、将来的に
 - meta description は全ページ設定済み
 - OGP (og:type/og:title/og:description/og:url/og:site_name) + Twitter Card 実装済み
 - canonical は正規順に統一。逆順ページも正規順 URL を指す
-- sitemap.xml は同一ブランド内の正規順ペアのみ登録 (index + 同ブランド比較ページ)。異ブランド間ページは内部リンク経由でクロールさせる
+- 個別製品ページ `/products/{slug}/` を全製品分生成。JSON-LD `Product` スキーマ + 全比較ページへの内部リンク一覧
+- sitemap.xml: index + 全製品ページ + 同一ブランド内正規順ペア (計 1025 URL)
+- index.html の製品リストから各 `/products/{slug}/` へ「Specs ↗」リンクで内部リンクを張る
 - JSON-LD `WebPage.about[Product]` の `name`/`about` も canonical 順で固定
 - og:image 未実装 (将来の拡張候補)
 
