@@ -1305,7 +1305,9 @@ function productPage(product, allProducts, buildDate) {
   const priceStr = product.price ? `$${Number(product.price).toLocaleString("en-US")}` : "";
   const specSuffix = specParts.length ? `: ${specParts.join(", ")}${priceStr ? `, ${priceStr}` : ""}` : (priceStr ? `: ${priceStr}` : "");
   const descEn = `${product.displayName} full specs${specSuffix}. Compare with ${allProducts.length - 1} other audio interfaces on Audio Interface Comparator.`;
-  const descJa = `${product.displayName} の詳細スペック${specSuffix ? "（" + specParts.join("、") + (priceStr ? "、" + priceStr : "") + "）" : ""}。他 ${allProducts.length - 1} 製品と比較できます。`;
+  const jaSpecParts = [...specParts];
+  if (priceStr) jaSpecParts.push(priceStr);
+  const descJa = `${product.displayName} の詳細スペック${jaSpecParts.length ? "（" + jaSpecParts.join("、") + "）" : ""}。他 ${allProducts.length - 1} 製品と比較できます。`;
 
   // JSON-LD
   const jsonLdObj = {
@@ -1360,7 +1362,7 @@ function productPage(product, allProducts, buildDate) {
   }).join("\n");
 
   const title = `${product.displayName} Specs — Audio Interface Comparator`;
-  const ogp = { type: "article", title: product.displayName, description: descEn, url: pageUrl };
+  const ogp = { title: `${product.displayName} Specs`, description: descEn, url: pageUrl };
 
   return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp)}
 <body>

@@ -110,6 +110,7 @@ xlsx のヘッダー名が変わるとビルドが壊れるため、将来的に
 - sitemap.xml: index + 全製品ページ + 同一ブランド内正規順ペア (計 1025 URL)
 - index.html の製品リストから各 `/products/{slug}/` へ「Specs ↗」リンクで内部リンクを張る
 - JSON-LD `WebPage.about[Product]` の `name`/`about` も canonical 順で固定
+- 個別製品ページの `og:type` は省略 (`"website"` デフォルト)、`og:title` は `"${displayName} Specs"` で `<title>` と整合
 - og:image 未実装 (将来の拡張候補)
 
 ### 4. 多言語 / ダークモード (保留)
