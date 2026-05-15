@@ -197,4 +197,25 @@ describe("index.html のアクセシビリティ検査", { skip: !distExists ? "
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/<noscript>/.test(html), "noscript タグが存在しない");
   });
+
+  test("Specs リンク (.specs-link) が product-item-wrap 内に存在すること", () => {
+    html = readFileSync(INDEX_PATH, "utf8");
+    assert.ok(/class="product-item-wrap"/.test(html), "product-item-wrap クラス欠落");
+    assert.ok(/class="specs-link"/.test(html), "specs-link クラス欠落");
+  });
+
+  test("Specs リンクの href が BASE_PATH + 'products/' + slug 形式で生成されること (JSコード確認)", () => {
+    // specs-link は renderList 内で JS が動的生成するため静的 HTML には href 値が展開されない。
+    // JSコード内に specsHref の生成パターンが存在することを確認する。
+    html = readFileSync(INDEX_PATH, "utf8");
+    assert.ok(/var specsHref = BASE_PATH \+ 'products\/' \+ p\.slug \+ '\/'/.test(html),
+      "specsHref の URL 生成コードが index.html に含まれていない");
+  });
+
+  test("Specs リンクに tabindex=\"-1\" が設定されること (JSコード確認)", () => {
+    // specs-link は JS で動的生成されるため、tabindex=\"-1\" の文字列がコード内にあることを確認する。
+    html = readFileSync(INDEX_PATH, "utf8");
+    assert.ok(/tabindex="-1"[^>]*specs-link|specs-link[^>]*tabindex="-1"/.test(html),
+      "specs-link の tabindex=-1 指定がコード内に存在しない");
+  });
 });
