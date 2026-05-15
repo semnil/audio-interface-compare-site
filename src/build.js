@@ -541,6 +541,11 @@ main { padding: 32px 0 64px; }
   overflow-y: auto;
   margin-top: 8px;
 }
+.product-item-wrap {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.product-item-wrap:last-child { border-bottom: none; }
 .product-item {
   display: block;
   width: 100%;
@@ -548,14 +553,31 @@ main { padding: 32px 0 64px; }
   background: transparent;
   border: none;
   color: inherit;
-  padding: 10px 14px;
+  padding: 10px 44px 10px 14px;
   cursor: pointer;
-  border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
   font-family: inherit;
   transition: background 0.1s;
 }
-.product-item:last-child { border-bottom: none; }
+.specs-link {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0.6;
+  transition: opacity 0.1s, background 0.1s;
+}
+.product-item-wrap:hover .specs-link,
+.product-item.selected ~ .specs-link { opacity: 1; }
+.product-item.selected ~ .specs-link { color: #fff; }
+.specs-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; opacity: 1; }
 .product-item:hover:not(:disabled) { background: var(--accent-light); }
 .product-item.selected {
   background: var(--accent);
@@ -873,14 +895,22 @@ function indexPage(products, buildDate) {
       // button 要素の disabled 属性があれば SR は disabled 状態を正しく読むため aria-disabled は重複
       var ariaSel = sel ? ' aria-selected="true"' : ' aria-selected="false"';
       var priceStr = p.price ? '$' + Number(p.price).toLocaleString('en-US') : '';
-      return '<button type="button" role="option" class="product-item' + sel + '" id="' + optionId(side, p.slug) + '" tabindex="-1"' + (isDisabled ? ' disabled' : '') + ariaSel + ' data-slug="' + p.slug + '">'
+      var specsLabel = isJa ? '仕様 ↗' : 'Specs ↗';
+      var specsHref = BASE_PATH + 'products/' + p.slug + '/';
+      return '<div class="product-item-wrap">'
+        + '<button type="button" role="option" class="product-item' + sel + '" id="' + optionId(side, p.slug) + '" tabindex="-1"' + (isDisabled ? ' disabled' : '') + ariaSel + ' data-slug="' + p.slug + '">'
         + '<span class="brand">' + esc(p.brand) + '</span> ' + esc(p.model)
         + '<div class="meta">' + esc(p.category) + (priceStr ? ' · ' + priceStr : '') + '</div>'
-        + '</button>';
+        + '</button>'
+        + '<a class="specs-link" href="' + specsHref + '" tabindex="-1" aria-label="' + esc(p.brand) + ' ' + esc(p.model) + ' specs page">' + specsLabel + '</a>'
+        + '</div>';
     }).join('');
 
     el.querySelectorAll('.product-item:not(:disabled)').forEach(item => {
       item.addEventListener('click', () => selectItem(item, side));
+    });
+    el.querySelectorAll('.specs-link').forEach(link => {
+      link.addEventListener('click', e => e.stopPropagation());
     });
     // 絞り込み後も以前のアクティブ製品が残っていればその新 idx を追跡、なければクリア
     if (prevSlug) {
