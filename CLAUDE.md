@@ -13,6 +13,7 @@ audio-interface-compare-site/
 ├── package.json                        ← Node >=18, 依存: exceljs
 ├── data/audio_interfaces.xlsx          ← スペックデータ (ソース、43列。最終列=Measurement Reports)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML)
+├── tools/                              ← xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記)
 ├── tests/                              ← node:test ベースのテストスイート
 └── dist/                               ← 生成物 (gitignore 対象)
     ├── index.html                      ← トップページ (製品選択UI + クライアント検索)
@@ -73,6 +74,13 @@ audio-interface-compare-site/
 - `diffClass` は両辺が数値でない限りハイライトを抑止 (片側欠損での誤優劣表示を防ぐ)
 - 数値範囲文字列 (`"0-65"` / `"-18-65"` など) は両端の平均値で比較
 
+### 製品カタログ / データ更新
+- 収録対象は現行 IF + USB/配信ミキサー + 配信機。**プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限**に留めている (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, Lynx Aurora マトリクス, Ferrofish, MOTU AVB 等は未収録 = 将来候補)
+- 機種の削除 (生産終了) は製品ページの 301/404 リダイレクトで検証してから行う
+- 未公開の測定値 (DR/THD+N/EIN) は空欄にする (推測で埋めない)
+- `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
+- `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)
+
 ### ホスティング: GitHub Pages
 - リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
 - AWS (S3, CloudFront, IAM) 一切不要
@@ -93,7 +101,7 @@ audio-interface-compare-site/
 ## 未解決・要対応
 
 ### 1. xlsx のカラムマッピング
-build.js 内の `COLUMNS` 配列が xlsx ヘッダーの日本語名とハードコーディングで紐付いている。
+build.js は `COLUMNS[].label` (英語ヘッダー名) と xlsx ヘッダーの完全一致で列を特定する。
 xlsx のヘッダー名が変わるとビルドが壊れるため、将来的にはヘッダー自動検出 or マッピング設定ファイル化を検討。
 
 ### 2. 比較ページのハイライトロジック
