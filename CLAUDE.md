@@ -11,7 +11,7 @@ audio-interface-compare-site/
 ├── .github/workflows/build-deploy.yml  ← GitHub Actions (月次自動ビルド→GitHub Pages デプロイ)
 ├── .gitignore                          ← node_modules/, dist/
 ├── package.json                        ← Node >=18, 依存: exceljs
-├── data/audio_interfaces.xlsx          ← スペックデータ (ソース、36列)
+├── data/audio_interfaces.xlsx          ← スペックデータ (ソース、43列。最終列=Measurement Reports)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML)
 ├── tests/                              ← node:test ベースのテストスイート
 └── dist/                               ← 生成物 (gitignore 対象)
@@ -107,7 +107,7 @@ xlsx のヘッダー名が変わるとビルドが壊れるため、将来的に
 - OGP (og:type/og:title/og:description/og:url/og:site_name) + Twitter Card 実装済み
 - canonical は正規順に統一。逆順ページも正規順 URL を指す
 - 個別製品ページ `/products/{slug}/` を全製品分生成。JSON-LD `Product` スキーマ + 全比較ページへの内部リンク一覧
-- sitemap.xml: index + 全製品ページ + 同一ブランド内正規順ペア (計 1025 URL)
+- sitemap.xml: index + 全製品ページ + 同一ブランド内正規順ペア
 - index.html の製品リストから各 `/products/{slug}/` へ「Specs ↗」リンクで内部リンクを張る
 - JSON-LD `WebPage.about[Product]` の `name`/`about` も canonical 順で固定
 - 個別製品ページの `og:type` は省略 (`"website"` デフォルト)、`og:title` は `"${displayName} Specs"` で `<title>` と整合
@@ -137,9 +137,16 @@ npm run build && npx serve dist -l 3000
 ## データソース
 
 `data/audio_interfaces.xlsx` — 「Audio Interfaces」シート、1行目ヘッダー、2行目以降データ。
-36列 (A〜AJ): ブランド, モデル名, カテゴリ, 参考価格 (USD), マイクプリアンプ数, Combo入力,
-ライン入力, Hi-Z入力, ADAT入力, S/PDIF入力, アナログメイン出力, アナログライン出力,
-ヘッドフォン出力, ADAT出力, S/PDIF出力, ファンタム電源, 最大サンプリングレート,
-最大ビット深度, USB規格, MIDI I/O, ループバック, DSPエフェクト, ダイレクトモニタリング,
+ヘッダーは英語名で、`build.js` の `COLUMNS[].label` と一致させて列を特定する (日本語名ではない)。
+主な列: ブランド, モデル名, カテゴリ, 参考価格 (USD), マイクプリアンプ数, Combo入力,
+ライン入力, Hi-Z入力, ADAT入力, 光ポート/S/PDIF(同軸・光)/AES入力, アナログメイン出力, アナログライン出力,
+ヘッドフォン出力, ADAT出力, 光ポート/S/PDIF(同軸・光)/AES出力, ファンタム電源, 最大サンプリングレート,
+最大ビット深度, 接続規格, MIDI I/O, ループバック, DSPエフェクト, ダイレクトモニタリング,
 プリアンプゲインレンジ, DR入力, DR出力, DR(条件不明), THD+Nマイク入力, THD+N出力,
-THD+N(条件不明), EIN(A-weighted), EIN(条件不明), 対応OS, バンドルソフト, 特記事項, 製品ページURL
+THD+N(条件不明), EIN(A-weighted), EIN(条件不明), 対応OS, バンドルソフト, 特記事項, 製品ページURL,
+Measurement Reports (測定レポート、最終列)。
+
+`Measurement Reports` 列は、各製品の客観測定 (RMAA / ASR の APx ベンチ / メーカー公称 / Sound on Sound 等) を
+公開するページへの markdown リンク (`[ラベル](url) / ...`) を格納する。`build.js` の `renderMeasurements()` が
+`sanitizeUrl` で http(s) のみ許可し、ラベル・URL とも escapeHtml した上で外部リンク (`target="_blank" rel="noopener noreferrer"`)
+に変換する。オーディオ性能グループの最終行として比較ページ・個別製品ページに描画。データ未収集の製品は `—`。
