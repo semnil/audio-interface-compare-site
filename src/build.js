@@ -86,6 +86,7 @@ const COLUMNS = [
   { key: "bundle",           label: "Bundled Software",             labelJa: "バンドルソフト" },
   { key: "notes",            label: "Notes",                        labelJa: "特記事項" },
   { key: "url",              label: "Product Page URL",             labelJa: "製品ページURL" },
+  { key: "measurements",     label: "Measurement Reports",          labelJa: "測定レポート" },
 ];
 
 // Spec groups for comparison page layout
@@ -113,7 +114,7 @@ const SPEC_GROUPS = [
   {
     id: "performance",
     title: "Audio Performance", titleJa: "オーディオ性能",
-    keys: ["sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown", "thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown"],
+    keys: ["sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown", "thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown", "measurements"],
   },
   {
     id: "software",
@@ -143,6 +144,25 @@ function escapeHtml(str) {
 function displayValue(val) {
   if (val == null || val === "") return '<span class="na" aria-label="No data">—</span>';
   return escapeHtml(String(val));
+}
+
+// 測定レポート列: markdown "[label](url) / [label](url)" を外部リンクの HTML に変換
+// URL は sanitizeUrl で http(s) のみ許可し、ラベル・URL とも escapeHtml する
+function renderMeasurements(val) {
+  const naSpan = '<span class="na" aria-label="No data">—</span>';
+  if (val == null || val === "") return naSpan;
+  const links = [];
+  const re = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let m;
+  while ((m = re.exec(String(val))) !== null) {
+    const url = sanitizeUrl(m[2]);
+    if (!url) continue;
+    // ↗ で外部サイトへの遷移を明示 (サイト全体の外部リンク慣習に合わせる)。矢印は aria-hidden、
+    // スクリーンリーダー向けには sr-only テキストで外部サイトである旨を補足する
+    links.push(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(m[1])}<span class="ext-arrow" aria-hidden="true"> ↗</span><span class="sr-only" data-i18n="extSite"> (external site)</span></a>`);
+  }
+  if (links.length === 0) return naSpan;
+  return `<span class="measure-links">${links.join('<span class="sep" aria-hidden="true"> / </span>')}</span>`;
 }
 
 // <script> タグ内への JSON 埋め込み向けに、</script> 脱出と U+2028/U+2029 をエスケープ
@@ -396,7 +416,7 @@ ${extra}
 const I18N_JS = `(function(){
 if(!/^ja\\b/.test(navigator.language))return;
 document.documentElement.lang='ja';
-var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
+var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告',extSite:' (外部サイト)'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
 document.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');if(ja[k])el.textContent=ja[k];});
 document.querySelectorAll('[data-i18n-content]').forEach(function(el){var v=el.getAttribute('data-i18n-val');if(v)el.setAttribute('content',v);});
 document.querySelectorAll('[data-i18n-label]').forEach(function(el){el.textContent=el.getAttribute('data-i18n-label');});
@@ -710,6 +730,11 @@ main { padding: 32px 0 64px; }
   color: var(--green);
   font-weight: 700;
 }
+.spec-table .measure-links { font-size: 0.85rem; line-height: 1.5; }
+.spec-table .measure-links a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+.spec-table .measure-links .ext-arrow { font-size: 0.85em; }
+.spec-table .measure-links a:hover { text-decoration: underline; }
+.spec-table .measure-links .sep { color: #cbd5e1; }
 
 .back-link {
   display: inline-block;
@@ -1180,8 +1205,8 @@ function comparePage(a, b, buildDate, totalProducts) {
       const fmtVal = (val) => key === "price" && val != null && val !== ""
         ? '$' + Number(val).toLocaleString('en-US')
         : null;
-      const cellA = fmtVal(a[key]) ?? displayValue(a[key]);
-      const cellB = fmtVal(b[key]) ?? displayValue(b[key]);
+      const cellA = key === "measurements" ? renderMeasurements(a[key]) : (fmtVal(a[key]) ?? displayValue(a[key]));
+      const cellB = key === "measurements" ? renderMeasurements(b[key]) : (fmtVal(b[key]) ?? displayValue(b[key]));
       tableRows += `<tr>
   <th scope="row" class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</th>
   <td class="val-col${clsA}">${withMark(cellA, clsA)}</td>
@@ -1329,7 +1354,9 @@ function productPage(product, allProducts, buildDate) {
     for (const key of group.keys) {
       const label = keyToLabel[key] || key;
       const labelJa = keyToLabelJa[key] || label;
-      const cell = key === "price" && product[key] != null && product[key] !== ""
+      const cell = key === "measurements"
+        ? renderMeasurements(product[key])
+        : key === "price" && product[key] != null && product[key] !== ""
         ? `$${Number(product[key]).toLocaleString("en-US")}`
         : displayValue(product[key]);
       tableRows += `<tr>
@@ -1573,3 +1600,5 @@ export function _diffClass(key, valA, valB) {
   if (nA === nB) return ["", ""];
   return nA > nB ? [" highlight", ""] : ["", " highlight"];
 }
+
+export function _renderMeasurements(val) { return renderMeasurements(val); }
