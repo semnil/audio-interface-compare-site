@@ -14,14 +14,21 @@ import ExcelJS from "exceljs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
-// 生産終了で削除する製品 ("Brand Model")
+// 生産終了・重複統合で削除する製品 ("Brand Model")
 const REMOVALS = new Set([
-  "Antelope Audio Discrete 4 Pro Synergy Core",
-  "Antelope Audio Discrete 8 Pro Synergy Core",
-  "Antelope Audio Zen Go Synergy Core",
-  "Antelope Audio Zen Q Synergy Core",
-  "MOTU 828x",
-  "Native Instruments Komplete Audio 6 Mk2",
+  "Mackie M•Caster Studio",
+  "Mackie Onyx Artist 1•2",
+  "Mackie Onyx Producer 2•2",
+  "MOTU 1248",
+  "PreSonus Quantum HD 2",
+  "PreSonus Quantum HD 8",
+  "PreSonus Studio 68c",
+  "Shure MVX2U",
+  "Soundcraft Signature 12 MTK",
+  "Soundcraft Signature 22 MTK",
+  "TASCAM SERIES 102i",
+  "TASCAM SERIES 208i",
+  "TASCAM US-42B MiNiSTUDIO CREATOR",
 ]);
 
 const newRowsPath = process.argv[2];
