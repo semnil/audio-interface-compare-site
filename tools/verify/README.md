@@ -85,7 +85,8 @@ node tools/verify/propose-corrections.js          # --all で low も含める
 #    missing_in_xlsx (空欄追記) のうち機械変換できない項目は work/missing-pending.json に保留として
 #    出力し、build-report.js は保留分のみを「空欄」セクションに描画する
 
-# 6. レポート生成 (リポジトリ直下 product-page-verification-report.md)
+# 6. レポート生成 (リポジトリ直下 product-page-verification-report.md。git 管理外で、
+#    更新のたびに再生成・上書きし、照合サイクル完了後に削除する)
 #    相違表は「機種 | 列 | xlsx | 公式ページ | 修正候補」。修正候補列は corrections-edited.json から
 #    差し込まれる (無い項目は「—」)
 node tools/verify/build-report.js

@@ -2,3 +2,4 @@ node_modules/
 dist/
 .claude/
 tools/verify/work/
+product-page-verification-report.md
