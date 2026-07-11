@@ -10,15 +10,17 @@
  *    ワークフローが途中で死んでも完了分はファイルとして残る。
  *  - 復旧はワークフローのキャッシュに依存しない: validate-results.js が結果ファイルの
  *    有無と健全性から未完了 ids を算出し、その ids だけで本スクリプトを再起動する。
- *  - 直列実行 (利用制限で中断しても失うのは実行中の 1 件のみ)。
- *  - 利用制限を検知するためのサーキットブレーカー: 連続 maxConsecFail 回のエージェント失敗で
- *    以降を実行せず打ち切る (制限中の無駄な連続失敗を防ぐ)。
+ *  - 既定は直列実行 (中断で失うのは実行中の 1 件のみ)。args.concurrency で並列化できる
+ *    (中断で失うのは実行中の最大 concurrency 件。いずれも validate → nextIds で復旧する)。
+ *  - 利用制限を検知するためのサーキットブレーカー: 完了順で連続 maxConsecFail 回の
+ *    エージェント失敗で未着手分を打ち切る (制限中の無駄な連続失敗を防ぐ)。
+ *  - args.model / args.effort でエージェントのモデル・エフォートを指定できる (省略時はセッション継承)。
  */
 export const meta = {
   name: 'verify-product-pages-v2',
-  description: 'xlsx の製品スペックを公式ページと照合する (チェックポイント書込・直列・打切り付き)',
+  description: 'xlsx の製品スペックを公式ページと照合する (チェックポイント書込・打切り付き・並列度/モデル指定可)',
   phases: [
-    { title: 'Verify', detail: '製品 1 件につき 1 エージェント、直列実行' },
+    { title: 'Verify', detail: '製品 1 件につき 1 エージェント、並列度は args.concurrency (既定 1 = 直列)' },
   ],
 }
 
@@ -27,6 +29,9 @@ const workDir = input.workDir
 // ids は配列指定または連続範囲 {idsFrom, idsTo} 指定 (引数の肥大回避)
 const ids = input.ids ?? Array.from({ length: input.idsTo - input.idsFrom + 1 }, (_, k) => input.idsFrom + k)
 const maxConsecFail = input.maxConsecFail ?? 5
+const concurrency = Math.max(1, input.concurrency ?? 1)
+const model = input.model
+const effort = input.effort
 
 const SCHEMA = {
   type: 'object',
@@ -68,18 +73,17 @@ const SCHEMA = {
 }
 
 phase('Verify')
-log(ids.length + ' 件を照合 (直列、連続 ' + maxConsecFail + ' 失敗で打切り)')
+log(ids.length + ' 件を照合 (並列 ' + concurrency + '、モデル ' + (model ?? 'セッション継承') + '、完了順で連続 ' + maxConsecFail + ' 失敗で打切り)')
 
 const done = []
 const agentFailed = []
 const inputMissing = []
 let consecFail = 0
 let aborted = false
-let attempted = 0
+let completed = 0
+let cursor = 0
 
-for (let n = 0; n < ids.length; n++) {
-  attempted = n + 1
-  const i = ids[n]
+async function verifyOne(i) {
   const id = String(i).padStart(3, '0')
   const inFile = workDir + '/products/product-' + id + '.json'
   const outFile = workDir + '/results/product-' + id + '.json'
@@ -109,28 +113,42 @@ for (let n = 0; n < ids.length; n++) {
     '6. 結果の保存 (必須): StructuredOutput と同一内容の JSON を Write ツールで ' + outFile + ' に書き込む。同名ファイルが既にある場合は先に Read してから上書きする (Write は未読ファイルの上書きを拒否する)。書き込みに成功してから、同じ内容を StructuredOutput で返す。',
   ].join('\n')
 
-  const r = await agent(prompt, { label: 'product-' + id, phase: 'Verify', schema: SCHEMA })
+  const opts = { label: 'product-' + id, phase: 'Verify', schema: SCHEMA }
+  if (model) opts.model = model
+  if (effort) opts.effort = effort
+  const r = await agent(prompt, opts)
     .then(x => x ?? null)
     .catch(() => null)
 
+  completed++
   if (r === null || r.notes === 'input file missing') {
     if (r === null) agentFailed.push(i)
     else inputMissing.push(i)
     consecFail++
-    if (consecFail >= maxConsecFail) {
+    if (consecFail >= maxConsecFail && !aborted) {
       aborted = true
-      log('連続 ' + consecFail + ' 件失敗のため残り ' + (ids.length - n - 1) + ' 件を打切り (利用制限または workDir 誤設定の可能性)')
-      break
+      log('完了順で連続 ' + consecFail + ' 件失敗のため未着手の ' + Math.max(0, ids.length - cursor) + ' 件を打切り (利用制限または workDir 誤設定の可能性)')
     }
   } else {
     consecFail = 0
     done.push({ idx: i, status: r.fetch_status, mismatches: r.mismatches.length })
   }
-  if ((n + 1) % 10 === 0 || n + 1 === ids.length) log('進捗: ' + (n + 1) + '/' + ids.length)
+  if (completed % 10 === 0 || completed === ids.length) log('進捗: ' + completed + '/' + ids.length + ' 完了')
 }
 
+// ワーカープール: concurrency 本のワーカーが共有カーソルから次の id を取り、直列に処理する。
+// aborted が立ったら未着手分を取らずに終了する (実行中の分は完走させる)。
+const workers = Array.from({ length: Math.min(concurrency, ids.length) }, () => async () => {
+  while (!aborted) {
+    const n = cursor++
+    if (n >= ids.length) return
+    await verifyOne(ids[n])
+  }
+})
+await parallel(workers)
+
 return {
-  attempted,
+  attempted: completed,
   doneCount: done.length,
   done,
   agentFailed,

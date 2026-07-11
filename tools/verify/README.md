@@ -6,15 +6,15 @@
 
 ```mermaid
 flowchart TD
-    A[export-products.js\nxlsx → work/products/*.json] --> B[Workflow ツールで workflow.js を起動\nargs: workDir + ids]
-    B --> C[エージェント: 1 製品 = 1 体、直列\n公式ページ取得 → 照合\n結果を work/results/product-NNN.json に書込]
+    A[export-products.js\nxlsx → work/products/*.json] --> B[Workflow ツールで workflow.js を起動\nargs: workDir + ids\n任意: concurrency/model/effort]
+    B --> C[エージェント: 1 製品 = 1 体\n公式ページ取得 → 照合\n結果を work/results/product-NNN.json に書込]
     C --> D[validate-results.js\n結果ファイルを xlsx 実値と突合]
     D -->|invalid は results-invalid/ へ退避| D
     D --> E{missingIds が空?}
     E -->|いいえ: 未完了あり| B
     E -->|はい: failed の残存は許容| F[propose-corrections.js\nmismatch から修正案を生成]
     F --> G[proposed を xlsx セル書式の修正候補に編集\nwork/corrections-edited.json]
-    G --> H[build-report.js\nproduct-page-verification-report.md 生成\n相違表 = 機種/列/xlsx/公式ページ/修正候補]
+    G --> H[build-report.js\nproduct-page-verification-report.md 生成\n相違表 = 機種/列/修正候補/変更理由/変更前]
     H --> I[apply-corrections.js dry-run\n変更点を列挙]
     I --> J{操作者の同意}
     J -->|同意| K[apply-corrections.js --apply\nxlsx へ反映 → export で変更行を再照合]
@@ -27,8 +27,9 @@ flowchart TD
 - **チェックポイント = 結果ファイル**: 各エージェントが照合完了時に `work/results/product-NNN.json` を自分で書き込む。ワークフロー本体やセッションが死んでも完了分はファイルとして残る。ワークフローの戻り値は進捗の要約のみで、データの正本はファイル側。
 - **消えない作業領域**: `work/` はリポジトリ内 (git 管理外)。/tmp のセッション別 scratchpad はセッション再起動で消えるため使わない (初回実施で 273 ファイル消失 → エージェントが勝手に xlsx から行を再構成 → 1 行ズレの汚染が発生した)。
 - **復旧はキャッシュ非依存**: 再開時は `validate-results.js` が結果ファイルの有無と健全性から `nextIds` を算出し、その ids だけを `workflow.js` に渡して再実行する。Workflow ツールの `resumeFromRunId` キャッシュが使えない状況 (別セッション・スクリプト変更後) でも復旧できる。
-- **直列実行**: 利用制限・リソース不足で中断しても失うのは実行中の 1 件のみ。
-- **サーキットブレーカー**: エージェントが連続 `maxConsecFail` 回 (既定 5) 失敗したら残りを打ち切る。利用制限中に残り全件を無駄に失敗させない。制限解除後に validate → 再実行で続きから進む。
+- **既定は直列実行**: 中断しても失うのは実行中の 1 件のみ。`args.concurrency` で並列化できる (ワーカープール方式。中断で失うのは実行中の最大 concurrency 件で、いずれも validate → nextIds で復旧する)。同時実行の上限は Workflow 実行環境の枠 = min(16, CPU コア − 2)。
+- **サーキットブレーカー**: エージェントが完了順で連続 `maxConsecFail` 回 (既定 5) 失敗したら未着手分を打ち切る。利用制限中に残り全件を無駄に失敗させない。制限解除後に validate → 再実行で続きから進む。
+- **モデル/エフォート指定**: `args.model` / `args.effort` でエージェント単位のモデル・エフォートを指定できる (省略時はセッション継承)。照合は機械的タスクのため下位モデルでもよい。汚染は validate が検出するが、相違の見落とし (false negative) は検出できない点に留意。
 
 ## 未照合 (failed) を減らす取得ラダー
 
@@ -61,7 +62,9 @@ node tools/verify/export-products.js
 
 # 2. Claude Code で Workflow を起動 (ids は初回は全件、再開時は state.json の nextIds)
 #    Workflow({ scriptPath: "<repo>/tools/verify/workflow.js",
-#               args: { workDir: "<repo>/tools/verify/work", ids: [...] } })
+#               args: { workDir: "<repo>/tools/verify/work", ids: [...],
+#                       concurrency: 8, model: "sonnet", effort: "high" } })
+#    concurrency / model / effort は任意 (省略時: 直列 / セッション継承 / セッション継承)
 
 # 3. 健全性検証と未完了 ids の算出
 node tools/verify/validate-results.js
@@ -75,20 +78,23 @@ node tools/verify/validate-results.js
 node tools/verify/propose-corrections.js          # --all で low も含める
 #    → work/corrections-proposal.json の proposed (ページ記載の生テキスト) を xlsx セル書式の
 #      「修正後セル値」に編集し、work/corrections-edited.json として保存する:
-#      [{ idx, brand, model, column, confidence?, current, proposed, note?, hold? }]
+#      [{ idx, brand, model, column, confidence?, current, proposed, note?, hold?, unreviewed?, missing? }]
 #      - proposed: 修正後セル値。"" は空欄化 (非搭載・該当なし・未公表は 0 や No ではなく空欄の慣行)
 #      - note: レポート表示用の補足 / hold: 反映を保留する理由 (apply でスキップされる)
+#      - unreviewed: 操作者の確認待ち (apply でスキップ。review-state の境界更新で外れる)
+#      - missing: 空欄追記由来の印 (レポートの「空欄追記の候補」セクションに描画される)
 #      - 相違由来でない一括修正 (書式統一・行統合の反映・空欄追記など) も同スキーマで追加できる
 #        (confidence キーが一致しないためレポートの相違表には出ず、apply にのみ効く)
-#    操作者レビューの進捗は work/review-state.json ({ highReviewedUntilIdx, lowReviewedUntilIdx })。
+#    操作者レビューの進捗は work/review-state.json
+#    ({ highReviewedUntilIdx, lowReviewedUntilIdx, missingReviewedUntilIdx })。
 #    build-report.js は到達済み範囲の相違行を非表示にし、未確認分だけを表示する。
 #    missing_in_xlsx (空欄追記) のうち機械変換できない項目は work/missing-pending.json に保留として
 #    出力し、build-report.js は保留分のみを「空欄」セクションに描画する
 
 # 6. レポート生成 (リポジトリ直下 product-page-verification-report.md。git 管理外で、
 #    更新のたびに再生成・上書きし、照合サイクル完了後に削除する)
-#    相違表は「機種 | 列 | xlsx | 公式ページ | 修正候補」。修正候補列は corrections-edited.json から
-#    差し込まれる (無い項目は「—」)
+#    相違表の列構成 (変更後の値を左に置く) と表示規則は build-report.js の生成に従う
+#    (運用の詳細は .claude/skills/verify-products/SKILL.md の「レポート」節)
 node tools/verify/build-report.js
 
 # 7. xlsx への反映 (任意): 操作者の同意を得てから反映する
