@@ -1,0 +1,42 @@
+{
+ "skill_name": "verify-products",
+ "evals": [
+  {
+   "id": 0,
+   "prompt": "オーディオインターフェースのスペック照合、こないだ途中で止まってた気がする。今どこまで終わってるか確認して、再開に必要な対象 ids と Workflow の起動引数を JSON で resume-plan.json に書き出して。ワークフロー自体はまだ起動しないで。",
+   "expected_output": "validate-results.js を実行し、state.json の nextIds と一致する ids、workflow.js の scriptPath、workDir を含む resume-plan.json を出力する",
+   "files": [],
+   "assertions": [
+    "resume-plan.json が存在し有効な JSON である",
+    "再開対象 ids が work/state.json の nextIds と集合一致する",
+    "起動引数に tools/verify/workflow.js の scriptPath と tools/verify/work の workDir (絶対パス) が含まれる",
+    "照合を実行していない (work/results/ のファイル数が実行前から増えていない)",
+    "summary.md の照合済み/未完了件数が work/state.json の集計と一致している"
+   ]
+  },
+  {
+   "id": 1,
+   "prompt": "スペック照合のレポートを最新の結果から作り直して report.md に置いて。ok/partial/wrong_page/failed の件数と相違検出の機種数も教えて。",
+   "expected_output": "validate を通してから build-report.js で report.md を生成し、byStatus と相違機種数が結果ファイルの実態と一致する",
+   "files": [],
+   "assertions": [
+    "report.md が指定パスに生成されている",
+    "report.md の取得ステータス件数が work/state.json の byStatus と一致する",
+    "summary.md の報告件数が report.md の内容と矛盾しない",
+    "相違検出の機種数が結果ファイルの実態 (mismatches 非空の件数) と一致する"
+   ]
+  },
+  {
+   "id": 2,
+   "prompt": "照合できてない (failed) 機種の一覧をブランド別に集計して教えて。再挑戦するときのコマンドと引数も。結果は failed-summary.md に保存して。",
+   "expected_output": "failed の全機種をブランド別に正しく集計し、--retry-failed による再挑戦手順と Workflow 起動引数を示す",
+   "files": [],
+   "assertions": [
+    "failed-summary.md に failed の全機種が列挙されている (state.json の failed と一致)",
+    "ブランド別集計の合計が state.json の failed 件数と一致する",
+    "再挑戦手順として validate-results.js --retry-failed (または nextIds 経由) と Workflow 起動引数が正しく示されている",
+    "work/results/ の failed 結果が退避・削除されずに残っている"
+   ]
+  }
+ ]
+}

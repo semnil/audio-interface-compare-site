@@ -1,5 +1,8 @@
 node_modules/
 dist/
-.claude/
+.claude/*
+!.claude/skills/
+.claude/skills/*-workspace/
 tools/verify/work/
+tools/discover/work/
 product-page-verification-report.md

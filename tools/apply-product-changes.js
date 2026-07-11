@@ -1,9 +1,9 @@
 /**
- * apply-product-changes.js — xlsx へ製品行の削除 + 追加を一括適用する (一度きりの移行用)
+ * apply-product-changes.js — xlsx へ製品行の削除 + 追加を一括適用する
  *
  * usage: node tools/apply-product-changes.js <new-rows-json-path>
- * new-rows JSON は {Header:value} オブジェクトの配列 (43 列のキーはヘッダー名と一致)。
- * 削除対象は REMOVALS に "Brand Model" で列挙。
+ * new-rows JSON は {Header:value} オブジェクトの配列 (キーは xlsx ヘッダー名と一致)。
+ * 削除対象は REMOVALS に "Brand Model" で列挙 (サイクルごとに書き換える。追加のみなら空にする)。
  * 既存行を読み込み → 削除対象を除外 → 新規行を連結 → Brand,Model 順にソート → データ領域を書き直す。
  */
 import { readFileSync } from "node:fs";
