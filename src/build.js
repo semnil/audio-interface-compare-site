@@ -51,6 +51,7 @@ const COLUMNS = [
   { key: "micPre",           label: "Mic Preamps",                  labelJa: "マイクプリアンプ数" },
   { key: "comboIn",          label: "Combo Inputs (XLR/TRS)",       labelJa: "Combo入力 (XLR/TRS)" },
   { key: "lineIn",           label: "Line Inputs",                  labelJa: "ライン入力" },
+  { key: "rcaIn",            label: "RCA Input",                    labelJa: "RCA入力" },
   { key: "hiZ",              label: "Hi-Z Inputs",                  labelJa: "Hi-Z入力" },
   { key: "adatIn",           label: "ADAT Input (ch@48kHz)",        labelJa: "ADAT入力 (ch@48kHz)" },
   { key: "opticalIn",        label: "Optical Ports (Input)",        labelJa: "光ポート (入力)" },
@@ -59,6 +60,7 @@ const COLUMNS = [
   { key: "aesIn",            label: "AES/EBU Input",                labelJa: "AES/EBU入力" },
   { key: "mainOut",          label: "Analog Main Output",           labelJa: "アナログメイン出力" },
   { key: "lineOut",          label: "Analog Line Output",           labelJa: "アナログライン出力" },
+  { key: "rcaOut",           label: "RCA Output",                   labelJa: "RCA出力" },
   { key: "hpOut",            label: "Headphone Output",             labelJa: "ヘッドフォン出力" },
   { key: "adatOut",          label: "ADAT Output (ch@48kHz)",       labelJa: "ADAT出力 (ch@48kHz)" },
   { key: "opticalOut",       label: "Optical Ports (Output)",       labelJa: "光ポート (出力)" },
@@ -99,12 +101,12 @@ const SPEC_GROUPS = [
   {
     id: "input",
     title: "Inputs",        titleJa: "入力",
-    keys: ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn"],
+    keys: ["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn"],
   },
   {
     id: "output",
     title: "Outputs",       titleJa: "出力",
-    keys: ["mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut"],
+    keys: ["mainOut", "lineOut", "rcaOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut"],
   },
   {
     id: "features",
@@ -1160,34 +1162,36 @@ function indexPage(products, buildDate) {
 </html>`;
 }
 
+// Parse numeric value; for range strings like "-18 to +70" (canonical) or legacy "0-65" / "-18-65"
+// returns the mean of both ends
+const RANGE_RE = /^([+-]?\d+(?:\.\d+)?)\s*(?:[-\u2013]|to\s)\s*([+-]?\d+(?:\.\d+)?)$/i;
+function parseNumeric(val) {
+  const s = String(val).trim();
+  const rangeMatch = s.match(RANGE_RE);
+  if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
+  return parseFloat(s);
+}
+
+// THD+N and EIN are lower-is-better but use string formats; skip highlighting
+// Price: not highlighted (preference depends on buyer)
+const HIGHER_BETTER = new Set(["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
+  "mainOut", "lineOut", "rcaOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
+  "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"]);
+function diffClass(key, valA, valB) {
+  if (!HIGHER_BETTER.has(key)) return ["", ""];
+  const nA = parseNumeric(valA), nB = parseNumeric(valB);
+  // 片側でも NaN なら比較対象外 (欠損を「優位」とは見なさない)
+  if (isNaN(nA) || isNaN(nB)) return ["", ""];
+  if (nA === nB) return ["", ""];
+  return nA > nB ? [" highlight", ""] : ["", " highlight"];
+}
+
 function comparePage(a, b, buildDate, totalProducts) {
   const keyToLabel = {};
   const keyToLabelJa = {};
   for (const col of COLUMNS) {
     keyToLabel[col.key] = col.label;
     keyToLabelJa[col.key] = col.labelJa;
-  }
-
-  // Parse numeric value; for range strings like "0-65" or "-18-65" returns the mean of both ends
-  function parseNumeric(val) {
-    const s = String(val).trim();
-    const rangeMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[-\u2013]\s*(-?\d+(?:\.\d+)?)$/);
-    if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
-    return parseFloat(s);
-  }
-
-  function diffClass(key, valA, valB) {
-    const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
-      "mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
-      "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
-    // THD+N and EIN are lower-is-better but use string formats; skip highlighting
-    // Price: not highlighted (preference depends on buyer)
-    if (!higherBetter.includes(key)) return ["", ""];
-    const nA = parseNumeric(valA), nB = parseNumeric(valB);
-    // 片側でも NaN なら比較対象外 (欠損を「優位」とは見なさない)
-    if (isNaN(nA) || isNaN(nB)) return ["", ""];
-    if (nA === nB) return ["", ""];
-    return nA > nB ? [" highlight", ""] : ["", " highlight"];
   }
 
   function withMark(cell, cls) {
@@ -1576,29 +1580,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 }
 
 // テスト用エクスポート (本番ビルドには影響しない)
-// diffClass は comparePage のクロージャ内に定義されているため、ここで同等実装を export する
 export function _slugify(brand, model) { return slugify(brand, model); }
 export function _escapeHtml(str) { return escapeHtml(str); }
-export { COLUMNS };
-
-// diffClass は comparePage 内のクロージャだが、テスト用に同等ロジックを再公開する
-function _parseNumeric(val) {
-  const s = String(val).trim();
-  const rangeMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[-\u2013]\s*(-?\d+(?:\.\d+)?)$/);
-  if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
-  return parseFloat(s);
-}
-export function _diffClass(key, valA, valB) {
-  const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
-    "mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
-    "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
-  // THD+N and EIN are lower-is-better but use string formats; skip highlighting
-  if (!higherBetter.includes(key)) return ["", ""];
-  const nA = _parseNumeric(valA), nB = _parseNumeric(valB);
-  // 片側でも NaN なら比較対象外 (欠損を「優位」とは見なさない)
-  if (isNaN(nA) || isNaN(nB)) return ["", ""];
-  if (nA === nB) return ["", ""];
-  return nA > nB ? [" highlight", ""] : ["", " highlight"];
-}
+export { COLUMNS, diffClass as _diffClass };
 
 export function _renderMeasurements(val) { return renderMeasurements(val); }

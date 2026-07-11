@@ -9,15 +9,15 @@ import assert from "node:assert/strict";
 // build.js の parseNumeric と同一ロジック (範囲文字列は両端の平均を返す)
 function parseNumeric(val) {
   const s = String(val).trim();
-  const rangeMatch = s.match(/^(-?\d+(?:\.\d+)?)\s*[-\u2013]\s*(-?\d+(?:\.\d+)?)$/);
+  const rangeMatch = s.match(/^([+-]?\d+(?:\.\d+)?)\s*(?:[-\u2013]|to\s)\s*([+-]?\d+(?:\.\d+)?)$/i);
   if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
   return parseFloat(s);
 }
 
 // build.js の diffClass と同一ロジック (片側でも NaN なら比較しない)
 function diffClass(key, valA, valB) {
-  const higherBetter = ["micPre", "comboIn", "lineIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
-    "mainOut", "lineOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
+  const higherBetter = ["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
+    "mainOut", "lineOut", "rcaOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
     "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
   if (!higherBetter.includes(key)) return ["", ""];
   const nA = parseNumeric(valA), nB = parseNumeric(valB);
@@ -68,6 +68,25 @@ describe("parseNumeric: 範囲文字列の境界値 (via diffClass:gainRange)", 
   test("負値範囲 '-18-65' は平均 23.5 として扱われる", () => {
     // 'A=-18-65' (平均 23.5) vs 'B=50' → B ハイライト
     assert.deepEqual(diffClass("gainRange", "-18-65", 50), ["", " highlight"]);
+  });
+
+  test("正規形 '-18 to +70' は平均 26 として扱われる", () => {
+    // 'A=-18 to +70' (平均 26) vs 'B=50' → B ハイライト
+    assert.deepEqual(diffClass("gainRange", "-18 to +70", 50), ["", " highlight"]);
+  });
+
+  test("正規形 '+10 to +65' は平均 37.5 として扱われる", () => {
+    // '+10 to +65' (平均 37.5) vs 30 → A ハイライト
+    assert.deepEqual(diffClass("gainRange", "+10 to +65", 30), [" highlight", ""]);
+  });
+
+  test("正規形 '0 to +60' は平均 30 として扱われる", () => {
+    // '0 to +60' (平均 30) vs 50 → B ハイライト
+    assert.deepEqual(diffClass("gainRange", "0 to +60", 50), ["", " highlight"]);
+  });
+
+  test("'to' の大文字混在 '0 To +60' も認識される", () => {
+    assert.deepEqual(diffClass("gainRange", "0 To +60", 50), ["", " highlight"]);
   });
 
   test("空白のみ文字列は両側 NaN → 空配列", () => {
