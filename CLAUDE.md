@@ -11,9 +11,10 @@ audio-interface-compare-site/
 ├── .github/workflows/build-deploy.yml  ← GitHub Actions (月次自動ビルド→GitHub Pages デプロイ)
 ├── .gitignore                          ← node_modules/, dist/
 ├── package.json                        ← Node >=18, 依存: exceljs
-├── data/audio_interfaces.xlsx          ← スペックデータ (ソース、43列。最終列=Measurement Reports)
+├── data/audio_interfaces.xlsx          ← スペックデータ (ソース。最終列=Measurement Reports)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML)
-├── tools/                              ← xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記)
+├── tools/                              ← xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記、add-rca-columns.js: RCA 列の追加)
+│   └── verify/                         ← 製品スペック自動照合パイプライン (README.md 参照。work/ は git 管理外)
 ├── tests/                              ← node:test ベースのテストスイート
 └── dist/                               ← 生成物 (gitignore 対象)
     ├── index.html                      ← トップページ (製品選択UI + クライアント検索)
@@ -72,14 +73,17 @@ audio-interface-compare-site/
 - slug 衝突は build 時に `Error('Slug collision: ...')` で fail fast
 - `BASE_PATH` は trim + 連続スラッシュ畳み込みで正規化
 - `diffClass` は両辺が数値でない限りハイライトを抑止 (片側欠損での誤優劣表示を防ぐ)
-- 数値範囲文字列 (`"0-65"` / `"-18-65"` など) は両端の平均値で比較
+- 数値範囲文字列は両端の平均値で比較。正規形は符号付き `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`)、旧形式 (`"0-65"` / `"-18-65"`) もパーサは互換
 
 ### 製品カタログ / データ更新
 - 収録対象は現行 IF + USB/配信ミキサー + 配信機。**プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限**に留めている (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, Lynx Aurora マトリクス, Ferrofish, MOTU AVB 等は未収録 = 将来候補)
-- 機種の削除 (生産終了) は製品ページの 301/404 リダイレクトで検証してから行う
+- 機種の削除 (生産終了) は根拠を確認してから行う (公式ページの 301/404・生産完了表記・公式 discontinued リスト・代理店の価格表/告知のいずれか + 操作者の同意)
 - 未公開の測定値 (DR/THD+N/EIN) は空欄にする (推測で埋めない)
+- プリアンプゲインレンジ列の正規形は符号付き `x to y` (例: `-18 to +70`, `+10 to +65`, `0 to +60`)。レンジ未公表 (ゲイン幅のみ公称) の機種は単一値のまま。ハイフン区切り (`0-65`) は負値と紛らわしいため新規記入に使わない
+- RCA Input / RCA Output 列 (アンバランス RCA 端子、ライン入出力とは分離して計数) は `tools/add-rca-columns.js` で xlsx に追加する新列。build.js の COLUMNS には追加済みで、xlsx 側の列追加は照合修正の適用と同時に行う
 - `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
 - `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)
+- `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして work/results/ に保存し、中断後は validate-results.js の nextIds から再開する。照合結果のレポートはリポジトリ直下 product-page-verification-report.md (git 管理外にするか否かは運用判断、現状未コミット)
 
 ### ホスティング: GitHub Pages
 - リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
@@ -95,7 +99,8 @@ audio-interface-compare-site/
 ### テスト基盤
 - `node:test` + `node:assert` (外部依存ゼロ) で `tests/*.test.js` を実行
 - `package.json` の test スクリプトは `--test-concurrency=1` でシリアル実行 (build.js import 時副作用ガード併用)
-- `src/build.js` は末尾で `_slugify` / `_escapeHtml` / `_diffClass` / `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` / `COLUMNS` などを export
+- `src/build.js` が末尾で export するのは `_slugify` / `_escapeHtml` / `_diffClass` / `_renderMeasurements` / `COLUMNS` のみ。これらを import するテストは `diffClass.test.js` / `renderMeasurements.test.js` の 2 本
+- `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` は **未 export**。該当テストは build() の副作用を避けるため同一ロジックをテスト側にインライン再現する (各テスト冒頭コメントに参照元の build.js 行番号を明記)
 - 監査由来のテスト多数: a11y 契約、JSON-LD エスケープ、canonical URL 契約、script 読込順序、slug 衝突、sanitize URL probe など
 
 ## 未解決・要対応
@@ -138,6 +143,12 @@ BASE_PATH=/repo-name/ npm run build
 # 出力先変更ビルド
 DIST_DIR=/tmp/build-output npm run build
 
+# サイト絶対 URL 指定 (OGP / canonical / sitemap のベース。未指定時は semnil.github.io/... がデフォルト)
+SITE_URL=https://example.com npm run build
+
+# カスタムドメイン配信 (dist/CNAME を生成)
+CUSTOM_DOMAIN=example.com BASE_PATH=/ npm run build
+
 # ローカルプレビュー
 npm run build && npx serve dist -l 3000
 ```
@@ -147,8 +158,8 @@ npm run build && npx serve dist -l 3000
 `data/audio_interfaces.xlsx` — 「Audio Interfaces」シート、1行目ヘッダー、2行目以降データ。
 ヘッダーは英語名で、`build.js` の `COLUMNS[].label` と一致させて列を特定する (日本語名ではない)。
 主な列: ブランド, モデル名, カテゴリ, 参考価格 (USD), マイクプリアンプ数, Combo入力,
-ライン入力, Hi-Z入力, ADAT入力, 光ポート/S/PDIF(同軸・光)/AES入力, アナログメイン出力, アナログライン出力,
-ヘッドフォン出力, ADAT出力, 光ポート/S/PDIF(同軸・光)/AES出力, ファンタム電源, 最大サンプリングレート,
+ライン入力, RCA入力, Hi-Z入力, ADAT入力, 光ポート/S/PDIF(同軸・光)/AES入力, アナログメイン出力, アナログライン出力,
+RCA出力, ヘッドフォン出力, ADAT出力, 光ポート/S/PDIF(同軸・光)/AES出力, ファンタム電源, 最大サンプリングレート,
 最大ビット深度, 接続規格, MIDI I/O, ループバック, DSPエフェクト, ダイレクトモニタリング,
 プリアンプゲインレンジ, DR入力, DR出力, DR(条件不明), THD+Nマイク入力, THD+N出力,
 THD+N(条件不明), EIN(A-weighted), EIN(条件不明), 対応OS, バンドルソフト, 特記事項, 製品ページURL,
