@@ -35,6 +35,38 @@ Workflow({
 - `concurrency` (既定 1 = 直列) / `model` / `effort` (既定セッション継承) は任意。並列時の中断・上限・下位モデルのリスク特性は README「中断耐性の設計」が正本
 - モデル選択の実績: 2026-07 の再照合 (反映値の最終確認) は sonnet + effort high + 並列 8 で実施。初回照合をどのモデルで行うかは操作者判断
 
+## 相違の精査と質問解決 (第 2 段・第 3 段 — 標準経路)
+
+全項目スキャン (第 1 段) の validate が完了して mismatch が残ったら、そのまま操作者に見せず精査を挟んで偽陽性を排除する (実測: 高確度 28 件中 13 件が偽陽性、精査コストはスキャンの 5% 程度):
+
+```bash
+node tools/verify/export-contested.js   # 争点抽出。既知 hold/単位差は自動除外、価格は隔離
+```
+
+```
+Workflow({
+  scriptPath: "<リポジトリ絶対パス>/tools/verify/recheck-workflow.js",
+  args: { workDir: "<リポジトリ絶対パス>/tools/verify/work",
+          ids: <work/contested-index.json の配列>,
+          concurrency: 2, model: "<第 1 段と別モデル>", effort: "high" }
+})
+```
+
+- model は第 1 段と**別のモデル**にして誤読の相関を切る (第 1 段 sonnet なら第 2 段はセッション継承等)。精査エージェントはマニュアル/データシート PDF の参照が必須
+- 並列度は **2 が上限** (スクリプト側で固定)。PDF 解析 + headless Chrome のメモリ負荷が高く、並列 8 でプロセスごと落ち、並列 4 でも高負荷の実績あり (2026-07-12)
+- 復旧: 結果は `work/rechecks/product-NNN.json` のチェックポイント。中断したら contested-index.json から rechecks/ に無い ids を差し引いて再起動する
+
+```bash
+node tools/verify/partition-rechecks.js  # verdict 仕分け + 質問下書きを出力
+```
+
+- `xlsx_correct` は自動 hold — **質問しない** (偽陽性として決着)
+- `page_correct` / `judgement_required` のみ AskUserQuestion で操作者に確認する。機種単位でグルーピングし最大 4 問/バッチ、各質問に原文引用 + 修正候補を含め、選択肢は「修正適用 / 変更なし」を基本にする (このセッション実績のフロー)
+- 操作者決定は corrections-gen.py の新ラウンド (`ROUND<N>` → `corrections-round<N>.json`) に記録する。idx は行削除でシフトするため、ラウンドごとに「何行時点の rows-full.json 基準か」をコメントに残す
+- 恒久的な「変更不要」(ページ側誤記・単位差・計数方針・操作者決定) は gen の `KNOWN_HOLDS` に (brand, model, column) で追加する。export-contested と build-report が次サイクルから自動除外する
+- 参考価格の相違は work/price-diffs.json に隔離される。レポートの「参考価格の相違」セクションで一括判断を仰ぐ
+- 事前 lint (任意): `node tools/verify/lint-columns.js` で列間矛盾をエージェントなしで検出できる
+
 ## 中断・失敗への対応
 
 - ワークフローが `aborted: true` (連続失敗の打切り) や利用制限エラーで終わったら、制限解除後に「validate → nextIds で再起動」するだけ。それ以外の復旧操作は不要
@@ -87,7 +119,7 @@ node tools/verify/apply-corrections.js tools/verify/work/corrections-edited.json
 
 ## 修正候補の作成と xlsx への反映 (反映は要・操作者の同意)
 
-照合で確定した誤りは xlsx に反映して初めて完了となる。ただし**同意なしに xlsx を書き換えない**:
+相違が数百件規模の初回サイクルでは、第 2 段の代わりに propose-corrections + レポートの一括レビュー経路も使える (通常は上記の精査 → 質問解決を使う)。いずれの経路でも、照合で確定した誤りは xlsx に反映して初めて完了となる。ただし**同意なしに xlsx を書き換えない**:
 
 ```bash
 node tools/verify/propose-corrections.js     # mismatch (high) から修正案 work/corrections-proposal.json を生成
