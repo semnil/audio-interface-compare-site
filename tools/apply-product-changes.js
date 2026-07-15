@@ -17,6 +17,21 @@ const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 // 生産終了・重複統合で削除する製品 ("Brand Model")。サイクルごとに書き換える
 const REMOVALS = new Set([]);
 
+// 追加行のセル値を数値化する。new-rows JSON は全値が文字列になりがちで、そのまま
+// 書くと参照価格・入出力数・サンプルレート等が数値でなくテキストセルになる。純数値の
+// 文字列だけ Number 化する (テキスト列は除外 = MOTU 624/848 のような純数値の Model を壊さない)。
+const TEXT_COLUMNS = new Set(["Brand", "Model", "Category"]);
+const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
+function coerceNumericCells(row) {
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = typeof v === "string" && !TEXT_COLUMNS.has(k) && NUMERIC_STRING.test(v.trim())
+      ? Number(v.trim())
+      : v;
+  }
+  return out;
+}
+
 const newRowsPath = process.argv[2];
 if (!newRowsPath) {
   console.error("usage: node tools/apply-product-changes.js <new-rows-json-path>");
@@ -66,7 +81,7 @@ for (const r of newRows) {
   const key = `${r.Brand} ${r.Model}`;
   if (dup.has(key)) { console.warn(`skip duplicate: ${key}`); continue; }
   dup.add(key);
-  added.push(r);
+  added.push(coerceNumericCells(r));
 }
 
 const combined = kept.concat(added);
