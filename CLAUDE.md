@@ -13,10 +13,11 @@ audio-interface-compare-site/
 ├── package.json                        ← Node >=18, 依存: exceljs
 ├── data/audio_interfaces.xlsx          ← スペックデータ (ソース。最終列=Measurement Reports)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML)
-├── .claude/skills/                     ← 運用スキル (verify-products: スペック照合、discover-products: 新製品検出。*-workspace/ は git 管理外)
+├── .claude/skills/                     ← 運用スキル (verify-products: スペック照合、discover-products: 新製品検出、collect-measurements: Measurement Reports 収集。*-workspace/ は git 管理外)
 ├── tools/                              ← xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記、add-rca-columns.js: RCA 列の追加)
 │   ├── verify/                         ← 製品スペック自動照合パイプライン (README.md 参照。work/ は git 管理外)
-│   └── discover/work/                  ← 新製品検出 (カタログ監査) の作業領域 (git 管理外。手順は .claude/skills/discover-products)
+│   ├── discover/work/                  ← 新製品検出 (カタログ監査) の作業領域 (git 管理外。手順は .claude/skills/discover-products)
+│   └── measurements/work/              ← 測定レポート収集の作業領域 (git 管理外。手順は .claude/skills/collect-measurements)
 ├── tests/                              ← node:test ベースのテストスイート
 └── dist/                               ← 生成物 (gitignore 対象)
     ├── index.html                      ← トップページ (製品選択UI + クライアント検索)
@@ -85,7 +86,8 @@ audio-interface-compare-site/
 - プリアンプゲインレンジ列の正規形は符号付き `x to y` (例: `-18 to +70`, `+10 to +65`, `0 to +60`)。レンジ未公表 (ゲイン幅のみ公称) の機種は単一値のまま。ハイフン区切り (`0-65`) は負値と紛らわしいため新規記入に使わない
 - RCA Input / RCA Output 列 (アンバランス RCA 端子、ライン入出力とは分離して計数) は `tools/add-rca-columns.js` で xlsx に追加する新列。build.js の COLUMNS には追加済みで、xlsx 側の列追加は照合修正の適用と同時に行う
 - `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
-- `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)
+- `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)。既定は dry-run (機種ごとの書き込みプレビュー) で、`--apply` を付けたときだけ xlsx を書き込む (add-rca-columns.js / apply-corrections.js と同じ同意ゲート)
+- 測定レポート (Measurement Reports 列) の収集は skill collect-measurements で運用する (作業領域 tools/measurements/work/)。独立系の第三者ベンチ (ASR/APx・ProSound RMAA・測定系 YouTube〈Julian Krause 等〉・Sound on Sound bench・小規模ラボ) を優先し、無いときのみメーカー公称にフォールバック。世代・型番のミスマッチ (旧 Gen・姉妹機の測定の流用) を避ける。JS ゲートで直接読めない動画などを間接採用したときは確度フラグ (`verification: indirect` + 裏取り) を残す
 - `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして work/results/ に保存し、中断後は validate-results.js の nextIds から再開する。照合レポート (リポジトリ直下 product-page-verification-report.md) は git 管理外で、更新のたびに再生成・上書きし、照合サイクル完了後に削除する
 
 ### ホスティング: GitHub Pages
