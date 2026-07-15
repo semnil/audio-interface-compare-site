@@ -1,10 +1,11 @@
 /**
  * update-xlsx.js — 測定レポート URL カラムを xlsx に書き込む (データ再収集時の移行ツール)
  *
- * usage: node tools/update-xlsx.js <result-json-path>
- * result JSON は Workflow (collect-rmaa-urls) の出力形式。
+ * usage: node tools/update-xlsx.js <result-json-path> [--apply]
+ * result JSON は collect-measurements スキルの収集結果形式。
  * .result.products[] = {product, urls:[{source,url,measurementType,title}]} または {products:[...]} を受け付ける。
  * 冪等: 既存の "Measurement Reports" 列があれば上書き、なければ最終列に追加する。
+ * 既定は dry-run (機種ごとの書き込みプレビューのみ)。--apply を付けたときだけ xlsx を書き込む。
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -15,9 +16,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 const HEADER = "Measurement Reports";
 
-const resultPath = process.argv[2];
+const args = process.argv.slice(2);
+const apply = args.includes("--apply");
+const resultPath = args.find((a) => !a.startsWith("--"));
 if (!resultPath) {
-  console.error("usage: node tools/update-xlsx.js <result-json-path>");
+  console.error("usage: node tools/update-xlsx.js <result-json-path> [--apply]");
   process.exit(1);
 }
 
@@ -93,6 +96,7 @@ headerRow.getCell(targetCol).value = HEADER;
 let written = 0;
 let matched = 0;
 const unmatched = [];
+const changes = [];
 ws.eachRow((row, rowNumber) => {
   if (rowNumber === 1) return;
   const brand = row.getCell(1).value;
@@ -103,6 +107,7 @@ ws.eachRow((row, rowNumber) => {
   const md = mdByProduct[displayName];
   if (md) {
     row.getCell(targetCol).value = md;
+    changes.push([displayName, md]);
     written++;
   }
 });
@@ -119,13 +124,20 @@ for (const key of Object.keys(mdByProduct)) {
   if (!xlsxNames.has(key)) unmatched.push(key);
 }
 
-headerRow.commit();
-await wb.xlsx.writeFile(DATA_FILE);
+if (apply) {
+  headerRow.commit();
+  await wb.xlsx.writeFile(DATA_FILE);
+}
 
 console.log(`Header column: ${targetCol} ("${HEADER}")`);
-console.log(`Data rows: ${matched}, rows with URLs written: ${written}`);
+console.log(`Data rows: ${matched}, rows with URLs ${apply ? "written" : "to write"}: ${written}`);
 console.log(`Products with URLs in result: ${Object.keys(mdByProduct).length}`);
+if (changes.length) {
+  console.log(`\n${apply ? "WRITTEN" : "PREVIEW (dry-run)"}:`);
+  changes.forEach(([name, md]) => console.log(`  ${name}: ${md}`));
+}
 if (unmatched.length) {
   console.log(`\nUNMATCHED (result product not found in xlsx):`);
   unmatched.forEach((u) => console.log(`  - ${u}`));
 }
+if (!apply) console.log(`\n(dry-run) 書き込むには --apply を付けて再実行`);
