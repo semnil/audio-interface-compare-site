@@ -15,10 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
 // 生産終了・重複統合で削除する製品 ("Brand Model")。サイクルごとに書き換える
-const REMOVALS = new Set([
-  "Native Instruments Komplete Audio 1",
-  "Native Instruments Komplete Audio 2",
-]);
+const REMOVALS = new Set([]);
 
 const newRowsPath = process.argv[2];
 if (!newRowsPath) {
