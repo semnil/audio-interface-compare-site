@@ -5,4 +5,5 @@ dist/
 .claude/skills/*-workspace/
 tools/verify/work/
 tools/discover/work/
+tools/measurements/work/
 product-page-verification-report.md
