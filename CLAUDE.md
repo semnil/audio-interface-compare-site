@@ -88,7 +88,7 @@ audio-interface-compare-site/
 - `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
 - `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)。既定は dry-run (機種ごとの書き込みプレビュー) で、`--apply` を付けたときだけ xlsx を書き込む (add-rca-columns.js / apply-corrections.js と同じ同意ゲート)
 - 測定レポート (Measurement Reports 列) の収集は skill collect-measurements で運用する (作業領域 tools/measurements/work/)。独立系の第三者ベンチ (ASR/APx・ProSound RMAA・測定系 YouTube〈Julian Krause 等〉・Sound on Sound bench・小規模ラボ) を優先し、無いときのみメーカー公称にフォールバック。世代・型番のミスマッチ (旧 Gen・姉妹機の測定の流用) を避ける。JS ゲートで直接読めない動画などを間接採用したときは確度フラグ (`verification: indirect` + 裏取り) を残す
-- `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして work/results/ に保存し、中断後は validate-results.js の nextIds から再開する。照合レポート (リポジトリ直下 product-page-verification-report.md) は git 管理外で、更新のたびに再生成・上書きし、照合サイクル完了後に削除する
+- `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして work/results/ に保存し、中断後は validate-results.js の nextIds から再開する。照合レポート (リポジトリ直下 product-page-verification-report.md) は git 管理外で、更新のたびに再生成・上書きし (ヘッダーの生成時刻で版を識別、最新版のみが残る)、照合サイクル完了後に削除する。削除予定/削除済みの機種名は removals.json の保存名 (brand/model) で照合・表示し、行削除で並びがずれる idx には依存しない
 
 ### ホスティング: GitHub Pages
 - リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
