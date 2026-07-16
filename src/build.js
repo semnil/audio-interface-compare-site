@@ -3,9 +3,13 @@
  *
  * 処理:
  * 1. data/audio_interfaces.xlsx を読み込み
- * 2. dist/products.json を出力 (クライアント検索用)
- * 3. dist/index.html を出力 (トップページ: 製品選択 + 検索)
- * 4. dist/compare/{slugA}-vs-{slugB}/index.html を全組合せ分出力
+ * 2. dist/products.json を出力 (クライアント検索 + 動的比較のデータソース)
+ * 3. dist/index.html を出力 (トップページ: 製品選択 + 検索 + クライアント動的比較)
+ * 4. dist/compare.js を出力 (フラグメント URL /#a=..&b=.. で比較表をブラウザ描画)
+ * 5. dist/products/{slug}/index.html を製品数分出力 (個別スペックページ)
+ *
+ * 比較は全組合せの静的ページ生成を廃止し、クライアントサイドのフラグメント URL に移行した。
+ * 比較 URL はクローラーに別 URL として扱われず、インデックス対象は index + 製品ページに限定される。
  */
 
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
@@ -13,6 +17,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setPriority, constants } from "node:os";
 import ExcelJS from "exceljs";
+import { createCanvas } from "@napi-rs/canvas";
 
 // ビルドプロセスの CPU 優先度を下げ、他のアプリケーションへの影響を軽減
 try { setPriority(constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
@@ -148,6 +153,32 @@ function displayValue(val) {
   return escapeHtml(String(val));
 }
 
+// key → {en, ja} ラベル。ビルド側 (製品ページ) と compare.js 埋め込みで共用する単一のテーブル
+const KEY_LABELS = {};
+for (const c of COLUMNS) KEY_LABELS[c.key] = { en: c.label, ja: c.labelJa };
+
+// 価格表示の唯一のフォーマッタ (compare.js には .toString() で埋め込む)
+function fmtPrice(v) {
+  return "$" + Number(v).toLocaleString("en-US");
+}
+
+// スペック表セルの描画分岐 (measurements / price / その他)。
+// 静的製品ページと動的比較ビュー (compare.js 埋め込み) の両方が使う単一実装
+function cellFor(p, key) {
+  if (key === "measurements") return renderMeasurements(p[key]);
+  if (key === "price" && p[key] != null && p[key] !== "") return fmtPrice(p[key]);
+  return displayValue(p[key]);
+}
+
+// 主要スペックの 1 行要素 (og:image のスペック行と meta description が共用)
+function keySpecParts(p) {
+  const parts = [];
+  if (p.micPre != null && p.micPre !== "") parts.push(`${p.micPre} mic preamp${Number(p.micPre) === 1 ? "" : "s"}`);
+  if (p.sampleRate != null && p.sampleRate !== "") parts.push(`${p.sampleRate} kHz${p.bitDepth ? ` / ${p.bitDepth}-bit` : ""}`);
+  if (p.usb != null && p.usb !== "") parts.push(String(p.usb));
+  return parts;
+}
+
 // 測定レポート列: markdown "[label](url) / [label](url)" を外部リンクの HTML に変換
 // URL は sanitizeUrl で http(s) のみ許可し、ラベル・URL とも escapeHtml する
 function renderMeasurements(val) {
@@ -178,6 +209,13 @@ function safeJsonForScript(obj) {
 // JSON-LD (application/ld+json) 埋め込み向け。上記に加え & も \u0026 にエスケープする
 function safeJsonForScriptLD(obj) {
   return safeJsonForScript(obj).replace(/&/g, "\\u0026");
+}
+
+// PAGE_JA → i18n.js の読み込み順契約を 1 箇所に集約する。値のエスケープは
+// safeJsonForScript が機械的に担保する (手書きのクォートエスケープを持ち込まない)
+function i18nScripts(pageJa) {
+  return `<script>var PAGE_JA=${safeJsonForScript(pageJa)};</script>
+<script src="${BASE_PATH}i18n.js"></script>`;
 }
 
 // 外部 URL を http(s) スキームに限定してサニタイズ。不正なら空文字を返す
@@ -350,6 +388,101 @@ function generateFaviconIco() {
   return Buffer.concat(parts);
 }
 
+// ─── og:image generation (1200x630 share card) ──────────────────────────
+// SNS 共有カード。ランキング要因ではなく共有 CTR 向け。favicon と同じ配色 (D4 デザイン) で統一。
+// テキスト描画に @napi-rs/canvas を使用 (フォントは OS の sans-serif にフォールバック)。
+const OG_W = 1200;
+const OG_H = 630;
+
+function ogWrapText(ctx, text, maxWidth, maxLines) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+  let overflow = false;
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth || !line) {
+      line = candidate;
+    } else if (lines.length < maxLines - 1) {
+      lines.push(line);
+      line = word;
+    } else {
+      // 最終行が埋まった。残りは省略記号で丸める
+      overflow = true;
+      break;
+    }
+  }
+  if (line) lines.push(line);
+  if (overflow) {
+    let last = lines[lines.length - 1];
+    while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 1) last = last.slice(0, -1);
+    lines[lines.length - 1] = `${last}…`;
+  }
+  return lines;
+}
+
+// 描画のみを行い canvas を返す。PNG エンコードは呼び出し側が canvas.encode("png") (非同期) で
+// バッチ並列実行する — 同期 toBuffer はエンコード (17ms/枚 × 309 枚) がビルド時間の 8 割を占めた。
+// 注意: エンコードが in-flight の間に別 canvas を描画すると @napi-rs/canvas 1.x でクラッシュするため、
+// バッチ内は「全描画完了 → 全エンコード」の順序を守ること (build() の og ループ参照)
+function drawOgCard({ title, subtitle = "", specLine = "" }) {
+  const canvas = createCanvas(OG_W, OG_H);
+  const ctx = canvas.getContext("2d");
+
+  const g = ctx.createLinearGradient(0, 0, OG_W, OG_H);
+  g.addColorStop(0, "#1e1b4b");
+  g.addColorStop(1, "#0f172a");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, OG_W, OG_H);
+
+  // 3 バーのロゴモチーフ (favicon と同配色)
+  const bars = [
+    { x: 64, y: 76, w: 18, h: 56, color: "#3b82f6" },
+    { x: 90, y: 90, w: 18, h: 42, color: "#818cf8" },
+    { x: 116, y: 69, w: 18, h: 63, color: "#a855f7" },
+  ];
+  for (const b of bars) {
+    ctx.fillStyle = b.color;
+    if (typeof ctx.roundRect === "function") {
+      ctx.beginPath();
+      ctx.roundRect(b.x, b.y, b.w, b.h, 5);
+      ctx.fill();
+    } else {
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+  }
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "600 28px sans-serif";
+  ctx.fillText("AUDIO INTERFACE COMPARATOR", 156, 112);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "700 68px sans-serif";
+  const lines = ogWrapText(ctx, title, OG_W - 128, 2);
+  let y = 292;
+  for (const line of lines) {
+    ctx.fillText(line, 64, y);
+    y += 82;
+  }
+
+  if (subtitle) {
+    ctx.fillStyle = "#a5b4fc";
+    ctx.font = "500 40px sans-serif";
+    ctx.fillText(ogWrapText(ctx, subtitle, OG_W - 128, 1)[0] || "", 64, y + 6);
+    y += 60;
+  }
+  if (specLine) {
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "400 32px sans-serif";
+    ctx.fillText(ogWrapText(ctx, specLine, OG_W - 128, 1)[0] || "", 64, y + 10);
+  }
+
+  ctx.fillStyle = "#3b82f6";
+  ctx.fillRect(0, OG_H - 12, OG_W, 12);
+
+  return canvas;
+}
+
 // ─── Read xlsx ──────────────────────────────────────────────────────────
 async function readXlsx() {
   const wb = new ExcelJS.Workbook();
@@ -384,28 +517,63 @@ async function readXlsx() {
 
 // ─── Templates ──────────────────────────────────────────────────────────
 
-function htmlHead(title, extra = "", ogp = null) {
+// 言語選択の保存キー。semnil.github.io はプロジェクト間でオリジンを共有するため名前空間を付ける
+const LANG_PREF_KEY = "aicmp-lang";
+
+// 初回訪問の言語リダイレクト (英語ページ専用・非対称)。
+// 保存済み選択が無く navigator.language が ja のとき、同一パスの /ja/ へ location.replace する。
+// /ja/ 側では発火させない: Googlebot (en ロケール) が /ja/ を描画した際に / へ飛ばすと
+// /ja/ のインデックスが壊れるため。en ページは Googlebot では条件不成立 (navigator=en) で無害。
+// トグル操作 (i18n.js で localStorage に保存) を以後尊重する。
+// 注: 変数は `var BP = ` (スペース入り) とし localizeToJa の `="..."` / `const BASE_PATH = ` パターンに一致させない
+function langRedirectSnippet() {
+  return `<script>(function(){
+if(document.documentElement.lang==='ja')return;
+var BP = ${JSON.stringify(BASE_PATH)};
+if(location.pathname.indexOf(BP+'ja/')===0)return;
+var pref=null;try{pref=localStorage.getItem(${JSON.stringify(LANG_PREF_KEY)});}catch(e){}
+if(pref==='ja'||(!pref&&/^ja\\b/.test(navigator.language)))
+location.replace(BP+'ja/'+location.pathname.slice(BP.length)+location.search+location.hash);
+})();</script>`;
+}
+
+// alternates: { enUrl, jaUrl } (絶対 URL)。指定時に hreflang alternate + x-default と
+// 初回訪問の言語リダイレクトスニペットを出力する (404 など alternates 無しのページには出力しない)。
+// lang 属性は常に "en" で出力し、/ja/ ページは localizeToJa() が "ja" に書き換える。
+function htmlHead(title, extra = "", ogp = null, alternates = null) {
   const ogpTags = ogp ? (() => {
     const t = escapeHtml(ogp.title || title);
     const d = escapeHtml(ogp.description || "");
     const u = escapeHtml(ogp.url || SITE_URL + BASE_PATH);
+    const img = ogp.image ? escapeHtml(ogp.image) : "";
+    const imgTags = img ? `
+<meta property="og:image" content="${img}">
+<meta property="og:image:width" content="${OG_W}">
+<meta property="og:image:height" content="${OG_H}">` : "";
+    const twImgTag = img ? `
+<meta name="twitter:image" content="${img}">` : "";
     return `
 <meta property="og:type" content="${ogp.type || "website"}">
 <meta property="og:title" content="${t}">
 <meta property="og:description" content="${d}">
 <meta property="og:url" content="${u}">
-<meta property="og:site_name" content="Audio Interface Comparator">
-<meta name="twitter:card" content="summary">
+<meta property="og:site_name" content="Audio Interface Comparator">${imgTags}
+<meta name="twitter:card" content="${img ? "summary_large_image" : "summary"}">
 <meta name="twitter:title" content="${t}">
-<meta name="twitter:description" content="${d}">`;
+<meta name="twitter:description" content="${d}">${twImgTag}`;
   })() : "";
+  const hreflangTags = alternates ? `
+<link rel="alternate" hreflang="en" href="${escapeHtml(alternates.enUrl)}">
+<link rel="alternate" hreflang="ja" href="${escapeHtml(alternates.jaUrl)}">
+<link rel="alternate" hreflang="x-default" href="${escapeHtml(alternates.enUrl)}">` : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+${alternates ? langRedirectSnippet() : ""}
 <title>${escapeHtml(title)}</title>
-<meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />${ogpTags}
+<meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />${ogpTags}${hreflangTags}
 <link rel="icon" href="${BASE_PATH}favicon.svg" type="image/svg+xml">
 <link rel="icon" href="${BASE_PATH}favicon.ico" sizes="48x48">
 <link rel="stylesheet" href="${BASE_PATH}style.css">
@@ -413,17 +581,216 @@ ${extra}
 </head>`;
 }
 
+// 言語トグル。target は切替先言語 ("ja" → 「日本語」 / "en" → 「English」)。
+// テンプレートと localizeToJa() の両方がこの関数を使い、マークアップの真実を 1 箇所に保つ
+function langToggle(href, target) {
+  const label = target === "ja" ? "日本語" : "English";
+  return `<a class="lang-toggle" href="${escapeHtml(href)}" hreflang="${target}">${label}</a>`;
+}
+
+// 置換が期待件数に満たなければ throw する。regex 後処理方式 (localizeToJa) の既知の脆さを
+// 「テンプレート変更で静かに本番へ出る」から「ビルドが落ちる」に変える fail-fast ガード
+function mustReplace(html, pattern, replacement, minCount, label) {
+  const found = typeof pattern === "string"
+    ? html.split(pattern).length - 1
+    : (html.match(pattern) || []).length;
+  if (found < minCount) {
+    throw new Error(`localizeToJa: パターン不一致 (${label}): expected >= ${minCount}, found ${found}`);
+  }
+  return html.replace(pattern, replacement);
+}
+
+// 英語ページの生成済み HTML を /ja/ ページに変換する。
+// - <html lang> を ja に
+// - 内部ページリンク (home / products / brands / categories / 比較フラグメント) を /ja/ 配下へ
+// - canonical / og:url を /ja/ URL へ (自己参照)
+// - index インラインスクリプトの PAGE_BASE を /ja/ へ (specs-link 用)
+// - 言語トグルを英語版へのリンクに差し替え
+// アセット (style.css / i18n.js / compare.js / favicon / products.json / sitemap.xml) は distinct な
+// ファイル名でルート配信のため、下記パターンには一致せず据え置かれる。
+// 本文テキストは i18n.js が lang=ja を見てクライアント翻訳する (Googlebot も lang 条件で可視)。
+// 全ページで必ず存在する結合点 (lang / canonical / og:url / トグル / index の PAGE_BASE) は
+// mustReplace で件数を検証する。件数がページ種別に依存するリンク書き換えは通常の replace。
+function localizeToJa(enHtml, enHref, jaHref, { hasInlineBase = false } = {}) {
+  const bp = BASE_PATH;
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let html = enHtml;
+  html = mustReplace(html, '<html lang="en">', '<html lang="ja">', 1, "lang 属性");
+  // 内部ページリンク: ="${bp}products/ 等 → ="${bp}ja/products/
+  for (const seg of ["products/", "brands/", "categories/"]) {
+    html = html.replace(new RegExp(`="${esc(bp + seg)}`, "g"), `="${bp}ja/${seg}`);
+  }
+  // 比較フラグメント: ="${bp}#... → ="${bp}ja/#...
+  html = html.replace(new RegExp(`="${esc(bp)}#`, "g"), `="${bp}ja/#`);
+  // ホームリンク (完全一致 ="${bp}") → ="${bp}ja/"
+  html = html.replace(new RegExp(`="${esc(bp)}"`, "g"), `="${bp}ja/"`);
+  html = mustReplace(html, new RegExp(`(rel="canonical" href="${esc(SITE_URL + bp)})`, "g"), `$1ja/`, 1, "canonical");
+  html = mustReplace(html, new RegExp(`(property="og:url" content="${esc(SITE_URL + bp)})`, "g"), `$1ja/`, 1, "og:url");
+  html = mustReplace(html,
+    `const PAGE_BASE = ${JSON.stringify(bp)};`,
+    `const PAGE_BASE = ${JSON.stringify(bp + "ja/")};`,
+    hasInlineBase ? 1 : 0, "インライン PAGE_BASE");
+  html = mustReplace(html, langToggle(jaHref, "ja"), langToggle(enHref, "en"), 1, "lang-toggle");
+  return html;
+}
+
 // Shared i18n script (written to dist/i18n.js)
 // PAGE_JA is expected to be set by each page before loading this script
+// 言語は URL で分離する (/ = 英語, /ja/ = 日本語)。i18n は navigator.language ではなく
+// <html lang> を見て動作する。これにより /ja/ ページは Googlebot (en ロケール) でも常に
+// 日本語化され、逆に / は常に英語のまま (hreflang + 言語トグルで相互誘導)。
+// window.__i18n.apply(root) を公開し、compare.js が挿入した DOM 部分木にも翻訳を適用する。
 const I18N_JS = `(function(){
-if(!/^ja\\b/.test(navigator.language))return;
-document.documentElement.lang='ja';
+var isJa=document.documentElement.lang==='ja';
 var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告',extSite:' (外部サイト)'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
-document.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');if(ja[k])el.textContent=ja[k];});
-document.querySelectorAll('[data-i18n-content]').forEach(function(el){var v=el.getAttribute('data-i18n-val');if(v)el.setAttribute('content',v);});
-document.querySelectorAll('[data-i18n-label]').forEach(function(el){el.textContent=el.getAttribute('data-i18n-label');});
-document.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){var k=el.getAttribute('data-i18n-placeholder');if(ja[k])el.placeholder=ja[k];});
+function apply(root){
+if(!isJa)return;
+root=root||document;
+root.querySelectorAll('[data-i18n]').forEach(function(el){var k=el.getAttribute('data-i18n');if(ja[k])el.textContent=ja[k];});
+root.querySelectorAll('[data-i18n-content]').forEach(function(el){var v=el.getAttribute('data-i18n-val');if(v)el.setAttribute('content',v);});
+root.querySelectorAll('[data-i18n-label]').forEach(function(el){el.textContent=el.getAttribute('data-i18n-label');});
+root.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){var k=el.getAttribute('data-i18n-placeholder');if(ja[k])el.placeholder=ja[k];});
+}
+window.__i18n={isJa:isJa,ja:ja,apply:apply};
+apply(document);
+document.querySelectorAll('.lang-toggle').forEach(function(el){
+el.addEventListener('click',function(){try{localStorage.setItem('${LANG_PREF_KEY}',el.getAttribute('hreflang')||'en');}catch(e){}});
+});
 })();`;
+
+// ─── Client-side compare renderer (dist/compare.js) ─────────────────────
+// 比較表をブラウザで描画するスクリプト。build.js のヘルパー (escapeHtml / sanitizeUrl /
+// displayValue / renderMeasurements / parseNumeric / diffClass) を .toString() で埋め込み、
+// サーバー生成の旧比較ページと同一のロジック・マークアップでレンダリングする (二重管理を避ける)。
+// data-i18n / data-i18n-label 付きで生成し、挿入後に window.__i18n.apply() で日本語化する。
+// 注: この方式は build.js が非トランスパイルの素の ESM として実行されることに依存する。
+function compareJs() {
+  // 前提ガード: .toString() 埋め込みはトランスパイル/バンドルで '[native code]' 化すると壊れる
+  const embedded = [escapeHtml, sanitizeUrl, displayValue, renderMeasurements, parseNumeric, diffClass, fmtPrice, cellFor];
+  for (const fn of embedded) {
+    if (fn.toString().includes("[native code]")) {
+      throw new Error(`compareJs: ${fn.name} が native code 化されており埋め込めない`);
+    }
+  }
+  return `(function(){
+"use strict";
+var ROOT_BASE=${JSON.stringify(BASE_PATH)};
+// products.json 等の共有アセットは常にルート。ページリンク (back-link) は現在言語のホームへ。
+var PAGE_BASE=(location.pathname.indexOf(ROOT_BASE+'ja/')===0)?ROOT_BASE+'ja/':ROOT_BASE;
+var GROUPS=${safeJsonForScript(SPEC_GROUPS)};
+var LABELS=${safeJsonForScript(KEY_LABELS)};
+var HIGHER_BETTER=new Set(${safeJsonForScript([...HIGHER_BETTER])});
+var RANGE_RE=${RANGE_RE.toString()};
+${escapeHtml.toString()}
+${sanitizeUrl.toString()}
+${displayValue.toString()}
+${renderMeasurements.toString()}
+${parseNumeric.toString()}
+${diffClass.toString()}
+${fmtPrice.toString()}
+${cellFor.toString()}
+function withMark(cell,cls){if(!cls)return cell;return cell+'<span class="hl-mark" aria-hidden="true"> \\u2713</span><span class="sr-only"> Better value</span>';}
+function buildRows(a,b){
+  var rows='';
+  for(var gi=0;gi<GROUPS.length;gi++){
+    var g=GROUPS[gi];
+    rows+='<tr class="group-header" id="'+g.id+'"><td colspan="3"><a href="#'+g.id+'" data-i18n-label="'+escapeHtml(g.titleJa)+'">'+escapeHtml(g.title)+'</a></td></tr>';
+    for(var ki=0;ki<g.keys.length;ki++){
+      var key=g.keys[ki];
+      var lab=LABELS[key]||{en:key,ja:key};
+      var d=diffClass(key,a[key],b[key]);
+      var clsA=d[0],clsB=d[1];
+      rows+='<tr><th scope="row" class="label-col" data-i18n-label="'+escapeHtml(lab.ja)+'">'+escapeHtml(lab.en)+'</th>'
+        +'<td class="val-col'+clsA+'">'+withMark(cellFor(a,key),clsA)+'</td>'
+        +'<td class="val-col'+clsB+'">'+withMark(cellFor(b,key),clsB)+'</td></tr>';
+    }
+  }
+  return rows;
+}
+function extLink(p){var u=sanitizeUrl(p.url);return u?'<a class="ext-link" href="'+escapeHtml(u)+'" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page \\u2192</a>':'';}
+function card(p){
+  var price=(p.price!=null&&p.price!=='')?'<div class="price">'+escapeHtml(fmtPrice(p.price))+'</div>':'<div class="price no-price" data-i18n="noPrice">No price info</div>';
+  return '<div class="product-card"><h2>'+escapeHtml(p.displayName)+'</h2><div class="cat">'+escapeHtml(p.category||'')+'</div>'+price+extLink(p)+'</div>';
+}
+function backLink(){return '<a class="back-link" href="'+PAGE_BASE+'" data-i18n="backLink">\\u2190 Back to product selection</a>';}
+function renderCompare(a,b){
+  return backLink()
+    +'<div class="compare-header">'+card(a)+card(b)+'</div>'
+    +'<div class="spec-table-wrap"><table class="spec-table">'
+    +'<caption class="sr-only">Audio interface spec comparison: '+escapeHtml(a.displayName)+' vs '+escapeHtml(b.displayName)+'</caption>'
+    +'<thead><tr><th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>'
+    +'<th scope="col" class="val-col" style="font-weight:700">'+escapeHtml(a.displayName)+'</th>'
+    +'<th scope="col" class="val-col" style="font-weight:700">'+escapeHtml(b.displayName)+'</th></tr></thead>'
+    +'<tbody>'+buildRows(a,b)+'</tbody></table></div>';
+}
+var DATA=null,loading=null;
+function ensureData(){
+  if(DATA)return Promise.resolve(DATA);
+  if(loading)return loading;
+  loading=fetch(ROOT_BASE+'products.json').then(function(r){if(!r.ok)throw new Error('http '+r.status);return r.json();}).then(function(list){
+    var map={};for(var i=0;i<list.length;i++)map[list[i].slug]=list[i];DATA=map;return map;
+  });
+  return loading;
+}
+function parseHash(){
+  var h=location.hash.replace(/^#/,'');
+  if(!h)return null;
+  var params=new URLSearchParams(h);
+  var a=params.get('a'),b=params.get('b');
+  if(!a||!b)return null;
+  return {a:a,b:b};
+}
+function i18nApply(el){if(window.__i18n)window.__i18n.apply(el);}
+function selectorView(){return document.getElementById('selector-view');}
+function compareView(){return document.getElementById('compare-view');}
+function showSelector(){
+  var cv=compareView();if(cv){cv.hidden=true;cv.innerHTML='';}
+  var sv=selectorView();if(sv)sv.hidden=false;
+}
+function showStatus(cv,key,en){
+  cv.innerHTML=backLink()+'<p class="compare-status" data-i18n="'+key+'">'+en+'</p>';
+  i18nApply(cv);
+}
+function showCompare(slugA,slugB){
+  var sv=selectorView();if(sv)sv.hidden=true;
+  var cv=compareView();if(!cv)return;
+  cv.hidden=false;
+  showStatus(cv,'loading','Loading\\u2026');
+  ensureData().then(function(map){
+    // 取得完了までに別ペアへ遷移/離脱していたら stale 描画を中断
+    var cur=parseHash();
+    if(!cur||cur.a!==slugA||cur.b!==slugB)return;
+    var a=map[slugA],b=map[slugB];
+    if(!a||!b){showStatus(cv,'notFound','One or both products were not found.');return;}
+    document.title=a.displayName+' vs '+b.displayName+' \\u2014 Audio Interface Comparator';
+    cv.innerHTML=renderCompare(a,b);
+    i18nApply(cv);
+    window.scrollTo(0,0);
+    cv.setAttribute('tabindex','-1');
+    cv.focus({preventScroll:true});
+  }).catch(function(){
+    showStatus(cv,'loadError','Failed to load comparison data.');
+  });
+}
+function route(){
+  var sel=parseHash();
+  if(sel)showCompare(sel.a,sel.b);else showSelector();
+}
+document.addEventListener('click',function(e){
+  var t=e.target.closest('.back-link');
+  if(t&&compareView()&&!compareView().hidden){
+    e.preventDefault();
+    history.pushState(null,'',PAGE_BASE);
+    showSelector();
+    var first=document.getElementById('search-a');if(first)first.focus();
+  }
+});
+// pushState 経路はクリックハンドラが直接 showSelector() を呼び、hash 遷移と履歴の戻る/進むは
+// いずれも hashchange で拾える (popstate を併用すると毎遷移で二重描画になる)
+window.addEventListener('hashchange',route);
+route();
+})();`;
+}
 
 const CSS = `
 :root {
@@ -494,6 +861,25 @@ header h1 a {
   color: var(--text);
   text-decoration: none;
 }
+.header-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.lang-toggle {
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lang-toggle:hover { border-color: var(--accent); background: var(--accent-light); }
+.lang-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 header .subtitle {
   font-size: 0.85rem;
   color: var(--text-secondary);
@@ -641,7 +1027,16 @@ main { padding: 32px 0 64px; }
   color: var(--text-secondary);
 }
 
-/* ─ Comparison page ─ */
+/* ─ Comparison view (client-rendered) ─ */
+[hidden] { display: none !important; }
+/* コンテナへのプログラム的フォーカス (SR 読み上げ順制御) にリングは不要 */
+.compare-view:focus { outline: none; }
+.compare-status {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
 .compare-header {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -777,11 +1172,22 @@ footer a:hover { color: var(--accent); }
 }
 
 /* ─ Product page ─ */
+.product-summary {
+  margin: 0 0 24px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  font-size: 0.95rem;
+  color: var(--text);
+  line-height: 1.7;
+}
 .compare-links-heading {
   font-size: 1.1rem;
   margin: 48px 0 16px;
 }
-.compare-links {
+.compare-links,
+.hub-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -789,7 +1195,8 @@ footer a:hover { color: var(--accent); }
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 8px;
 }
-.compare-links li a {
+.compare-links li a,
+.hub-list li a {
   display: block;
   padding: 10px 16px;
   background: var(--surface);
@@ -800,10 +1207,54 @@ footer a:hover { color: var(--accent); }
   font-size: 0.9rem;
   transition: border-color 0.1s, background 0.1s;
 }
-.compare-links li a:hover { border-color: var(--accent); background: var(--accent-light); }
-.compare-links li a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.compare-links .brand { font-weight: 600; }
-.compare-links .meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+.compare-links li a:hover,
+.hub-list li a:hover { border-color: var(--accent); background: var(--accent-light); }
+.compare-links li a:focus-visible,
+.hub-list li a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.compare-links .brand,
+.hub-list .brand { font-weight: 600; }
+.compare-links .meta,
+.hub-list .meta { font-size: 0.8rem; color: var(--text-secondary); margin-top: 2px; }
+
+/* ─ Browse (index static hub links) ─ */
+.browse { margin-top: 32px; }
+.browse h2 { font-size: 1rem; margin: 0 0 12px; color: var(--text-secondary); }
+.browse-group { margin-bottom: 24px; }
+.browse-group h3 { font-size: 0.82rem; font-weight: 600; color: var(--text); margin: 0 0 8px; }
+.browse-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.browse-links li a {
+  display: inline-block;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+.browse-links li a:hover { border-color: var(--accent); background: var(--accent-light); }
+.browse-links li a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.browse-links .count { color: var(--text-secondary); }
+
+/* ─ 404 page ─ */
+.notfound { text-align: center; padding: 48px 0 64px; }
+.notfound-code {
+  font-size: 4rem;
+  font-weight: 800;
+  color: var(--accent);
+  margin: 0;
+  line-height: 1;
+}
+.notfound h2 { font-size: 1.4rem; margin: 16px 0 8px; }
+.notfound p { color: var(--text-secondary); }
+.notfound .compare-btn { color: #fff; margin: 16px 0 8px; }
 
 /* 減速モーションを好むユーザーのために transition / animation を最小化 */
 @media (prefers-reduced-motion: reduce) {
@@ -815,7 +1266,7 @@ footer a:hover { color: var(--accent); }
 }
 `;
 
-function indexPage(products, buildDate) {
+function indexPage(products, brandGroups, categoryGroups, buildDate) {
   const productJson = safeJsonForScript(
     products.map((p) => ({
       slug: p.slug,
@@ -827,26 +1278,51 @@ function indexPage(products, buildDate) {
     }))
   );
 
+  const descEn = `Compare specs of ${products.length} audio interfaces side by side — mic preamps, inputs, outputs, audio performance (DR/THD+N/EIN), connection, and price.`;
+  const descJa = `オーディオインターフェース ${products.length} 機種の詳細スペックを横並び比較。マイクプリ・入出力数・オーディオ性能 (DR/THD+N/EIN)・接続規格・価格をひと目で確認。`;
   const ogp = {
     type: "website",
     title: "Audio Interface Comparator",
-    description: `Compare specs of ${products.length} audio interfaces side by side — inputs, outputs, audio performance, and price.`,
+    description: descEn,
     url: `${SITE_URL}${BASE_PATH}`,
+    image: `${SITE_URL}${BASE_PATH}og/site.png`,
   };
-  const canonicalTag = `<link rel="canonical" href="${SITE_URL}${BASE_PATH}">`;
-  return `${htmlHead("Audio Interface Comparator", canonicalTag, ogp)}
+  const headExtra = `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${SITE_URL}${BASE_PATH}">`;
+  const alternates = { enUrl: `${SITE_URL}${BASE_PATH}`, jaUrl: `${SITE_URL}${BASE_PATH}ja/` };
+
+  // 静的なブラウズ導線 (ブランド別 / カテゴリ別ハブへのリンク)。製品ページへの
+  // レンダリング非依存のクロール経路を作り、リスト系クエリを取りに行く
+  const brandLinks = brandGroups.map((g) => `<li><a href="${BASE_PATH}brands/${g.slug}/">${escapeHtml(g.name)} <span class="count">(${g.items.length})</span></a></li>`).join("");
+  const catLinks = categoryGroups.map((g) => `<li><a href="${BASE_PATH}categories/${g.slug}/">${escapeHtml(g.name)} <span class="count">(${g.items.length})</span></a></li>`).join("");
+  const browseSection = `<section class="browse" aria-labelledby="browse-heading">
+      <h2 id="browse-heading" data-i18n="browseHeading">Browse all products</h2>
+      <div class="browse-group">
+        <h3 data-i18n="browseBrands">By brand</h3>
+        <ul class="browse-links">${brandLinks}</ul>
+      </div>
+      <div class="browse-group">
+        <h3 data-i18n="browseCategories">By category</h3>
+        <ul class="browse-links">${catLinks}</ul>
+      </div>
+    </section>`;
+
+  return `${htmlHead("Audio Interface Comparator", headExtra, ogp, alternates)}
 <body>
 <a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
-  <div class="container">
-    <h1>Audio Interface Comparator</h1>
-    <div class="subtitle" data-i18n="subtitle">${products.length} products — Select two to compare specs</div>
+  <div class="container header-bar">
+    <div>
+      <h1>Audio Interface Comparator</h1>
+      <div class="subtitle" data-i18n="subtitle">${products.length} products — Select two to compare specs</div>
+    </div>
+    ${langToggle(`${BASE_PATH}ja/`, "ja")}
   </div>
 </header>
 <main id="main">
   <div class="container">
-    <noscript><p class="noscript-warning">JavaScript is required to select products. Browse the <a href="${BASE_PATH}sitemap.xml">sitemap</a> to reach specific comparisons.</p></noscript>
+    <noscript><p class="noscript-warning">JavaScript is required to search and compare. Browse by brand or category below, or open the <a href="${BASE_PATH}sitemap.xml">sitemap</a> for all product spec pages.</p></noscript>
+    <div id="selector-view">
     <div class="selector-section">
       <div class="selector-grid">
         <div class="selector-col" id="col-a">
@@ -868,6 +1344,9 @@ function indexPage(products, buildDate) {
         <p class="compare-hint" id="compare-hint" data-i18n="compareHint">Select Product A and Product B</p>
       </div>
     </div>
+    ${browseSection}
+    </div>
+    <div id="compare-view" class="compare-view" hidden></div>
   </div>
 </main>
 <footer>
@@ -878,9 +1357,9 @@ function indexPage(products, buildDate) {
 </footer>
 <script>
 (function(){
-  const BASE_PATH = ${JSON.stringify(BASE_PATH)};
+  const PAGE_BASE = ${JSON.stringify(BASE_PATH)};
   const PRODUCTS = ${productJson};
-  const isJa = /^ja\\b/.test(navigator.language);
+  const isJa = document.documentElement.lang === 'ja';
 
   // Lightweight search: split query into tokens, match all tokens against brand+model
   function search(query) {
@@ -923,7 +1402,7 @@ function indexPage(products, buildDate) {
       var ariaSel = sel ? ' aria-selected="true"' : ' aria-selected="false"';
       var priceStr = p.price ? '$' + Number(p.price).toLocaleString('en-US') : '';
       var specsLabel = isJa ? '仕様 ↗' : 'Specs ↗';
-      var specsHref = BASE_PATH + 'products/' + p.slug + '/';
+      var specsHref = PAGE_BASE + 'products/' + p.slug + '/';
       return '<div class="product-item-wrap">'
         + '<button type="button" role="option" class="product-item' + sel + '" id="' + optionId(side, p.slug) + '" tabindex="-1"' + (isDisabled ? ' disabled' : '') + ariaSel + ' data-slug="' + p.slug + '">'
         + '<span class="brand">' + esc(p.brand) + '</span> ' + esc(p.model)
@@ -1152,12 +1631,28 @@ function indexPage(products, buildDate) {
 
   document.getElementById('compare-btn').addEventListener('click', () => {
     if (!state.a || !state.b) return;
-    window.location.href = BASE_PATH + 'compare/' + state.a + '-vs-' + state.b + '/';
+    // フラグメント URL に遷移。compare.js が hashchange を受けて比較表を描画する
+    location.hash = '#a=' + encodeURIComponent(state.a) + '&b=' + encodeURIComponent(state.b);
   });
 })();
 </script>
-<script>var PAGE_JA={subtitle:'全 ${products.length} 製品 — 2つ選んで詳細スペックを比較',productA:'製品 A',productB:'製品 B',searchPlaceholder:'ブランド名・モデル名で検索…',compareBtn:'比較する',compareHint:'Product A と Product B を選択',skipToMain:'メインコンテンツへスキップ',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
-<script src="${BASE_PATH}i18n.js"></script>
+${i18nScripts({
+  subtitle: `全 ${products.length} 製品 — 2つ選んで詳細スペックを比較`,
+  productA: "製品 A",
+  productB: "製品 B",
+  searchPlaceholder: "ブランド名・モデル名で検索…",
+  compareBtn: "比較する",
+  compareHint: "Product A と Product B を選択",
+  skipToMain: "メインコンテンツへスキップ",
+  loading: "読み込み中…",
+  notFound: "指定された製品が見つかりませんでした。",
+  loadError: "比較データの読み込みに失敗しました。",
+  browseHeading: "すべての製品を見る",
+  browseBrands: "ブランド別",
+  browseCategories: "カテゴリ別",
+  footer: `最終更新: ${buildDate} — データソース: 各メーカー公式仕様`,
+})}
+<script src="${BASE_PATH}compare.js"></script>
 </body>
 </html>`;
 }
@@ -1186,152 +1681,73 @@ function diffClass(key, valA, valB) {
   return nA > nB ? [" highlight", ""] : ["", " highlight"];
 }
 
-function comparePage(a, b, buildDate, totalProducts) {
-  const keyToLabel = {};
-  const keyToLabelJa = {};
-  for (const col of COLUMNS) {
-    keyToLabel[col.key] = col.label;
-    keyToLabelJa[col.key] = col.labelJa;
-  }
+// ─── Spec summary (machine-generated, data-driven) ─────────────────────────
+// xlsx の既存データのみから 2〜4 文の英日サマリーを生成する (推測で埋めない)。
+// 製品ページ固有のテキスト量を増やし、準重複ページ評価を緩和する狙い。
+function specSummary(product) {
+  const num = (v) => (v != null && v !== "" && !isNaN(Number(v)) ? Number(v) : null);
+  const yes = (v) => v != null && String(v).trim().toLowerCase().startsWith("yes");
+  const listEn = (arr) => arr.length <= 1 ? (arr[0] || "")
+    : arr.length === 2 ? `${arr[0]} and ${arr[1]}`
+    : `${arr.slice(0, -1).join(", ")}, and ${arr[arr.length - 1]}`;
+  const en = [];
+  const ja = [];
 
-  function withMark(cell, cls) {
-    if (!cls) return cell;
-    return cell + '<span class="hl-mark" aria-hidden="true"> ✓</span><span class="sr-only"> Better value</span>';
-  }
+  const conn = product.usb != null && product.usb !== "" ? String(product.usb) : "";
+  en.push(`${product.displayName} is an audio interface${conn ? ` with ${conn} connectivity` : ""}.`);
+  ja.push(`${product.displayName} は${conn ? ` ${conn} 接続の` : ""}オーディオインターフェースです。`);
 
-  let tableRows = "";
-  for (const group of SPEC_GROUPS) {
-    tableRows += `<tr class="group-header" id="${group.id}"><td colspan="3"><a href="#${group.id}" data-i18n-label="${escapeHtml(group.titleJa)}">${escapeHtml(group.title)}</a></td></tr>\n`;
-    for (const key of group.keys) {
-      const label = keyToLabel[key] || key;
-      const labelJa = keyToLabelJa[key] || label;
-      const [clsA, clsB] = diffClass(key, a[key], b[key]);
-      const fmtVal = (val) => key === "price" && val != null && val !== ""
-        ? '$' + Number(val).toLocaleString('en-US')
-        : null;
-      const cellA = key === "measurements" ? renderMeasurements(a[key]) : (fmtVal(a[key]) ?? displayValue(a[key]));
-      const cellB = key === "measurements" ? renderMeasurements(b[key]) : (fmtVal(b[key]) ?? displayValue(b[key]));
-      tableRows += `<tr>
-  <th scope="row" class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</th>
-  <td class="val-col${clsA}">${withMark(cellA, clsA)}</td>
-  <td class="val-col${clsB}">${withMark(cellB, clsB)}</td>
-</tr>\n`;
-    }
-  }
-
-  const title = `${a.displayName} vs ${b.displayName} — Audio Interface Comparator`;
-  const descEn = `Compare ${a.displayName} and ${b.displayName} specs side by side. I/O count, audio performance, and price at a glance.`;
-  const descJa = `${a.displayName} と ${b.displayName} の詳細仕様を比較。入出力数・オーディオ性能・価格をひと目で確認。`;
-
-  function productJsonLd(p) {
-    const obj = { "@type": "Product", name: p.displayName };
-    if (p.brand) obj.brand = { "@type": "Brand", name: p.brand };
-    return obj;
-  }
-  // canonical / og:url は正規順 (アルファベット順) に統一し、逆順ページも同一 URL を指す
-  // JSON-LD の name / about も canonical と同じ正規順に固定する (逆順ページの SEO 同一性担保)
-  const [canonA, canonB] = a.slug < b.slug ? [a, b] : [b, a];
-  const canonSlugA = canonA.slug;
-  const canonSlugB = canonB.slug;
-  const canonTitle = `${canonA.displayName} vs ${canonB.displayName} — Audio Interface Comparator`;
-  const jsonLd = safeJsonForScriptLD({
-    "@context": "https://schema.org",
-    "@type": "WebPage",
-    name: canonTitle,
-    about: [productJsonLd(canonA), productJsonLd(canonB)],
-  });
-
-  const compareUrl = `${SITE_URL}${BASE_PATH}compare/${canonSlugA}-vs-${canonSlugB}/`;
-  const ogp = {
-    type: "article",
-    title: `${a.displayName} vs ${b.displayName}`,
-    description: descEn,
-    url: compareUrl,
+  const pusher = (arr, arrJa) => (v, unitEn, plEn, labelJa) => {
+    const n = num(v);
+    if (n) { arr.push(`${n} ${n === 1 ? unitEn : plEn}`); arrJa.push(`${labelJa} ${n}`); }
   };
+  const ins = [], insJa = [];
+  const pushIn = pusher(ins, insJa);
+  pushIn(product.micPre, "mic preamp", "mic preamps", "マイクプリ");
+  pushIn(product.comboIn, "combo input", "combo inputs", "Combo 入力");
+  pushIn(product.lineIn, "line input", "line inputs", "ライン入力");
+  pushIn(product.hiZ, "Hi-Z input", "Hi-Z inputs", "Hi-Z 入力");
+  if (ins.length) { en.push(`Inputs include ${listEn(ins)}.`); ja.push(`入力は${insJa.join("・")}を備えます。`); }
 
-  const aUrl = sanitizeUrl(a.url);
-  const bUrl = sanitizeUrl(b.url);
-  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${compareUrl}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp)}
-<body>
-<a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
-<div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
-<header>
-  <div class="container">
-    <h1>${escapeHtml(a.displayName)} vs ${escapeHtml(b.displayName)}</h1>
-    <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleCompare">${totalProducts} products covered</span></div>
-  </div>
-</header>
-<main id="main">
-  <div class="container">
-    <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
+  const outs = [], outsJa = [];
+  const pushOut = pusher(outs, outsJa);
+  pushOut(product.mainOut, "main output", "main outputs", "メイン出力");
+  pushOut(product.lineOut, "line output", "line outputs", "ライン出力");
+  pushOut(product.hpOut, "headphone output", "headphone outputs", "ヘッドフォン出力");
+  if (outs.length) { en.push(`Outputs include ${listEn(outs)}.`); ja.push(`出力は${outsJa.join("・")}を備えます。`); }
 
-    <div class="compare-header">
-      <div class="product-card">
-        <h2>${escapeHtml(a.displayName)}</h2>
-        <div class="cat">${escapeHtml(a.category || "")}</div>
-        ${a.price ? `<div class="price">$${Number(a.price).toLocaleString('en-US')}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
-        ${aUrl ? `<a class="ext-link" href="${escapeHtml(aUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
-      </div>
-      <div class="product-card">
-        <h2>${escapeHtml(b.displayName)}</h2>
-        <div class="cat">${escapeHtml(b.category || "")}</div>
-        ${b.price ? `<div class="price">$${Number(b.price).toLocaleString('en-US')}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
-        ${bUrl ? `<a class="ext-link" href="${escapeHtml(bUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
-      </div>
-    </div>
+  const caps = [], capsJa = [];
+  const sr = num(product.sampleRate), bd = num(product.bitDepth);
+  if (sr && bd) { caps.push(`up to ${sr} kHz / ${bd}-bit`); capsJa.push(`最大 ${sr} kHz / ${bd} bit`); }
+  else if (sr) { caps.push(`up to ${sr} kHz`); capsJa.push(`最大 ${sr} kHz`); }
+  if (yes(product.phantom)) { caps.push("48V phantom power"); capsJa.push("48V ファンタム電源"); }
+  if (yes(product.loopback)) { caps.push("loopback"); capsJa.push("ループバック"); }
+  if (yes(product.dsp)) { caps.push("onboard DSP"); capsJa.push("DSP エフェクト"); }
+  if (yes(product.directMon)) { caps.push("direct monitoring"); capsJa.push("ダイレクトモニタリング"); }
+  if (caps.length) { en.push(`It supports ${listEn(caps)}.`); ja.push(`${capsJa.join("・")}に対応します。`); }
 
-    <div class="spec-table-wrap">
-      <table class="spec-table">
-        <caption class="sr-only">Audio interface spec comparison: ${escapeHtml(a.displayName)} vs ${escapeHtml(b.displayName)}</caption>
-        <thead>
-          <tr>
-            <th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
-            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(a.displayName)}</th>
-            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(b.displayName)}</th>
-          </tr>
-        </thead>
-        <tbody>
-${tableRows}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</main>
-<footer>
-  <div class="container">
-    <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
-    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
-  </div>
-</footer>
-<script>var PAGE_JA={subtitleCompare:'${totalProducts} 製品を網羅',skipToMain:'メインコンテンツへスキップ',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
-<script src="${BASE_PATH}i18n.js"></script>
-</body>
-</html>`;
+  const perf = [], perfJa = [];
+  if (product.drIn) { perf.push(`${product.drIn} dB dynamic range (input)`); perfJa.push(`入力 DR ${product.drIn} dB`); }
+  if (product.drOut) { perf.push(`${product.drOut} dB dynamic range (output)`); perfJa.push(`出力 DR ${product.drOut} dB`); }
+  if (!product.drIn && !product.drOut && product.drUnknown) { perf.push(`${product.drUnknown} dB dynamic range`); perfJa.push(`DR ${product.drUnknown} dB`); }
+  if (perf.length) { en.push(`Measured performance includes ${listEn(perf)}.`); ja.push(`実測性能は${perfJa.join("・")}。`); }
+
+  if (product.price) {
+    const price = fmtPrice(product.price);
+    en.push(`Reference price: ${price}.`);
+    ja.push(`参考価格は ${price} です。`);
+  }
+
+  return { en: en.join(" "), ja: ja.join("") };
 }
 
 // ─── Product page ────────────────────────────────────────────────────────
 function productPage(product, allProducts, buildDate) {
-  const keyToLabel = {};
-  const keyToLabelJa = {};
-  for (const col of COLUMNS) {
-    keyToLabel[col.key] = col.label;
-    keyToLabelJa[col.key] = col.labelJa;
-  }
-
   const pageUrl = `${SITE_URL}${BASE_PATH}products/${product.slug}/`;
 
-  // Key specs for meta description
-  const specParts = [];
-  if (product.micPre != null && product.micPre !== "") {
-    specParts.push(`${product.micPre} mic preamp${product.micPre === 1 ? "" : "s"}`);
-  }
-  if (product.sampleRate != null && product.sampleRate !== "") {
-    specParts.push(`${product.sampleRate}kHz`);
-  }
-  if (product.usb != null && product.usb !== "") {
-    specParts.push(String(product.usb));
-  }
-  const priceStr = product.price ? `$${Number(product.price).toLocaleString("en-US")}` : "";
+  // Key specs for meta description (og:image のスペック行と同一のビルダーを共用)
+  const specParts = keySpecParts(product);
+  const priceStr = product.price ? fmtPrice(product.price) : "";
   const specSuffix = specParts.length ? `: ${specParts.join(", ")}${priceStr ? `, ${priceStr}` : ""}` : (priceStr ? `: ${priceStr}` : "");
   const descEn = `${product.displayName} full specs${specSuffix}. Compare with ${allProducts.length - 1} other audio interfaces on Audio Interface Comparator.`;
   const jaSpecParts = [...specParts];
@@ -1351,21 +1767,15 @@ function productPage(product, allProducts, buildDate) {
   if (extUrl) jsonLdObj.url = extUrl;
   const jsonLd = safeJsonForScriptLD(jsonLdObj);
 
-  // Spec table (2-column: label | value)
+  // Spec table (2-column: label | value)。セル描画は compare.js と共用の cellFor
   let tableRows = "";
   for (const group of SPEC_GROUPS) {
     tableRows += `<tr class="group-header" id="${group.id}"><td colspan="2"><a href="#${group.id}" data-i18n-label="${escapeHtml(group.titleJa)}">${escapeHtml(group.title)}</a></td></tr>\n`;
     for (const key of group.keys) {
-      const label = keyToLabel[key] || key;
-      const labelJa = keyToLabelJa[key] || label;
-      const cell = key === "measurements"
-        ? renderMeasurements(product[key])
-        : key === "price" && product[key] != null && product[key] !== ""
-        ? `$${Number(product[key]).toLocaleString("en-US")}`
-        : displayValue(product[key]);
+      const lab = KEY_LABELS[key] || { en: key, ja: key };
       tableRows += `<tr>
-  <th scope="row" class="label-col" data-i18n-label="${escapeHtml(labelJa)}">${escapeHtml(label)}</th>
-  <td class="val-col">${cell}</td>
+  <th scope="row" class="label-col" data-i18n-label="${escapeHtml(lab.ja)}">${escapeHtml(lab.en)}</th>
+  <td class="val-col">${cellFor(product, key)}</td>
 </tr>\n`;
     }
   }
@@ -1380,29 +1790,34 @@ function productPage(product, allProducts, buildDate) {
   sameBrand.sort((x, y) => x.displayName.localeCompare(y.displayName));
   otherBrand.sort((x, y) => x.displayName.localeCompare(y.displayName));
 
+  // 比較は index ページのフラグメント URL に集約。現製品を左 (a) に置いた表示順で開く。
+  // フラグメントはクローラーに別 URL として扱われないため、正規順ソートは不要
   function compareHref(other) {
-    const [sa, sb] = product.slug < other.slug
-      ? [product.slug, other.slug]
-      : [other.slug, product.slug];
-    return `${BASE_PATH}compare/${sa}-vs-${sb}/`;
+    return `${BASE_PATH}#a=${encodeURIComponent(product.slug)}&b=${encodeURIComponent(other.slug)}`;
   }
 
   const compareLinkItems = [...sameBrand, ...otherBrand].map((other) => {
-    const otherPrice = other.price ? ` · $${Number(other.price).toLocaleString("en-US")}` : "";
+    const otherPrice = other.price ? ` · ${fmtPrice(other.price)}` : "";
     return `<li><a href="${escapeHtml(compareHref(other))}"><span class="brand">${escapeHtml(other.brand)}</span> ${escapeHtml(other.model)}<div class="meta">${escapeHtml(other.category || "")}${escapeHtml(otherPrice)}</div></a></li>`;
   }).join("\n");
 
+  const summary = specSummary(product);
   const title = `${product.displayName} Specs — Audio Interface Comparator`;
-  const ogp = { title: `${product.displayName} Specs`, description: descEn, url: pageUrl };
+  const ogp = { title: `${product.displayName} Specs`, description: descEn, url: pageUrl,
+    image: `${SITE_URL}${BASE_PATH}og/products/${product.slug}.png` };
+  const alternates = { enUrl: pageUrl, jaUrl: `${SITE_URL}${BASE_PATH}ja/products/${product.slug}/` };
 
-  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp)}
+  return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp, alternates)}
 <body>
 <a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
 <div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
 <header>
-  <div class="container">
-    <h1>${escapeHtml(product.displayName)} Specs</h1>
-    <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
+  <div class="container header-bar">
+    <div>
+      <h1>${escapeHtml(product.displayName)} Specs</h1>
+      <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
+    </div>
+    ${langToggle(`${BASE_PATH}ja/products/${product.slug}/`, "ja")}
   </div>
 </header>
 <main id="main">
@@ -1414,6 +1829,8 @@ function productPage(product, allProducts, buildDate) {
       ${priceStr ? `<div class="price">${escapeHtml(priceStr)}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
       ${extUrl ? `<a class="ext-link" href="${escapeHtml(extUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
     </div>
+
+    <p class="product-summary" data-i18n-label="${escapeHtml(summary.ja)}">${escapeHtml(summary.en)}</p>
 
     <div class="spec-table-wrap">
       <table class="spec-table">
@@ -1442,8 +1859,129 @@ ${compareLinkItems}
     <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
   </div>
 </footer>
-<script>var PAGE_JA={subtitleProduct:'全 ${allProducts.length} 製品を収録',skipToMain:'メインコンテンツへスキップ',footer:'最終更新: ${escapeHtml(buildDate)} — データソース: 各メーカー公式仕様'};</script>
-<script src="${BASE_PATH}i18n.js"></script>
+${i18nScripts({
+  subtitleProduct: `全 ${allProducts.length} 製品を収録`,
+  skipToMain: "メインコンテンツへスキップ",
+  footer: `最終更新: ${buildDate} — データソース: 各メーカー公式仕様`,
+})}
+</body>
+</html>`;
+}
+
+// ─── Hub pages (brand / category listings) ─────────────────────────────────
+// 製品ページへの静的な内部リンクを提供し、クロール経路とリスト系クエリの両方を取りに行く。
+// kind: "brand" | "category"。items は当該ブランド/カテゴリの製品配列 (表示順ソート済み)。
+function hubPage(kind, name, slug, items, totalProducts, buildDate) {
+  const isBrand = kind === "brand";
+  const dir = isBrand ? "brands" : "categories";
+  const titleEn = `${name} Audio Interfaces`;
+  const titleJa = `${name} のオーディオインターフェース`;
+  const pageUrl = `${SITE_URL}${BASE_PATH}${dir}/${slug}/`;
+  const descEn = `All ${items.length} ${name} audio interface${items.length === 1 ? "" : "s"} — compare specs, inputs, outputs, and price. Part of a ${totalProducts}-product comparison.`;
+  const descJa = `${name} のオーディオインターフェース ${items.length} 機種の一覧。スペック・入出力・価格を比較できます (全 ${totalProducts} 製品)。`;
+
+  const itemListLd = safeJsonForScriptLD({
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: titleEn,
+    numberOfItems: items.length,
+    itemListElement: items.map((p, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      url: `${SITE_URL}${BASE_PATH}products/${p.slug}/`,
+      name: p.displayName,
+    })),
+  });
+
+  const listItems = items.map((p) => {
+    const price = p.price ? ` · ${fmtPrice(p.price)}` : "";
+    // ブランドハブでは製品名 (モデル) を主表示、カテゴリハブではブランド+モデルを主表示
+    const primary = isBrand
+      ? `<span class="brand">${escapeHtml(p.brand)}</span> ${escapeHtml(p.model)}`
+      : `<span class="brand">${escapeHtml(p.displayName)}</span>`;
+    const secondary = isBrand ? escapeHtml(p.category || "") : escapeHtml(p.brand);
+    return `<li><a href="${BASE_PATH}products/${p.slug}/">${primary}<div class="meta">${secondary}${escapeHtml(price)}</div></a></li>`;
+  }).join("\n");
+
+  const ogp = { title: titleEn, description: descEn, url: pageUrl,
+    image: `${SITE_URL}${BASE_PATH}og/${dir}/${slug}.png` };
+  const extra = `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${itemListLd}</script>`;
+  const alternates = { enUrl: pageUrl, jaUrl: `${SITE_URL}${BASE_PATH}ja/${dir}/${slug}/` };
+
+  return `${htmlHead(`${titleEn} — Audio Interface Comparator`, extra, ogp, alternates)}
+<body>
+<a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
+<div class="ai-disclaimer" data-i18n="aiDisclaimer">Specifications were collected with the assistance of AI and may contain errors. Please verify with official sources.</div>
+<header>
+  <div class="container header-bar">
+    <div>
+      <h1 data-i18n="hubTitle">${escapeHtml(titleEn)}</h1>
+      <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="hubCount">${items.length} of ${totalProducts} products</span></div>
+    </div>
+    ${langToggle(`${BASE_PATH}ja/${dir}/${slug}/`, "ja")}
+  </div>
+</header>
+<main id="main">
+  <div class="container">
+    <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
+    <ul class="hub-list">
+${listItems}
+    </ul>
+  </div>
+</main>
+<footer>
+  <div class="container">
+    <span data-i18n="footer">Last updated: ${escapeHtml(buildDate)} — Source: Official manufacturer specs</span>
+    <br><a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
+  </div>
+</footer>
+${i18nScripts({
+  hubTitle: titleJa,
+  hubCount: `${totalProducts} 製品中 ${items.length} 件`,
+  skipToMain: "メインコンテンツへスキップ",
+  footer: `最終更新: ${buildDate} — データソース: 各メーカー公式仕様`,
+})}
+</body>
+</html>`;
+}
+
+// ─── 404 page ────────────────────────────────────────────────────────────
+// GitHub Pages が任意パスの 404 で配信する静的ページ。旧比較 URL (フラグメント移行前) や
+// slug 変更由来の旧 URL に着地したユーザーを index / sitemap へ静的リンクで誘導する。
+// 自動リダイレクトは soft 404 のアンチパターンなので行わない。noindex で自身の登録を防ぐ。
+function notFoundPage() {
+  const extra = `<meta name="robots" content="noindex">`;
+  return `${htmlHead("Page not found — Audio Interface Comparator", extra)}
+<body>
+<a href="#main" class="skip-link" data-i18n="skipToMain">Skip to main content</a>
+<header>
+  <div class="container">
+    <h1><a href="${BASE_PATH}">Audio Interface Comparator</a></h1>
+  </div>
+</header>
+<main id="main">
+  <div class="container">
+    <div class="notfound">
+      <p class="notfound-code">404</p>
+      <h2 data-i18n="nf404Title">This page could not be found.</h2>
+      <p data-i18n="nf404Body">The page may have moved or been removed. Comparisons are now generated on the fly — pick two products from the home page.</p>
+      <p><a class="compare-btn" href="${BASE_PATH}" data-i18n="nf404Home">Go to product selection</a></p>
+      <p><a href="${BASE_PATH}sitemap.xml" data-i18n="nf404Sitemap">Browse all product pages (sitemap)</a></p>
+    </div>
+  </div>
+</main>
+<footer>
+  <div class="container">
+    <a href="https://github.com/semnil/audio-interface-compare-site/issues" target="_blank" rel="noopener noreferrer" data-i18n="reportIssue">Report an issue</a>
+  </div>
+</footer>
+${i18nScripts({
+  skipToMain: "メインコンテンツへスキップ",
+  nf404Title: "ページが見つかりませんでした",
+  nf404Body: "ページが移動または削除された可能性があります。比較はその場で生成する方式に変わりました。トップページから 2 製品を選んでください。",
+  nf404Home: "製品選択へ移動",
+  nf404Sitemap: "全製品ページを見る (サイトマップ)",
+})}
 </body>
 </html>`;
 }
@@ -1496,11 +2034,60 @@ async function build() {
   writeFileSync(jsonPath, JSON.stringify(products, null, 2));
   console.log("Wrote products.json");
 
-  // 2. Index page
-  writeFileSync(join(DIST, "index.html"), minifyHtml(indexPage(products, buildDate)));
-  console.log("Wrote index.html");
+  // ブランド / カテゴリのグルーピング (ハブページ + index のブラウズ導線用)
+  const hubSlug = (name) => slugify(name, "");
+  const groupBy = (getKey) => {
+    const m = new Map();
+    for (const p of products) {
+      const key = getKey(p);
+      if (!key) continue;
+      if (!m.has(key)) m.set(key, { name: key, slug: hubSlug(key), items: [] });
+      m.get(key).items.push(p);
+    }
+    const groups = [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+    for (const g of groups) g.items.sort((x, y) => x.displayName.localeCompare(y.displayName));
+    return groups;
+  };
+  const brandGroups = groupBy((p) => p.brand);
+  const categoryGroups = groupBy((p) => p.category);
 
-  // 3. Comparison pages (all C(n,2) combinations)
+  // ハブ slug 衝突の fail-fast ガード (製品 slug と同じ不変条件をハブ名前空間にも適用)。
+  // 別名が同一 slug に潰れると writePair と og 画像がサイレント上書きになるため生成前に検出する
+  for (const groups of [brandGroups, categoryGroups]) {
+    const seen = new Map();
+    for (const g of groups) {
+      if (seen.has(g.slug)) {
+        throw new Error(`Hub slug collision: ${g.slug} from "${seen.get(g.slug)}" and "${g.name}"`);
+      }
+      seen.set(g.slug, g.name);
+    }
+  }
+
+  // 各ページを英語 (ルート) と日本語 (/ja/) の 2 版で書き出すヘルパー。
+  // 日本語版は localizeToJa() で英語 HTML の lang / 内部 URL / canonical / トグルを書き換える。
+  const writePair = (enHtml, relPath) => {
+    const enHref = `${BASE_PATH}${relPath}`;
+    const jaHref = `${BASE_PATH}ja/${relPath}`;
+    const enDir = join(DIST, relPath);
+    mkdirSync(enDir, { recursive: true });
+    writeFileSync(join(enDir, "index.html"), minifyHtml(enHtml));
+    const jaDir = join(DIST, "ja", relPath);
+    mkdirSync(jaDir, { recursive: true });
+    // インライン PAGE_BASE (specs-link 用) を持つのは index のみ
+    const jaHtml = localizeToJa(enHtml, enHref, jaHref, { hasInlineBase: relPath === "" });
+    writeFileSync(join(jaDir, "index.html"), minifyHtml(jaHtml));
+  };
+
+  // 2. Index page (en + ja)
+  writePair(indexPage(products, brandGroups, categoryGroups, buildDate), "");
+  console.log("Wrote index.html (+ ja/)");
+
+  // 3. Client-side compare renderer (dist/compare.js, 共有)
+  writeFileSync(join(DIST, "compare.js"), compareJs());
+  console.log("Wrote compare.js");
+
+  // slug 衝突の fail-fast ガード。製品ページ (dist/products/{slug}/) は衝突時に
+  // サイレント上書きになるため、生成前に必ず検出する (build の不変条件)
   const slugMap = new Map();
   for (const p of products) {
     if (slugMap.has(p.slug)) {
@@ -1509,65 +2096,85 @@ async function build() {
     slugMap.set(p.slug, p);
   }
 
-  let pageCount = 0;
-  for (let i = 0; i < products.length; i++) {
-    for (let j = i + 1; j < products.length; j++) {
-      const a = products[i];
-      const b = products[j];
-      // Generate both directions (a-vs-b and b-vs-a) to preserve user's left/right selection
-      for (const [left, right] of [[a, b], [b, a]]) {
-        const dir = join(DIST, "compare", `${left.slug}-vs-${right.slug}`);
-        mkdirSync(dir, { recursive: true });
-        writeFileSync(
-          join(dir, "index.html"),
-          minifyHtml(comparePage(left, right, buildDate, products.length))
-        );
-        pageCount++;
-      }
-      if (pageCount % 100 === 0) {
-        // 100 ページごとに CPU を明け渡し、他プロセスの応答性を確保
-        await new Promise((r) => setTimeout(r, 0));
-      }
-      if (pageCount % 4000 === 0) {
-        console.log(`  ${pageCount} pages generated…`);
-      }
+  // 4. Product pages (one per product, en + ja)
+  for (const product of products) {
+    writePair(productPage(product, products, buildDate), `products/${product.slug}/`);
+  }
+  console.log(`Generated ${products.length} product pages (+ ja/)`);
+
+  // 5. Hub pages (brand / category listings, en + ja)
+  const hubSets = [
+    { kind: "brand", dir: "brands", groups: brandGroups },
+    { kind: "category", dir: "categories", groups: categoryGroups },
+  ];
+  for (const { kind, dir, groups } of hubSets) {
+    for (const g of groups) {
+      writePair(hubPage(kind, g.name, g.slug, g.items, products.length, buildDate), `${dir}/${g.slug}/`);
     }
   }
+  console.log(`Generated ${brandGroups.length} brand + ${categoryGroups.length} category hub pages (+ ja/)`);
 
-  console.log(`Generated ${pageCount} comparison pages`);
-
-  // 4. Product pages (one per product)
-  for (const product of products) {
-    const dir = join(DIST, "products", product.slug);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, "index.html"),
-      minifyHtml(productPage(product, products, buildDate))
-    );
-  }
-  console.log(`Generated ${products.length} product pages`);
-
-  // 5. sitemap.xml (index + all product pages + same-brand canonical comparisons)
+  // 6. sitemap.xml (index + product + hub、各 en + ja)
+  // 比較はフラグメント URL でクロール対象外のため sitemap には載せない
+  const pagePaths = ["", ...products.map((p) => `products/${p.slug}/`),
+    ...hubSets.flatMap(({ dir, groups }) => groups.map((g) => `${dir}/${g.slug}/`))];
   let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
-  sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}</loc><changefreq>monthly</changefreq></url>\n`;
-  let sitemapCount = 1;
-  for (const product of products) {
-    sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}products/${product.slug}/</loc><changefreq>monthly</changefreq></url>\n`;
-    sitemapCount++;
-  }
-  for (let i = 0; i < products.length; i++) {
-    for (let j = i + 1; j < products.length; j++) {
-      if (products[i].brand !== products[j].brand) continue;
-      const [sa, sb] = products[i].slug < products[j].slug
-        ? [products[i].slug, products[j].slug]
-        : [products[j].slug, products[i].slug];
-      sitemap += `  <url><loc>${SITE_URL}${BASE_PATH}compare/${sa}-vs-${sb}/</loc></url>\n`;
-      sitemapCount++;
+  for (const path of pagePaths) {
+    for (const prefix of [BASE_PATH, `${BASE_PATH}ja/`]) {
+      sitemap += `  <url><loc>${SITE_URL}${prefix}${path}</loc><changefreq>monthly</changefreq></url>\n`;
     }
   }
   sitemap += `</urlset>\n`;
   writeFileSync(join(DIST, "sitemap.xml"), sitemap);
-  console.log(`Wrote sitemap.xml (${sitemapCount} URLs: 1 index + ${products.length} product pages + same-brand comparisons)`);
+  console.log(`Wrote sitemap.xml (${pagePaths.length * 2} URLs: ${pagePaths.length} paths × en/ja)`);
+
+  // 7. og:image (SNS 共有カード。en/ja 共用のため言語別には生成しない)
+  // PNG エンコードが og 工程の実測 9 割超を占めるため、バッチ単位で非同期並列化する。
+  // バッチ内は「全描画完了 → 全エンコード開始」の順序が必須 (drawOgCard のコメント参照)
+  mkdirSync(join(DIST, "og", "products"), { recursive: true });
+  for (const { dir } of hubSets) mkdirSync(join(DIST, "og", dir), { recursive: true });
+  const ogJobs = [
+    {
+      file: join(DIST, "og", "site.png"),
+      opts: {
+        title: "Audio Interface Comparator",
+        subtitle: `${products.length} audio interfaces compared side by side`,
+        specLine: "Specs · I/O · Audio performance · Price",
+      },
+    },
+    ...products.map((p) => ({
+      file: join(DIST, "og", "products", `${p.slug}.png`),
+      opts: {
+        title: p.displayName,
+        subtitle: `${p.category || ""}${p.price ? ` · ${fmtPrice(p.price)}` : ""}`,
+        specLine: keySpecParts(p).join(" · "),
+      },
+    })),
+    ...hubSets.flatMap(({ dir, groups }) => groups.map((g) => ({
+      file: join(DIST, "og", dir, `${g.slug}.png`),
+      opts: {
+        title: `${g.name} Audio Interfaces`,
+        subtitle: `${g.items.length} product${g.items.length === 1 ? "" : "s"} compared`,
+      },
+    }))),
+  ];
+  const OG_BATCH = 8;
+  for (let i = 0; i < ogJobs.length; i += OG_BATCH) {
+    const batch = ogJobs.slice(i, i + OG_BATCH);
+    const canvases = batch.map((job) => drawOgCard(job.opts));
+    const bufs = await Promise.all(canvases.map((c) => c.encode("png")));
+    batch.forEach((job, k) => writeFileSync(job.file, bufs[k]));
+  }
+  console.log(`Wrote og images (${ogJobs.length}: 1 site + ${products.length} products + ${brandGroups.length + categoryGroups.length} hubs)`);
+
+  // 8. robots.txt (Sitemap 行のみ。比較 URL のクロールをブロックしない — 404 確認を妨げないため)
+  const robots = `User-agent: *\nAllow: /\nSitemap: ${SITE_URL}${BASE_PATH}sitemap.xml\n`;
+  writeFileSync(join(DIST, "robots.txt"), robots);
+  console.log("Wrote robots.txt");
+
+  // 9. 404.html (GitHub Pages のカスタム 404。自動リダイレクトはしない)
+  writeFileSync(join(DIST, "404.html"), minifyHtml(notFoundPage()));
+  console.log("Wrote 404.html");
 
   console.timeEnd("build");
 }

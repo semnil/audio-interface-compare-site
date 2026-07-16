@@ -130,7 +130,7 @@ describe("product-pages: SEO 契約", { skip: !distExists ? "dist/ が未生成"
     assert.equal(violations.length, 0, violations.slice(0, 5).join(" / "));
   });
 
-  test("比較リンク (.compare-links) が存在し、/compare/ URL を含むこと", () => {
+  test("比較リンク (.compare-links) が存在し、フラグメント URL (#a=..&b=..) を含むこと", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const violations = [];
@@ -140,8 +140,25 @@ describe("product-pages: SEO 契約", { skip: !distExists ? "dist/ が未生成"
         violations.push(`${p.slug}: compare-links 欠落`);
         continue;
       }
-      const linkCount = (html.match(/href="[^"]*\/compare\//g) || []).length;
-      if (linkCount === 0) violations.push(`${p.slug}: compare リンクが 0 件`);
+      // フラグメント URL に移行。静的 /compare/ URL は張らない (クロール爆発防止)
+      // HTML 属性内では & が &amp; にエスケープされる
+      const fragCount = (html.match(/href="[^"]*#a=[^"]*(?:&amp;|&)b=[^"]*"/g) || []).length;
+      if (fragCount === 0) violations.push(`${p.slug}: フラグメント比較リンクが 0 件`);
+      if (html.includes("/compare/")) violations.push(`${p.slug}: 静的 /compare/ URL が残存`);
+    }
+    assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
+  });
+
+  test("スペック要約文 (.product-summary) が存在し、製品名を含むこと", () => {
+    const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
+    const sample = sampleDirs(products, 15);
+    const violations = [];
+    for (const p of sample) {
+      const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
+      const m = html.match(/<p class="product-summary"[^>]*>([^<]+)<\/p>/);
+      if (!m) { violations.push(`${p.slug}: product-summary 欠落`); continue; }
+      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: 要約にブランド名なし`);
+      if (m[1].length < 30) violations.push(`${p.slug}: 要約が短すぎる (${m[1].length})`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });

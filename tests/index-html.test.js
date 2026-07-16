@@ -138,11 +138,12 @@ describe("index.html の品質検査", { skip: !distExists ? "dist/ が未生成
 
   test("PAGE_JA オブジェクトに subtitle / productA / productB / searchPlaceholder / compareBtn / footer の翻訳が含まれること", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    const m = html.match(/var PAGE_JA=\{([^}]+)\}/);
+    const m = html.match(/var PAGE_JA=(\{[^}]+\})/);
     assert.ok(m, "PAGE_JA オブジェクトが見つからない");
-    const block = m[1];
+    // safeJsonForScript による JSON 直列化 (キーはダブルクォート付き)
+    const parsed = JSON.parse(m[1].replace(/\\u003c/g, "<"));
     const required = ["subtitle", "productA", "productB", "searchPlaceholder", "compareBtn", "footer"];
-    const missing = required.filter(k => !block.includes(k + ":"));
+    const missing = required.filter(k => !parsed[k]);
     assert.equal(missing.length, 0, `PAGE_JA 翻訳キー欠落: ${missing.join(", ")}`);
   });
 });
@@ -204,11 +205,12 @@ describe("index.html のアクセシビリティ検査", { skip: !distExists ? "
     assert.ok(/class="specs-link"/.test(html), "specs-link クラス欠落");
   });
 
-  test("Specs リンクの href が BASE_PATH + 'products/' + slug 形式で生成されること (JSコード確認)", () => {
+  test("Specs リンクの href が PAGE_BASE + 'products/' + slug 形式で生成されること (JSコード確認)", () => {
     // specs-link は renderList 内で JS が動的生成するため静的 HTML には href 値が展開されない。
     // JSコード内に specsHref の生成パターンが存在することを確認する。
+    // PAGE_BASE は言語別のページリンク基底 (ja ページでは localizeToJa が /ja/ に書き換える)
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/var specsHref = BASE_PATH \+ 'products\/' \+ p\.slug \+ '\/'/.test(html),
+    assert.ok(/var specsHref = PAGE_BASE \+ 'products\/' \+ p\.slug \+ '\/'/.test(html),
       "specsHref の URL 生成コードが index.html に含まれていない");
   });
 
