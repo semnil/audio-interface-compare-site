@@ -37,7 +37,7 @@ audio-interface-compare-site/
 
 ### 静的サイト生成 + クライアント動的比較
 - `node src/build.js` で xlsx → 全 HTML を一括生成
-- フレームワーク不使用。依存は exceljs + @napi-rs/canvas (og:image のテキスト描画用に許容した唯一の native 依存) のみ
+- フレームワーク不使用。依存は exceljs + @napi-rs/canvas (og:image のテキスト描画用に許容した唯一の native 依存) のみ。package.json の `overrides.uuid: ^14.0.0` は exceljs の transitive 依存の脆弱性 (GHSA-w5hq-g745-h8pq) 対応
 - **比較ページの静的生成は全廃**。比較は index 上のフラグメント URL `/#a={slug}&b={slug}` で `compare.js` がブラウザ描画する
   - フラグメントはクローラーに別 URL として扱われず、クロール対象は index + 製品 + ハブに限定される
   - `compare.js` は build.js のヘルパー (escapeHtml / sanitizeUrl / displayValue / renderMeasurements / parseNumeric / diffClass / fmtPrice / cellFor) を `.toString()` で埋め込んで生成する (単一の真実。build.js が素の ESM で実行されることに依存。'[native code]' 化はビルド時 assert、等価性は vm スモークテストで担保)
@@ -85,6 +85,7 @@ audio-interface-compare-site/
 - `diffClass` は両辺が数値でない限りハイライトを抑止 (片側欠損での誤優劣表示を防ぐ)。compare.js に埋め込まれクライアント側で実行される
 - 数値範囲文字列は両端の平均値で比較。正規形は符号付き `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`)、旧形式 (`"0-65"` / `"-18-65"`) もパーサは互換
 - 製品ページのスペック要約文 (`specSummary`) は xlsx の既存データのみから生成する (推測で埋めない)
+- og 画像はバッチ (8 件) 単位で「全 canvas を描画 → 一括 `encode("png")`」の順序を守る。描画とエンコードのインターリーブは @napi-rs/canvas が darwin arm64 で SIGSEGV する (100% 再現) ため、逐次 await への書き換え禁止
 
 ### 多言語 (/ja/ + hreflang)
 - 言語は URL で分離: `/` = 英語 (lang="en")、`/ja/` = 日本語 (lang="ja")。**navigator.language による自動切替は廃止** (Googlebot に不可視のため)
@@ -170,7 +171,7 @@ SITE_URL=https://example.com npm run build
 CUSTOM_DOMAIN=example.com BASE_PATH=/ npm run build
 
 # ローカルプレビュー
-npm run build && npx serve dist -l 3000
+npm run build && npm run preview
 ```
 
 ## データソース

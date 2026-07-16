@@ -2161,6 +2161,8 @@ async function build() {
   const OG_BATCH = 8;
   for (let i = 0; i < ogJobs.length; i += OG_BATCH) {
     const batch = ogJobs.slice(i, i + OG_BATCH);
+    // 全 canvas 描画 → 一括 encode の順序を守る。描画と encode のインターリーブは
+    // @napi-rs/canvas が darwin arm64 で SIGSEGV する (100% 再現) ため変更禁止
     const canvases = batch.map((job) => drawOgCard(job.opts));
     const bufs = await Promise.all(canvases.map((c) => c.encode("png")));
     batch.forEach((job, k) => writeFileSync(job.file, bufs[k]));
