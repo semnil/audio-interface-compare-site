@@ -55,9 +55,18 @@ const loRev = reviewState.lowReviewedUntilIdx ?? -1;
 // (corrections-edited.json への追記反映後に gen が出力する。無ければ全件を表示)
 const missingPending = readJson("missing-pending.json", null);
 
-// 削除予定の行 (work/removals.json)。各表から除外し、専用セクションに理由付きで列挙する
+// 削除予定の行 (work/removals.json)。各表から除外し、専用セクションに理由付きで列挙する。
+// 保存時の idx は行の削除・追加で並びがずれるため、表示にも除外にも使わず brand/model 名で現行行と照合する。
+// 現行 xlsx に名前が無いエントリは適用済み (削除済み) として分離表示する
 const removals = readJson("removals.json", []);
-const removedIdx = new Set(removals.map((r) => r.idx));
+for (const r of removals) {
+  if (!r.brand || !r.model) throw new Error(`removals.json: brand/model の無いエントリ (idx: ${r.idx}) — 名前照合に必須`);
+}
+const rowIdxByName = new Map(rows.map((row, i) => [`${row.Brand} ${row.Model}`, i]));
+const removalName = (r) => `${r.brand} ${r.model}`;
+const pendingRemovals = removals.filter((r) => rowIdxByName.has(removalName(r)));
+const appliedRemovals = removals.filter((r) => !rowIdxByName.has(removalName(r)));
+const removedIdx = new Set(pendingRemovals.map((r) => rowIdxByName.get(removalName(r))));
 
 const results = new Map();
 for (const { idx, file, r } of scanResults()) {
@@ -95,6 +104,8 @@ for (const i of idxs) {
 const md = [];
 md.push(`# 製品ページ照合レポート — data/audio_interfaces.xlsx 全 ${rows.length} 機種`);
 md.push("");
+md.push(`生成: ${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC — 実行のたびに全体を上書きする (このファイルが常に最新版)`);
+md.push("");
 md.push(`照合済み ${idxs.length} / ${rows.length} 機種。各機種 1 エージェントが Product Page URL (＋同一公式ドメインのスペックページ・データシート PDF) を取得し、Measurement Reports を除く全列を照合した結果。`);
 md.push("");
 md.push("## 取得ステータス");
@@ -112,14 +123,24 @@ md.push("");
 md.push("確度の定義: **high** = ページが明確に異なる値を記載。**low** = 測定条件の差・価格変動・計数規約 (コンボ端子の数え方等) に依存し断定不可。表記ゆれ・単位差・世代注記は一致扱いで除外済み。");
 md.push("");
 
-if (removals.length) {
-  md.push(`## 削除予定 (${removals.length} 機種)`);
+if (pendingRemovals.length) {
+  md.push(`## 削除予定 (${pendingRemovals.length} 機種)`);
   md.push("");
   md.push("操作者決定済み。corrections の --apply 後に tools/apply-product-changes.js で行を削除する (先に削除すると idx がずれる)。以下の機種は各表から除外している。");
   md.push("");
   md.push("| 機種 | 理由 |");
   md.push("|---|---|");
-  for (const r of removals) md.push(`| ${esc(name(r.idx))} | ${esc(r.reason)} |`);
+  for (const r of pendingRemovals) md.push(`| ${esc(removalName(r))} | ${esc(r.reason)} |`);
+  md.push("");
+}
+if (appliedRemovals.length) {
+  md.push(`## 削除済み (${appliedRemovals.length} 機種 — 適用済み)`);
+  md.push("");
+  md.push("work/removals.json の記録のうち現行 xlsx に該当行が無いもの。機種名・理由は削除決定時の記録値をそのまま表示している。");
+  md.push("");
+  md.push("| 機種 | 理由 |");
+  md.push("|---|---|");
+  for (const r of appliedRemovals) md.push(`| ${esc(removalName(r))} | ${esc(r.reason)} |`);
   md.push("");
 }
 

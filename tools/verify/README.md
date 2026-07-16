@@ -174,7 +174,7 @@ tools/verify/
 ├── recheck-workflow.js    ← 第 2 段: 争点の精査 (Workflow ツール用。node では実行しない)
 ├── partition-rechecks.js  ← 第 3 段入力: verdict 仕分け → work/corrections-recheck.json + 質問下書き
 ├── lint-columns.js        ← 列間整合の事前 lint (エージェント不要)
-├── build-report.js        ← レポート生成 (既知 hold を自動除外、価格は独立セクション)
+├── build-report.js        ← レポート生成 (既知 hold を自動除外、価格は独立セクション、削除予定/削除済みは removals.json の保存名で照合し idx ずれの影響を受けない)
 ├── propose-corrections.js ← mismatch から xlsx 修正案を生成 (大規模サイクルの一括レビュー用)
 ├── apply-corrections.js   ← 同意済み修正リストを xlsx へ反映 (既定 dry-run)
 └── work/                  ← git 管理外の作業領域
