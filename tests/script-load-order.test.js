@@ -11,8 +11,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const DIST = join(ROOT, "dist");
 const INDEX_PATH = join(DIST, "index.html");
-const COMPARE_DIR = join(DIST, "compare");
-const distExists = existsSync(INDEX_PATH) && existsSync(COMPARE_DIR);
+const PRODUCTS_DIR = join(DIST, "products");
+const distExists = existsSync(INDEX_PATH) && existsSync(PRODUCTS_DIR);
 
 function sampleDirs(allDirs, count) {
   const step = Math.max(1, Math.floor(allDirs.length / count));
@@ -30,11 +30,22 @@ describe("スクリプト読み込み順序: PAGE_JA → i18n.js", { skip: !dist
       `PAGE_JA (${pageJaIdx}) が i18n.js (${i18nIdx}) より後ろにある - 読み込み順序バグ`);
   });
 
-  test("compare ページ 10 件で PAGE_JA が i18n.js より前にある", () => {
-    const sample = sampleDirs(readdirSync(COMPARE_DIR), 10);
+  test("index.html で i18n.js が compare.js より前にある (window.__i18n を compare.js が利用する)", () => {
+    const html = readFileSync(INDEX_PATH, "utf8");
+    // src 属性の script タグ位置で判定 (コメント中の "compare.js" 誤マッチを避ける)
+    const i18nIdx = html.search(/<script src="[^"]*i18n\.js"/);
+    const compareIdx = html.search(/<script src="[^"]*compare\.js"/);
+    assert.ok(i18nIdx > 0, "i18n.js script タグが見つからない");
+    assert.ok(compareIdx > 0, "compare.js script タグが見つからない");
+    assert.ok(i18nIdx < compareIdx,
+      `i18n.js (${i18nIdx}) が compare.js (${compareIdx}) より後ろにある - window.__i18n 未定義バグ`);
+  });
+
+  test("製品ページ 10 件で PAGE_JA が i18n.js より前にある", () => {
+    const sample = sampleDirs(readdirSync(PRODUCTS_DIR), 10);
     const violations = [];
     for (const d of sample) {
-      const html = readFileSync(join(COMPARE_DIR, d, "index.html"), "utf8");
+      const html = readFileSync(join(PRODUCTS_DIR, d, "index.html"), "utf8");
       const pageJaIdx = html.indexOf("var PAGE_JA=");
       const i18nIdx = html.indexOf("i18n.js");
       if (pageJaIdx < 0 || i18nIdx < 0 || pageJaIdx >= i18nIdx) {
@@ -63,27 +74,15 @@ describe("PAGE_JA の JS シンタックス健全性", { skip: !distExists ? "di
     assert.ok(parsed.footer, "PAGE_JA.footer が無い");
   });
 
-  test("compare ページの PAGE_JA も JS として parse 可能", () => {
-    const dirs = sampleDirs(readdirSync(COMPARE_DIR), 5);
+  test("製品ページの PAGE_JA も JS として parse 可能", () => {
+    const dirs = sampleDirs(readdirSync(PRODUCTS_DIR), 5);
     for (const d of dirs) {
-      const html = readFileSync(join(COMPARE_DIR, d, "index.html"), "utf8");
+      const html = readFileSync(join(PRODUCTS_DIR, d, "index.html"), "utf8");
       const m = html.match(/var PAGE_JA=(\{[^}]+\})/);
       assert.ok(m, `${d}: PAGE_JA 宣言が見つからない`);
       assert.doesNotThrow(() => {
         new Function(`return ${m[1]};`)();
       }, `${d}: PAGE_JA parse 失敗`);
     }
-  });
-
-  test("PAGE_JA 内の値 (シングルクォート囲み) にエスケープ不要な ' が混入していないこと", () => {
-    // build.js では PAGE_JA の値をシングルクォートで囲んでいる。
-    // もし buildDate 等の展開値に ' が含まれると JS シンタックスエラー。
-    // ISO 日付 (YYYY-MM-DD) には ' が含まれないため安全のはずだが、回帰として検査。
-    const html = readFileSync(INDEX_PATH, "utf8");
-    const m = html.match(/var PAGE_JA=(\{[^}]+\})/);
-    const pageJaLiteral = m[1];
-    // 文字列リテラル内の ' は \\\' でエスケープされるべき。ここでは粗く全体の 'x': 'y' 形式が壊れていないかを見る
-    // 単純に new Function で parse できれば OK (上のテストで担保)
-    assert.ok(pageJaLiteral.length > 20, "PAGE_JA リテラルが短すぎる");
   });
 });

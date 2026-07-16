@@ -66,20 +66,20 @@ describe("BASE_PATH 正規化: 異常値の吸収", () => {
 });
 
 describe("BASE_PATH 経路: 絶対 URL 結合シミュレーション", () => {
-  // SITE_URL と BASE_PATH は build.js で concat される (src/build.js:642, 826)
+  // SITE_URL と BASE_PATH は build.js で concat される (canonical / og:url / sitemap)
   // 正規化後の BASE_PATH が正しい URL を生成するか確認
   const SITE_URL = "https://semnil.github.io/audio-interface-compare-site";
 
-  test("ルート配信 ('/'): canonical URL が二重スラッシュにならない", () => {
+  test("ルート配信 ('/'): 製品ページ URL が二重スラッシュにならない", () => {
     const bp = normalizeBasePath("/");
-    const url = `${SITE_URL}${bp}compare/a-vs-b/`;
-    assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/compare/a-vs-b/");
+    const url = `${SITE_URL}${bp}products/a/`;
+    assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/products/a/");
   });
 
-  test("サブディレクトリ配信 ('/repo/'): compare URL が正しく構築される", () => {
+  test("サブディレクトリ配信 ('/repo/'): 製品ページ URL が正しく構築される", () => {
     const bp = normalizeBasePath("/repo/");
-    const url = `${SITE_URL}${bp}compare/a-vs-b/`;
-    assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/repo/compare/a-vs-b/");
+    const url = `${SITE_URL}${bp}products/a/`;
+    assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/repo/products/a/");
   });
 
   test("index URL は BASE_PATH 末尾スラッシュで確定する", () => {
