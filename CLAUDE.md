@@ -111,7 +111,7 @@ audio-interface-compare-site/
 ### ホスティング: GitHub Pages
 - リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
 - AWS (S3, CloudFront, IAM) 一切不要
-- 制約: サイトサイズ上限 1GB、帯域 100GB/月。比較の動的化によりサイズは O(n) (製品 260 機種で dist ≈ 53MB、うち og 画像 ≈ 22MB)
+- 制約: サイトサイズ上限 1GB、帯域 100GB/月。比較の動的化によりサイズは O(n) (製品 358 機種で dist ≈ 82MB、うち og 画像 ≈ 30MB)
 - 旧比較 URL (/compare/...) は 404 のまま放置が正 (Google 公式ガイダンスと整合)。robots.txt で /compare/ をブロックしない (404 確認を妨げるため)。URL 削除ツールも使わない
 
 ### ビルドトリガー (GitHub Actions)
@@ -131,8 +131,8 @@ audio-interface-compare-site/
 ## SEO 方針 (2026-07 A4 移行)
 
 - **比較クエリ (「A vs B」) の SEO は放棄**。全組合せの静的比較ページ (67,340 枚) は「クロール済み - インデックス未登録」2 万件超・登録 41 件という実績から品質評価を毀損しており、全廃した
-- インデックス対象: index + 製品 260 + ブランドハブ 41 + カテゴリハブ 7 (× en/ja = 618 URL)
-- 実装済み: meta description 全ページ / OGP + og:image (1200×630 共有カード、summary_large_image) / canonical 自己参照 / hreflang (en/ja/x-default) / sitemap.xml (618 URL) / robots.txt (Sitemap 行のみ) / カスタム 404.html (noindex、静的案内リンクのみ、自動リダイレクト禁止) / JSON-LD (Product + ItemList) / 製品ページのスペック要約文 (機械生成、固有テキスト増)
+- インデックス対象: index + 製品 358 + ブランドハブ 44 + カテゴリハブ 7 (× en/ja = 820 URL)
+- 実装済み: meta description 全ページ / OGP + og:image (1200×630 共有カード、summary_large_image) / canonical 自己参照 / hreflang (en/ja/x-default) / sitemap.xml (820 URL) / robots.txt (Sitemap 行のみ) / カスタム 404.html (noindex、静的案内リンクのみ、自動リダイレクト禁止) / JSON-LD (Product + ItemList) / 製品ページのスペック要約文 (機械生成、固有テキスト増)
 - インデックス回復は数か月〜次回コアアップデート単位の長期戦。GSC の 404 レポートは過去 1 か月窓なので自然減衰する
 
 ## 未解決・要対応
