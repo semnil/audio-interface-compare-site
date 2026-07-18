@@ -15,7 +15,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
 // 生産終了・重複統合で削除する製品 ("Brand Model")。サイクルごとに書き換える
-const REMOVALS = new Set([]);
+const REMOVALS = new Set([
+  // 2026-07-18 カタログ監査サイクル (操作者承認済み)
+  "PreSonus Revelator io24", // 公式製品ページに明示的な Discontinued ラベル
+  "Apogee Symphony Nova", // 未出荷 (公式ブログ 2026-05-13 で launch 準備中・製品ページ 404)。未出荷製品はリストに入れない方針
+]);
 
 // 追加行のセル値を数値化する。new-rows JSON は全値が文字列になりがちで、そのまま
 // 書くと参照価格・入出力数・サンプルレート等が数値でなくテキストセルになる。純数値の
