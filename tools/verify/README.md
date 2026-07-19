@@ -41,9 +41,10 @@ flowchart TD
 1. WebFetch
 2. `curl -sL --compressed` + ブラウザ User-Agent
 3. headless Chrome (`--headless=new --dump-dom --virtual-time-budget=15000` + UA 指定) — Cloudflare 等の JS チャレンジ対策
-4. 404/転送時は同一公式ドメインの sitemap.xml・404 ページ内リンクから正ページを探索 (`wrong_page` として正 URL を記録)
-5. 同一公式サイトの Specifications ページ・データシート/マニュアル PDF (`pdftotext -layout` で解析)
-6. 記載 URL のドメイン廃止時に限り、同一ブランド所有の公式ドメイン (例: focusritepro.com → focusrite.com)。小売・レビューサイトは禁止
+4. `--dump-dom` も 403 になるサイトは headless Chrome のスクリーンショット取得 (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + UA 指定) — レンダリング結果は画像でしか得られないため、Read ツールで画像を視認して製品名・価格・購入ボタン等を読み取る。テキスト照合には使えないが、ページの実在確認・現行性判定・主要値の確認には有効 (実績: fender.com は curl/WebFetch/`--dump-dom` 全て 403 だが `--screenshot` は製品ページを描画した。2026-07-18)
+5. 404/転送時は同一公式ドメインの sitemap.xml・404 ページ内リンクから正ページを探索 (`wrong_page` として正 URL を記録)
+6. 同一公式サイトの Specifications ページ・データシート/マニュアル PDF (`pdftotext -layout` で解析)
+7. 記載 URL のドメイン廃止時に限り、同一ブランド所有の公式ドメイン (例: focusritepro.com → focusrite.com)。小売・レビューサイトは禁止
 
 Cloudflare Turnstile 等で全手段が失敗するサイトは `failed` として残し、レポートで「未照合 (データ誤りではない)」と明示する。
 
