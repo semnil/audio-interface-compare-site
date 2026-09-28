@@ -1,5 +1,6 @@
 // tests/workflow-schedule.test.js
 // build-deploy.yml のトリガー契約: push (main) と workflow_dispatch のみで起動し、schedule トリガーを持たない
+// 検査対象のルートは WORKFLOW_ROOT (未設定ならリポジトリ直下)
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +8,8 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const WORKFLOW = readFileSync(join(__dirname, "..", ".github", "workflows", "build-deploy.yml"), "utf8");
+const ROOT = process.env.WORKFLOW_ROOT || join(__dirname, "..");
+const WORKFLOW = readFileSync(join(ROOT, ".github", "workflows", "build-deploy.yml"), "utf8");
 
 function onBlock(yaml) {
   const m = yaml.match(/^on:\n((?:[ \t]+.*\n|[ \t]*\n)*)/m);

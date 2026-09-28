@@ -1,0 +1,55 @@
+name: Workflow checks (default branch)
+
+# 全 PR で .github/workflows/ と action.yml / action.yaml の契約テスト (tests/workflow-*.test.js) を実行する。
+# pull_request_target で走り、ワークフロー定義・テストとも既定ブランチのものを使う (PR は自分を判定する検査を変えられない)。
+# PR のワークフロー・action ファイルは head コミットから GitHub API でデータとして取得して WORKFLOW_ROOT に置き、
+# PR のコードは checkout も実行もしない
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-tests-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+
+      - name: Fetch the pull request's workflow and action files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          src="$RUNNER_TEMP/pr-files"
+          mkdir -p "$src"
+          gh api "repos/${GITHUB_REPOSITORY}/git/trees/${HEAD_SHA}?recursive=1" > "$RUNNER_TEMP/tree.json"
+          truncated=$(yq -p=json '.truncated' "$RUNNER_TEMP/tree.json")
+          if [ "$truncated" != "false" ]; then
+            echo "::error::git tree listing of ${HEAD_SHA} is truncated (truncated=${truncated})"
+            exit 1
+          fi
+          targets='.tree[] | select(.path | (test("^[.]github/workflows/[^/]+[.]ya?ml$") or test("(^|/)action[.]ya?ml$")))'
+          yq -p=json -o=tsv "${targets} | select(.type != \"blob\" or (.mode != \"100644\" and .mode != \"100755\")) | [.path, .type, .mode]" "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/non-regular.tsv"
+          if [ -s "$RUNNER_TEMP/non-regular.tsv" ]; then
+            echo "::error::workflow and action files must be regular files (symlinks and other entries are rejected)"
+            cat "$RUNNER_TEMP/non-regular.tsv"
+            exit 1
+          fi
+          yq -p=json -o=tsv "${targets} | [.path, .sha]" "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/files.tsv"
+          while IFS=$'\t' read -r path blob; do
+            mkdir -p "$src/$(dirname "$path")"
+            gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_REPOSITORY}/git/blobs/${blob}" > "$src/$path"
+          done < "$RUNNER_TEMP/files.tsv"
+
+      - run: node --test tests/workflow-*.test.js
+        env:
+          WORKFLOW_ROOT: ${{ runner.temp }}/pr-files
