@@ -198,3 +198,5 @@ tools/verify/
     ├── review-state.json         ← 操作者レビューの到達 idx (到達済み範囲はレポートから省く)
     └── missing-pending.json      ← 空欄追記のうち機械変換できず操作者判断待ちの項目
 ```
+
+<!-- probe -->
