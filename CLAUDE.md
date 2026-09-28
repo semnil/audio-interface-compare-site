@@ -119,7 +119,8 @@ audio-interface-compare-site/
 - 手動 (`workflow_dispatch`)
 - main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
   - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
-- ワークフローの `uses:` は 40 桁のコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) でピンする。`tests/workflow-pins.test.js` が yq で YAML を解析し、`jobs.<id>.uses` / `jobs.<id>.steps[*].uses` の値と同じ行のコメントを検査する (yq は環境変数 `YQ` で差し替え可。CI では必須で、ローカルに yq が無いときは 3 件ともスキップ)。`.github/workflows/workflow-checks.yml` が全 PR で `tests/workflow-*.test.js` を実行する (チェック名 `workflow-tests`)。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
+- ワークフローの `uses:` は 40 桁のコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) でピンする。`tests/workflow-pins.test.js` が yq で YAML を解析し、`jobs.<id>.uses` / `jobs.<id>.steps[*].uses` と `action.yml` / `action.yaml` の `runs.steps[*].uses` の値と同じ行のコメントを検査する (yq は環境変数 `YQ` で差し替え可。CI では必須で、ローカルに yq が無いときは 3 件ともスキップ)。検査対象のルートは環境変数 `WORKFLOW_ROOT` (未設定ならリポジトリ直下)
+- `.github/workflows/workflow-checks.yml` が全 PR で `tests/workflow-*.test.js` を実行する。ジョブ `workflow-tests-main` は `pull_request_target` で走り、ワークフロー定義・テストとも既定ブランチのものを使う (GitHub は `pull_request_target` の定義を常に既定ブランチから読む)。PR のワークフロー・action ファイルは head コミットから GitHub API (git trees / blobs) で取得して `WORKFLOW_ROOT` に置き、PR のコードは checkout も実行もしない。ジョブ `workflow-tests` は PR 側の定義で走る `pull_request` 版。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
 
 ### テスト基盤
 - `node:test` + `node:assert` で `tests/*.test.js` を実行
