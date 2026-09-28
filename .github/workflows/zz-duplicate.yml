@@ -1,0 +1,10 @@
+name: Duplicate
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  workflow-tests-main:
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 0
