@@ -1,9 +1,9 @@
 name: Build & Deploy to GitHub Pages
 
 on:
-  # 月初の月曜 10:00 JST (01:00 UTC) に自動実行
+  # 毎週月曜 10:00 JST (01:00 UTC) に起動し、gate ジョブが月初の月曜 (1〜7 日) のみビルドへ進める
   schedule:
-    - cron: "0 1 1-7 * 1"
+    - cron: "0 1 * * 1"
   # 手動トリガー
   workflow_dispatch:
   # ビルド結果に影響するファイル更新時に自動ビルド
@@ -29,7 +29,23 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "schedule" ] || [ "$(date -u +%-d)" -le 7 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

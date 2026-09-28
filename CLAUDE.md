@@ -115,7 +115,8 @@ audio-interface-compare-site/
 - 旧比較 URL (/compare/...) は 404 のまま放置が正 (Google 公式ガイダンスと整合)。robots.txt で /compare/ をブロックしない (404 確認を妨げるため)。URL 削除ツールも使わない
 
 ### ビルドトリガー (GitHub Actions)
-- 月初月曜 10:00 JST (cron: `0 1 1-7 * 1`)
+- 月初月曜 10:00 JST (cron: `0 1 * * 1` で毎週月曜に起動し、gate ジョブが 1〜7 日のときだけ build/deploy へ進める。cron で日と曜日を両方指定すると OR 発火になるため、`tests/workflow-schedule.test.js` が同時指定を禁止している)
+- public リポジトリは 60 日間リポジトリ活動が無いと schedule が自動無効化される。schedule による実行自体は活動に数えられない
 - 手動 (`workflow_dispatch`)
 - main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
   - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
