@@ -3,7 +3,7 @@ name: Workflow checks (default branch)
 # 全 PR で .github/workflows/ と action.yml / action.yaml の契約テスト (tests/workflow-*.test.js) を実行する。
 # pull_request_target で走り、ワークフロー定義・テストとも既定ブランチのものを使う (PR は自分を判定する検査を変えられない)。
 # PR のワークフロー・action ファイルは head コミットから GitHub API でデータとして取得して WORKFLOW_ROOT に置き、
-# PR のコードは checkout も実行もしない
+# PR のコードは checkout も実行もしない。この検査のファイル (PROTECTED_PATTERN) が既定ブランチと一致しなければ失敗する
 on:
   pull_request_target:
 
@@ -28,6 +28,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PROTECTED_PATTERN: '^(\.github/workflows/workflow-checks-main\.yml|tests/workflow-[^/]+\.test\.js)$'
         run: |
           src="$RUNNER_TEMP/pr-files"
           mkdir -p "$src"
@@ -35,6 +36,30 @@ jobs:
           truncated=$(yq -p=json '.truncated' "$RUNNER_TEMP/tree.json")
           if [ "$truncated" != "false" ]; then
             echo "::error::git tree listing of ${HEAD_SHA} is truncated (truncated=${truncated})"
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/git/trees/${GITHUB_SHA}?recursive=1" > "$RUNNER_TEMP/base-tree.json"
+          base_truncated=$(yq -p=json '.truncated' "$RUNNER_TEMP/base-tree.json")
+          if [ "$base_truncated" != "false" ]; then
+            echo "::error::git tree listing of ${GITHUB_SHA} is truncated (truncated=${base_truncated})"
+            exit 1
+          fi
+          protected='.tree[] | select(.type == "blob" and (.path | test(env(PROTECTED_PATTERN)))) | [.path, .mode, .sha]'
+          yq -p=json -o=tsv "$protected" "$RUNNER_TEMP/base-tree.json" | LC_ALL=C sort > "$RUNNER_TEMP/protected-base.tsv"
+          yq -p=json -o=tsv "$protected" "$RUNNER_TEMP/tree.json" | LC_ALL=C sort > "$RUNNER_TEMP/protected-head.tsv"
+          if [ ! -s "$RUNNER_TEMP/protected-base.tsv" ]; then
+            echo "::error::no file on the default branch matches PROTECTED_PATTERN (${PROTECTED_PATTERN})"
+            exit 1
+          fi
+          if ! cmp -s "$RUNNER_TEMP/protected-base.tsv" "$RUNNER_TEMP/protected-head.tsv"; then
+            echo "::error::the files of this check must be identical to the default branch (to change them, lift the required status check first)"
+            diff "$RUNNER_TEMP/protected-base.tsv" "$RUNNER_TEMP/protected-head.tsv"
+            exit 1
+          fi
+          yq -p=json -o=tsv '.tree[] | select(.path | (test("(?i)(^|/)action[.]ya?ml$") and (test("(^|/)action[.]ya?ml$") | not))) | .path' "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/non-canonical.tsv"
+          if [ -s "$RUNNER_TEMP/non-canonical.tsv" ]; then
+            echo "::error::action file names must be lowercase action.yml / action.yaml (a case-insensitive file system opens these as action.yml)"
+            cat "$RUNNER_TEMP/non-canonical.tsv"
             exit 1
           fi
           targets='.tree[] | select(.path | (test("^[.]github/workflows/[^/]+[.]ya?ml$") or test("(^|/)action[.]ya?ml$")))'

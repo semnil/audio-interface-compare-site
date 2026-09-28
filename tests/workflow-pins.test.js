@@ -3,7 +3,8 @@
 // runs.steps[*].uses が、40 桁のコミット SHA で終わり同じ行のコメントが vX.Y.Z であること
 // (同一リポジトリ参照の ./ と $/ は対象外。参照先の action.yml / action.yaml は検査対象)。
 // 検査対象のルートは WORKFLOW_ROOT (未設定ならリポジトリ直下)。WORKFLOW_ROOT 指定時はその配下の action.yml / action.yaml を、
-// 未指定時は git ls-files の action.yml / action.yaml を対象にする。
+// 未指定時は git ls-files の action.yml / action.yaml を対象にする。大文字小文字を無視すると一致するが小文字でない名前
+// (Action.yml 等) は失敗にする。
 // YAML は yq (環境変数 YQ で上書き可) で解析する。CI では yq 必須、ローカルに yq が無い場合はスキップ
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
@@ -22,6 +23,7 @@ const query = uses => `[(${uses}) | {"line": line, "value": ., "comment": line_c
 const PINNED_VALUE = /^[^@\s]+@[0-9a-f]{40}$/;
 const VERSION_COMMENT = /^v\d+\.\d+\.\d+$/;
 const ACTION_FILE = /(^|\/)action\.ya?ml$/;
+const ACTION_FILE_ANY_CASE = /(^|\/)action\.ya?ml$/i;
 const SAME_REPOSITORY = /^[.$]\//;
 
 const yqAvailable = spawnSync(YQ, ["--version"], { encoding: "utf8" }).status === 0;
@@ -31,11 +33,16 @@ function walk(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
 }
 
-function actionFiles() {
-  if (process.env.WORKFLOW_ROOT) return walk(ROOT).map(p => relative(ROOT, p)).filter(p => ACTION_FILE.test(p));
-  const r = spawnSync("git", ["-C", ROOT, "ls-files", "-z", "--", "action.yml", "action.yaml", "*/action.yml", "*/action.yaml"], { encoding: "utf8" });
+// action.yml / action.yaml に大文字小文字を無視して一致するファイル (WORKFLOW_ROOT 指定時はその配下、未指定時は git の追跡ファイル)
+function actionFileCandidates() {
+  if (process.env.WORKFLOW_ROOT) return walk(ROOT).map(p => relative(ROOT, p)).filter(p => ACTION_FILE_ANY_CASE.test(p));
+  const r = spawnSync("git", ["-C", ROOT, "ls-files", "-z"], { encoding: "utf8" });
   assert.equal(r.status, 0, `git ls-files が失敗: ${r.stderr}`);
-  return r.stdout.split("\0").filter(Boolean);
+  return r.stdout.split("\0").filter(p => ACTION_FILE_ANY_CASE.test(p));
+}
+
+function actionFiles() {
+  return actionFileCandidates().filter(p => ACTION_FILE.test(p));
 }
 
 function entries(file, uses) {
@@ -52,6 +59,10 @@ function usesEntries() {
 describe("workflow-pins: サードパーティ Action の SHA ピン", () => {
   test("yq が実行できること", { skip }, () => {
     assert.ok(yqAvailable, `yq を実行できない (${YQ})`);
+  });
+
+  test("action ファイル名が小文字の action.yml / action.yaml であること", () => {
+    assert.deepEqual(actionFileCandidates().filter(p => !ACTION_FILE.test(p)), []);
   });
 
   test("uses が 1 件以上あること", { skip }, () => {
