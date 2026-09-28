@@ -1,7 +1,6 @@
 // tests/workflow-schedule.test.js
 // build-deploy.yml のスケジュール契約: 月初の月曜のみビルドする
-// cron は日 (3 番目) と曜日 (5 番目) を両方指定すると OR で発火するため、
-// 曜日だけを cron で指定し、日付の絞り込みは gate ジョブが行う
+// cron は曜日 (5 番目) だけを指定し、日 (3 番目) は * のまま、日付の絞り込みは gate ジョブが行う
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
