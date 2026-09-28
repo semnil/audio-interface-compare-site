@@ -10,7 +10,7 @@
 
 ```
 audio-interface-compare-site/
-├── .github/workflows/build-deploy.yml  ← GitHub Actions (月次自動ビルド→GitHub Pages デプロイ)
+├── .github/workflows/build-deploy.yml  ← GitHub Actions (push / 手動でビルド→GitHub Pages デプロイ)
 ├── .gitignore                          ← node_modules/, dist/
 ├── package.json                        ← Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)
 ├── data/audio_interfaces.xlsx          ← スペックデータ (ソース。最終列=Measurement Reports)
@@ -115,7 +115,7 @@ audio-interface-compare-site/
 - 旧比較 URL (/compare/...) は 404 のまま放置が正 (Google 公式ガイダンスと整合)。robots.txt で /compare/ をブロックしない (404 確認を妨げるため)。URL 削除ツールも使わない
 
 ### ビルドトリガー (GitHub Actions)
-- 月初月曜 10:00 JST (cron: `0 1 1-7 * 1`)
+- schedule トリガーは置かない (`tests/workflow-schedule.test.js` が検査)。public リポジトリでは 60 日間コミットが無いと schedule を持つワークフローが丸ごと無効化され、push / 手動でも起動しなくなる。schedule による実行自体は活動に数えられない。データ変更の無いビルドで変わるのはフッターの Last updated の日付だけ
 - 手動 (`workflow_dispatch`)
 - main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
   - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない

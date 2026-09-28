@@ -1,9 +1,6 @@
 name: Build & Deploy to GitHub Pages
 
 on:
-  # 月初の月曜 10:00 JST (01:00 UTC) に自動実行
-  schedule:
-    - cron: "0 1 1-7 * 1"
   # 手動トリガー
   workflow_dispatch:
   # ビルド結果に影響するファイル更新時に自動ビルド
@@ -31,6 +28,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -44,6 +42,7 @@ jobs:
         uses: actions/configure-pages@v6
 
       - run: npm ci
+        timeout-minutes: 10
 
       # BASE_PATH を渡してビルド
       # カスタムドメインなら "/" 、repo pages なら "/repo-name/" になる
@@ -61,6 +60,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
