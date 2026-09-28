@@ -119,7 +119,7 @@ audio-interface-compare-site/
 - 手動 (`workflow_dispatch`)
 - main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
   - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
-- ワークフローの `uses:` は 40 桁のコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) でピンする (`tests/workflow-pins.test.js` が検査)。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
+- ワークフローの `uses:` は 40 桁のコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) でピンする (`tests/workflow-pins.test.js` が検査)。`.github/workflows/workflow-checks.yml` が全 PR で `tests/workflow-*.test.js` を実行する (チェック名 `workflow-tests`)。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
 
 ### テスト基盤
 - `node:test` + `node:assert` で `tests/*.test.js` を実行
