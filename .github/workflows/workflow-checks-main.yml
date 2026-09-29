@@ -74,7 +74,7 @@ jobs:
             mkdir -p "$src/$(dirname "$path")"
             gh api -H "Accept: application/vnd.github.raw" "repos/${GITHUB_REPOSITORY}/git/blobs/${blob}" > "$src/$path"
           done < "$RUNNER_TEMP/files.tsv"
-          yq -p=json -o=tsv '.tree[] | select(.mode == "160000" or .mode == "120000") | [(.path | split("/") | map((select(test("^[\x00-\x7f]*$")) | downcase) // "*") | join("/")), .path, .mode]' "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/links.tsv"
+          yq -p=json -o=tsv '.tree[] | select(.mode == "999999") | [(.path | split("/") | map((select(test("^[\x00-\x7f]*$")) | downcase) // "*") | join("/")), .path, .mode]' "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/links.tsv"
           : > "$RUNNER_TEMP/local-refs.tsv"
           while IFS=$'\t' read -r path _; do
             if [[ "$path" =~ ^\.github/workflows/[^/]+\.ya?ml$ ]]; then
