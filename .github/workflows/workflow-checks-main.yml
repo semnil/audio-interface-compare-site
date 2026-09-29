@@ -78,18 +78,21 @@ jobs:
           : > "$RUNNER_TEMP/local-refs.tsv"
           while IFS=$'\t' read -r path _; do
             if [[ "$path" =~ ^\.github/workflows/[^/]+\.ya?ml$ ]]; then
-              (cd "$src" && yq '((.jobs[] | select(has("uses")) | .uses), (.jobs[].steps[]? | select(has("uses")) | .uses)) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
+              (cd "$src" && yq '(.jobs[] | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	job	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
+              (cd "$src" && yq '(.jobs[].steps[]? | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	step	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
             fi
             if [[ "$path" =~ (^|/)action\.ya?ml$ ]]; then
-              (cd "$src" && yq '(.runs.steps[]? | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
+              (cd "$src" && yq '(.runs.steps[]? | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	step	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
             fi
           done < "$RUNNER_TEMP/files.tsv"
           : > "$RUNNER_TEMP/bad-local.txt"
-          while IFS=$'\t' read -r file line valid json; do
+          while IFS=$'\t' read -r file line kind valid json; do
             ref="${json#\"}"
             ref="${ref%\"}"
             reason=""
-            if [ "$valid" != "true" ]; then
+            if [ "$kind" = "step" ] && [[ "$ref" == ./* ]]; then
+              reason="./ in a step resolves against the runner workspace; use \$/"
+            elif [ "$valid" != "true" ]; then
               reason="characters other than A-Z a-z 0-9 . _ - /"
             else
               rel="${ref:2}"
@@ -123,7 +126,7 @@ jobs:
             fi
           done < "$RUNNER_TEMP/local-refs.tsv"
           if [ -s "$RUNNER_TEMP/bad-local.txt" ]; then
-            echo '::error::local ./ and $/ uses must be a canonical path of A-Z a-z 0-9 . _ - characters that does not go through a symlink or into a submodule, compared case-insensitively (the referenced action.yml would not be checked)'
+            echo '::error::steps must reference same-repository actions with $/ (./ in a step resolves against the runner workspace), and local ./ and $/ uses must be a canonical path of A-Z a-z 0-9 . _ - characters that does not go through a symlink or into a submodule, compared case-insensitively (the referenced action.yml would not be checked)'
             cat "$RUNNER_TEMP/bad-local.txt"
             exit 1
           fi
