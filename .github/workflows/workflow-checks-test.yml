@@ -33,4 +33,5 @@ jobs:
         env:
           WORKFLOW_FILE: .github/workflows/workflow-checks-main.yml
           WORKFLOW_JOB: workflow-tests-main
+          WORKFLOW_CHECK_STEP: absent
         run: bash .github/tests/workflow-checks-test.sh
