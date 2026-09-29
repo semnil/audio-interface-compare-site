@@ -39,7 +39,7 @@ Agent ツール (general-purpose, model: sonnet) を 1 バッチ = 5〜8 ブラ�
    "notes": "取得に使った手段・留意点 (3 文以内)" }]
 ```
 
-取得不能なブランドは new_candidates を捏造せず notes に「未確認」と書かせる。取得ラダーの正本は tools/verify/README.md「未照合 (failed) を減らす取得ラダー」(WebFetch → curl + UA → headless Chrome dump-dom → r.jina.ai リーダープロキシ → **headless Chrome スクリーンショット + 画像視認** → sitemap 探索 → PDF → 公式ドメイン移行)。dump-dom まで 403 のサイト (実績: fender.com) もスクリーンショット (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + ブラウザ UA) なら描画されることがあり、画像を Read で視認して実在・現行性・主要値を確認する。
+取得不能なブランドは new_candidates を捏造せず notes に「未確認」と書かせる。r.jina.ai リーダープロキシの出力は公式ページを変換した本文で、iframe の中身は含まれず (`x-with-iframe` は API キーが必要)、`x-no-cache: true` を付けないとキャッシュされた応答のこともある。プロキシ出力だけで得た一覧からは「新製品なし」も一覧からの消失も確定しない。一覧の欠けは公式の別表示 (カテゴリ別ページ・検索結果)・スクリーンショット・個別の製品ページで補完し、補完できない部分は discontinued_candidates に入れず notes に「未確認」と書かせる。取得ラダーの正本は tools/verify/README.md「未照合 (failed) を減らす取得ラダー」(WebFetch → curl + UA → headless Chrome dump-dom → r.jina.ai リーダープロキシ → **headless Chrome スクリーンショット + 画像視認** → sitemap 探索 → PDF → 公式ドメイン移行)。dump-dom まで 403 のサイト (実績: fender.com) もスクリーンショット (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + ブラウザ UA) なら描画されることがあり、画像を Read で視認して実在・現行性・主要値を確認する。
 
 ### 2. 新ブランドの探索 (任意)
 
