@@ -11,7 +11,10 @@
 ```
 audio-interface-compare-site/
 ├── .github/workflows/build-deploy.yml  ← GitHub Actions (push / 手動でビルド→GitHub Pages デプロイ)
-├── .gitignore                          ← node_modules/, dist/
+├── .github/workflows/workflow-checks-main.yml ← 全 PR の必須チェック workflow-tests-main (action の固定検査。pull_request_target で既定ブランチの定義を使う)
+├── .github/workflows/workflow-checks-test.yml ← 検査の取得ステップのフィクスチャテストを実行
+├── .github/tests/workflow-checks-test.sh ← フィクスチャテスト本体 (bash + yq)
+├── .gitignore                          ← node_modules/, dist/, .claude/* (skills/ は追跡、skills/*-workspace/ は除外), tools/{verify,discover,measurements}/work/, product-page-verification-report.md
 ├── package.json                        ← Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)
 ├── data/audio_interfaces.xlsx          ← スペックデータ (ソース。最終列=Measurement Reports)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML + compare.js + og画像)
