@@ -11,7 +11,10 @@
 ```
 audio-interface-compare-site/
 ├── .github/workflows/build-deploy.yml  ← GitHub Actions (push / 手動でビルド→GitHub Pages デプロイ)
-├── .gitignore                          ← node_modules/, dist/
+├── .github/workflows/workflow-checks-main.yml ← 全 PR の必須チェック workflow-tests-main (action の固定検査。pull_request_target で既定ブランチの定義を使う)
+├── .github/workflows/workflow-checks-test.yml ← 検査の取得ステップのフィクスチャテストを実行
+├── .github/tests/workflow-checks-test.sh ← フィクスチャテスト本体 (bash + yq)
+├── .gitignore                          ← node_modules/, dist/, .claude/* (skills/ は追跡、skills/*-workspace/ は除外), tools/{verify,discover,measurements}/work/, product-page-verification-report.md
 ├── package.json                        ← Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)
 ├── data/audio_interfaces.xlsx          ← スペックデータ (ソース。最終列=Measurement Reports)
 ├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML + compare.js + og画像)
@@ -102,7 +105,7 @@ audio-interface-compare-site/
 - 機種の削除 (生産終了) は根拠を確認してから行う (公式ページの 301/404・生産完了表記・公式 discontinued リスト・代理店の価格表/告知のいずれか + 操作者の同意)
 - 未公開の測定値 (DR/THD+N/EIN) は空欄にする (推測で埋めない)
 - プリアンプゲインレンジ列の正規形は符号付き `x to y` (例: `-18 to +70`, `+10 to +65`, `0 to +60`)。レンジ未公表 (ゲイン幅のみ公称) の機種は単一値のまま。ハイフン区切り (`0-65`) は負値と紛らわしいため新規記入に使わない
-- RCA Input / RCA Output 列 (アンバランス RCA 端子、ライン入出力とは分離して計数) は `tools/add-rca-columns.js` で xlsx に追加する新列。build.js の COLUMNS には追加済みで、xlsx 側の列追加は照合修正の適用と同時に行う
+- RCA Input / RCA Output 列 (アンバランス RCA 端子、ライン入出力とは分離して計数) は `tools/add-rca-columns.js` で追加した列で、build.js の COLUMNS と xlsx の両方にある
 - `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
 - `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)。既定は dry-run (機種ごとの書き込みプレビュー) で、`--apply` を付けたときだけ xlsx を書き込む (add-rca-columns.js / apply-corrections.js と同じ同意ゲート)
 - 測定レポート (Measurement Reports 列) の収集は skill collect-measurements で運用する (作業領域 tools/measurements/work/)。独立系の第三者ベンチ (ASR/APx・ProSound RMAA・測定系 YouTube〈Julian Krause 等〉・Sound on Sound bench・小規模ラボ) を優先し、無いときのみメーカー公称にフォールバック。世代・型番のミスマッチ (旧 Gen・姉妹機の測定の流用) を避ける。JS ゲートで直接読めない動画などを間接採用したときは確度フラグ (`verification: indirect` + 裏取り) を残す
