@@ -115,6 +115,7 @@ node tools/verify/apply-corrections.js tools/verify/work/corrections-edited.json
 - Supported OS はアルファベット順の `/` 区切り (例 `Android/iOS/macOS/Windows`)
 - 測定値の複数条件値は代表値 (入力系=Mic、出力系=Line/Main Out)、他条件は note へ
 - 計数は物理ジャック数 (Analog Main Output のみ L/R=2 の慣行)。RCA 端子は RCA Input/Output 列へ分離
+- 3.5mm (1/8") ステレオミニの入力端子は、自分のチャンネル (専用の入力系統) を持つものを Line Inputs に 1 と数える。別の端子と同じチャンネルにつながる代替端子 (例: 背面 TRS ペアと並列の前面 3.5mm) は数えず、Notes に書く (操作者決定 2026-10-10)
 - 対応列がない仕様値は該当機種の Notes 末尾へ追記
 - 価格はページの USD 表記のまま (小数保持)
 
