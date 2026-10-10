@@ -16,10 +16,9 @@ const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
 // 生産終了・重複統合で削除する製品 ("Brand Model")。サイクルごとに書き換える
 const REMOVALS = new Set([
-  // 2026-10-10 カタログ監査サイクル (操作者承認済み)
-  "IK Multimedia AXE I/O Solo", // 公式製品ページに 'No longer available'
-  "RME ADI-2/4 Pro SE", // rme-audio.de/legacy-products.html の Out of Production 一覧に掲載
-  "RME ADI-2 Pro FS R", // 同一覧に ADI-2 Pro FS / ADI-2 Pro FS BE (リンク先は ADI-2-Pro FS R BE) が掲載
+  // 2026-10-10 再削除 (操作者承認済み)
+  "TASCAM SERIES 102i", // tascam.jp/jp/product/series_102i に「この製品は生産完了になりました。」
+  "TASCAM SERIES 208i", // tascam.jp/jp/product/series_208i に「この製品は生産完了になりました。」
 ]);
 
 // 追加行のセル値を数値化する。new-rows JSON は全値が文字列になりがちで、そのまま
