@@ -26,7 +26,7 @@ xlsx の最終列 `Measurement Reports` に、各機種の客観測定を公開�
 
 ## 対象機種の把握 (最初に必ずやる)
 
-既定は **gap-fill** (`Measurement Reports` が空の機種を埋める)。操作者が機種リストや刷新対象を指定した場合はそれに従う。
+既定は **gap-fill** (`Measurement Reports` が空の機種を埋める)。操作者が機種リストや刷新対象を指定した場合はそれに従う。discover-products の手順 7 から回すときは、そのサイクルで追加した行 (`[Manufacturer]` のリンクしか無い行を含む) が対象。
 
 ```bash
 node tools/verify/export-products.js   # rows-full.json を最新化 (Measurement Reports 含む全列)

@@ -101,7 +101,7 @@ audio-interface-compare-site/
 
 ### 製品カタログ / データ更新
 - 収録対象は現行 IF + USB/配信ミキサー + 配信機。**プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限**に留めている (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, Lynx Aurora マトリクス, Ferrofish, MOTU AVB 等は未収録 = 将来候補)
-- 新製品の検出 (未収録機種の発見 → スペック収集 → 行追加 → 照合接続) はスキル discover-products で運用する (作業領域 tools/discover/work/)
+- 新製品の検出 (未収録機種の発見 → スペック収集 → 行追加 → 照合接続 → 測定レポート収集) はスキル discover-products で運用する (作業領域 tools/discover/work/)
 - 機種の削除 (生産終了) は根拠を確認してから行う (公式ページの 301/404・生産完了表記・公式 discontinued リスト・代理店の価格表/告知のいずれか + 操作者の同意)
 - 未公開の測定値 (DR/THD+N/EIN) は空欄にする (推測で埋めない)
 - プリアンプゲインレンジ列の正規形は符号付き `x to y` (例: `-18 to +70`, `+10 to +65`, `0 to +60`)。レンジ未公表 (ゲイン幅のみ公称) の機種は単一値のまま。ハイフン区切り (`0-65`) は負値と紛らわしいため新規記入に使わない
