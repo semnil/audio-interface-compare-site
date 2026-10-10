@@ -35,6 +35,7 @@ await wb.xlsx.readFile(DATA_FILE);
 const ws = wb.worksheets[0];
 
 const headerCol = readHeaders(ws).byName;
+const TEXT_COLUMNS = new Set(["Brand", "Model", "Category"]);
 
 let ok = 0, bad = 0, held = 0, unrev = 0;
 for (const c of corrections) {
@@ -67,7 +68,9 @@ for (const c of corrections) {
   ok++;
   if (apply) {
     const v = String(c.proposed ?? "").trim();
-    const asNum = typeof cell.value === "number" && /^-?\d+(\.\d+)?$/.test(v);
+    // 数値セル、または空セルへの純数値は数値として書く。既存のテキストセルと Brand / Model / Category はテキストのまま
+    const empty = cell.value === null || cell.value === undefined || cell.value === "";
+    const asNum = (typeof cell.value === "number" || (empty && !TEXT_COLUMNS.has(c.column))) && /^-?\d+(\.\d+)?$/.test(v);
     cell.value = v === "" ? null : asNum ? Number(v) : v;
   }
 }
