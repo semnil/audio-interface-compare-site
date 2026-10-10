@@ -76,7 +76,7 @@ node -e "import('./src/build.js').then(m=>console.log(JSON.stringify(m.COLUMNS.m
 - セル書式規約は verify-products スキルの「セル書式規約」が正本。収集エージェントは他スキルを読めないため、プロンプトには正本の規約本文を転記して渡す
 - **未公開の測定値 (DR/THD+N/EIN) は空欄。推測で埋めない** (捏造防止)
 - `Product Page URL` は必須 (照合パイプラインの照合先になる)
-- `Measurement Reports` は見つかった場合のみ `[ラベル](url) / ...` 形式で。測定ソース (ASR/RMAA/Sound on Sound 等) はこの列に限り公式以外も可
+- `Measurement Reports` は見つかった場合のみ `[ラベル](url) / ...` 形式で。測定ソース (ASR/RMAA/Sound on Sound 等) はこの列に限り公式以外も可。第三者ベンチの探索は手順 7 で行う
 - 結果は `tools/discover/work/rows-<batch>.json` ({Header:value} の配列) にエージェント自身が Write する
 
 ### 5. 行追加の適用 (要・操作者の同意)
@@ -97,6 +97,10 @@ npm run build     # slug 衝突 fail fast とページ数 (O(n²)) の確認
 node tools/verify/export-products.js        # 新規行が nextIds に入る
 # 以降は verify-products スキルの手順 (Workflow → validate → build-report)
 ```
+
+### 7. 測定レポートの収集への接続
+
+照合の後、new-rows.json で追加した行に collect-measurements スキルを回して `Measurement Reports` を埋める。対象は `Measurement Reports` が空の行と、`[Manufacturer]` のリンクしか無い行の両方で、対象リストは new-rows.json の Brand + Model から作る (collect-measurements の既定の gap-fill は空の行だけを拾い、メーカーのリンクだけの行を対象にしない)。第三者ベンチが見つかった行は、既存のメーカーのリンクを残したまま追加する。収集・反映の手順 (update-xlsx.js の dry-run → 操作者の同意 → `--apply`) は collect-measurements スキルに従う。
 
 ## エージェント運用ノウハウ (過去の実績)
 
