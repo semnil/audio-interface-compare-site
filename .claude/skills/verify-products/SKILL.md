@@ -116,6 +116,11 @@ node tools/verify/apply-corrections.js tools/verify/work/corrections-edited.json
 - 測定値の複数条件値は代表値 (入力系=Mic、出力系=Line/Main Out)、他条件は note へ
 - 計数は物理ジャック数 (Analog Main Output のみ L/R=2 の慣行)。RCA 端子は RCA Input/Output 列へ分離
 - 3.5mm (1/8") ステレオミニの入力端子は、自分のチャンネル (専用の入力系統) を持つものを Line Inputs に 1 と数える。別の端子と同じチャンネルにつながる代替端子 (例: 背面 TRS ペアと並列の前面 3.5mm) は数えず、Notes に書く (操作者決定 2026-10-10)
+- ミキサーのチャンネル入力は、XLR とは別に付いたモノラルチャンネルの 1/4" ライン端子を 1、ステレオチャンネルの L/R を 2 と数える。2-track・外部モニター等の RCA 入力は RCA Input に数える
+- 入力端子の種別 (操作者決定 2026-10-10):
+  - Hi-Z 専用として別に付いた端子 (楽器専用の TS 端子・GTR 端子等) は Hi-Z Inputs にだけ数え、Line Inputs に数えない
+  - リターン専用の端子 (aux / FX リターン、インサート) は入力として数えない
+  - 兼用の端子 (ライン/Hi-Z 切替のライン端子、マイク/ライン兼用の XLR 端子、ライン入力としても使えるリターン端子、FX リターン兼用のステレオ入力等) は、兼ねる各列に数え (ライン/Hi-Z 兼用は Line Inputs と Hi-Z Inputs の両方、マイク/ライン兼用の XLR は Mic Preamps と Line Inputs の両方)、Notes に兼用である旨を補足する。兼用かどうかは公式資料の記載 (マイクとラインの両方を受けると明記) で判定する。XLR/TRS コンボは Combo Inputs 列で兼用を表すため Line Inputs に数えず、Notes の補足も不要
 - 対応列がない仕様値は該当機種の Notes 末尾へ追記
 - 価格はページの USD 表記のまま (小数保持)
 
