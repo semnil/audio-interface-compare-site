@@ -1,4 +1,4 @@
-# Audio Interface Compare Site — 引き継ぎ要約
+# Audio Interface Compare Site
 
 ## プロジェクト概要
 
@@ -8,39 +8,40 @@
 
 ## アーキテクチャ
 
-```
-audio-interface-compare-site/
-├── .github/workflows/build-deploy.yml  ← GitHub Actions (push / 手動でビルド→GitHub Pages デプロイ)
-├── .github/workflows/workflow-checks-main.yml ← 全 PR の必須チェック workflow-tests-main (action の固定検査。pull_request_target で既定ブランチの定義を使う)
-├── .github/workflows/workflow-checks-test.yml ← 検査の取得ステップのフィクスチャテストを実行
-├── .github/tests/workflow-checks-test.sh ← フィクスチャテスト本体 (bash + yq)
-├── .gitignore                          ← node_modules/, dist/, .claude/* (skills/ は追跡、skills/*-workspace/ は除外), tools/{verify,discover,measurements}/work/, product-page-verification-report.md
-├── package.json                        ← Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)
-├── data/audio_interfaces.xlsx          ← スペックデータ (ソース。最終列=Measurement Reports)
-├── src/build.js                        ← ビルドスクリプト (xlsx → JSON → 静的HTML + compare.js + og画像)
-├── .claude/skills/                     ← 運用スキル (verify-products: スペック照合、discover-products: 新製品検出、collect-measurements: Measurement Reports 収集。*-workspace/ は git 管理外)
-├── tools/                              ← xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記、add-rca-columns.js: RCA 列の追加)
-│   ├── verify/                         ← 製品スペック自動照合パイプライン (README.md 参照。work/ は git 管理外)
-│   ├── discover/work/                  ← 新製品検出 (カタログ監査) の作業領域 (git 管理外。手順は .claude/skills/discover-products)
-│   └── measurements/work/              ← 測定レポート収集の作業領域 (git 管理外。手順は .claude/skills/collect-measurements)
-├── tests/                              ← node:test ベースのテストスイート
-└── dist/                               ← 生成物 (gitignore 対象)
-    ├── index.html                      ← トップページ (製品選択UI + 検索 + 動的比較ビュー + ブラウズ導線)
-    ├── style.css / i18n.js / compare.js ← 共通 CSS・多言語 (lang 駆動)・クライアント比較レンダラー
-    ├── products.json                   ← 全製品データ JSON (検索 + 動的比較のデータソース)
-    ├── sitemap.xml                     ← (index + 製品 + ハブ) × (en + ja)
-    ├── robots.txt / 404.html           ← Sitemap 行のみ / カスタム 404 (自動リダイレクトなし・noindex)
-    ├── og/                             ← og:image 共有カード (site.png, products/, brands/, categories/)
-    ├── products/{slug}/                ← 個別製品ページ (製品数分)
-    ├── brands/{slug}/ , categories/{slug}/ ← ブランド別・カテゴリ別ハブページ
-    └── ja/                             ← 日本語版ミラー (index, products/, brands/, categories/)
+```mermaid
+flowchart LR
+  root["audio-interface-compare-site/"]
+  root --> wfBuild[".github/workflows/build-deploy.yml<br>GitHub Actions (push / 手動でビルドし GitHub Pages へデプロイ)"]
+  root --> wfMain[".github/workflows/workflow-checks-main.yml<br>全 PR の必須チェック workflow-tests-main (action の固定検査。pull_request_target で既定ブランチの定義を使う)"]
+  root --> wfTest[".github/workflows/workflow-checks-test.yml<br>検査の取得ステップのフィクスチャテストを実行"]
+  root --> testSh[".github/tests/workflow-checks-test.sh<br>フィクスチャテスト本体 (bash + yq)"]
+  root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ は追跡、skills/*-workspace/ は除外), tools/{verify,discover,measurements}/work/, product-page-verification-report.md"]
+  root --> pkg["package.json<br>Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)"]
+  root --> xlsx["data/audio_interfaces.xlsx<br>スペックデータ (ソース。最終列=Measurement Reports)"]
+  root --> buildJs["src/build.js<br>ビルドスクリプト (xlsx から JSON・静的HTML・compare.js・og画像を生成)"]
+  root --> skills[".claude/skills/<br>運用スキル (verify-products: スペック照合、discover-products: 新製品検出、collect-measurements: Measurement Reports 収集。*-workspace/ は git 管理外)"]
+  root --> tools["tools/<br>xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記、add-rca-columns.js: RCA 列の追加)"]
+  tools --> verify["verify/<br>製品スペック自動照合パイプライン (README.md 参照。work/ は git 管理外)"]
+  tools --> discover["discover/work/<br>新製品検出 (カタログ監査) の作業領域 (git 管理外。手順は .claude/skills/discover-products)"]
+  tools --> measurements["measurements/work/<br>測定レポート収集の作業領域 (git 管理外。手順は .claude/skills/collect-measurements)"]
+  root --> tests["tests/<br>node:test ベースのテストスイート"]
+  root --> dist["dist/<br>生成物 (gitignore 対象)"]
+  dist --> distIndex["index.html<br>トップページ (製品選択UI + 検索 + 動的比較ビュー + ブラウズ導線)"]
+  dist --> distAssets["style.css / i18n.js / compare.js<br>共通 CSS・多言語 (lang 駆動)・クライアント比較レンダラー"]
+  dist --> distJson["products.json<br>全製品データ JSON (検索 + 動的比較のデータソース)"]
+  dist --> distSitemap["sitemap.xml<br>(index + 製品 + ハブ) × (en + ja)"]
+  dist --> distRobots["robots.txt / 404.html<br>Sitemap 行のみ / カスタム 404 (自動リダイレクトなし・noindex)"]
+  dist --> distOg["og/<br>og:image 共有カード (site.png, products/, brands/, categories/)"]
+  dist --> distProducts["products/{slug}/<br>個別製品ページ (製品数分)"]
+  dist --> distHubs["brands/{slug}/ , categories/{slug}/<br>ブランド別・カテゴリ別ハブページ"]
+  dist --> distJa["ja/<br>日本語版ミラー (index, products/, brands/, categories/)"]
 ```
 
 ## 主要な設計判断
 
 ### 静的サイト生成 + クライアント動的比較
 - `node src/build.js` で xlsx → 全 HTML を一括生成
-- フレームワーク不使用。依存は exceljs + @napi-rs/canvas (og:image のテキスト描画用に許容した唯一の native 依存) のみ。package.json の `overrides.uuid: ^14.0.0` は exceljs の transitive 依存の脆弱性 (GHSA-w5hq-g745-h8pq) 対応
+- フレームワーク不使用。依存は exceljs + @napi-rs/canvas (og:image のテキスト描画用に許容した唯一の native 依存) のみ。この 2 つはグローバル規約「技術スタック」の外部依存ゼロに対する例外として宣言する。package.json の `overrides.uuid: ^14.0.0` は exceljs の transitive 依存の脆弱性 (GHSA-w5hq-g745-h8pq) 対応
 - **比較ページの静的生成は全廃**。比較は index 上のフラグメント URL `/#a={slug}&b={slug}` で `compare.js` がブラウザ描画する
   - フラグメントはクローラーに別 URL として扱われず、クロール対象は index + 製品 + ハブに限定される
   - `compare.js` は build.js のヘルパー (escapeHtml / sanitizeUrl / displayValue / renderMeasurements / parseNumeric / diffClass / fmtPrice / cellFor) を `.toString()` で埋め込んで生成する (単一の真実。build.js が素の ESM で実行されることに依存。'[native code]' 化はビルド時 assert、等価性は vm スモークテストで担保)
@@ -48,7 +49,7 @@ audio-interface-compare-site/
 - HTML minify + 共通 CSS/JS の外部参照化でページあたりのサイズを圧縮
 
 ### クライアント検索
-- 製品一覧 JSON (6 フィールドのみ) を index.html 内にインライン埋め込み
+- 製品一覧 JSON (検索・選択 UI 用のフィールドのみ。全スペックは products.json) を index.html 内にインライン埋め込み
 - ブラウザ側でトークン分割マッチ (外部ライブラリ不使用)
 - バックエンド/API 呼び出しなし (動的比較の products.json fetch は静的ファイル)
 
@@ -86,35 +87,37 @@ audio-interface-compare-site/
 - slug 衝突は build 時に `Error('Slug collision: ...')` で fail fast (製品ページ生成前のガード)
 - `BASE_PATH` は trim + 連続スラッシュ畳み込みで正規化
 - `diffClass` は両辺が数値でない限りハイライトを抑止 (片側欠損での誤優劣表示を防ぐ)。compare.js に埋め込まれクライアント側で実行される
+- 比較ビューのハイライトは「数値が大きい方が優位」な項目 (入出力数、DR 等) のみ。価格は買い手の価値観次第なのでハイライト対象外
 - 数値範囲文字列は両端の平均値で比較。正規形は符号付き `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`)、旧形式 (`"0-65"` / `"-18-65"`) もパーサは互換
 - 製品ページのスペック要約文 (`specSummary`) は xlsx の既存データのみから生成する (推測で埋めない)
-- og 画像はバッチ (8 件) 単位で「全 canvas を描画 → 一括 `encode("png")`」の順序を守る。描画とエンコードのインターリーブは @napi-rs/canvas が darwin arm64 で SIGSEGV する (100% 再現) ため、逐次 await への書き換え禁止
+- og 画像はバッチ (8 件) 単位で「全 canvas を描画 → 一括 `encode("png")`」の順序を守り、逐次 await へ書き換えない (@napi-rs/canvas の darwin arm64 の制約。グローバル規約「開発環境」)
 
 ### 多言語 (/ja/ + hreflang)
-- 言語は URL で分離: `/` = 英語 (lang="en")、`/ja/` = 日本語 (lang="ja")。**navigator.language による自動切替は廃止** (Googlebot に不可視のため)
+- 言語は URL で分離: `/` = 英語 (lang="en")、`/ja/` = 日本語 (lang="ja")。本文の翻訳言語は navigator.language ではなく `<html lang>` で決まる (navigator.language は Googlebot に不可視のため)。navigator.language を見るのは下記の初回訪問の言語リダイレクト (en→ja の片方向) だけ
 - i18n.js は `<html lang>` を見て動作し、`window.__i18n.apply(root)` を公開 (compare.js が動的挿入 DOM の翻訳に使用)
 - 日本語版は `localizeToJa()` が英語 HTML を後処理して生成: lang 属性、内部ページリンク (products/brands/categories/ホーム/比較フラグメント) の /ja/ プレフィックス、canonical / og:url の自己参照化、index インライン PAGE_BASE、言語トグル (langToggle() が単一の真実) の差し替え。**必須パターンは mustReplace で件数検証しビルドを fail fast** させる (regex 後処理の脆さ対策)。本文テキストは i18n.js がクライアント翻訳する (lang=ja で常時発火するため Googlebot も日本語を認識)
 - アセット (style.css / i18n.js / compare.js / products.json / og/) は言語間で共有 (ルート配信)。localizeToJa のパターンは distinct なファイル名により誤マッチしない
 - hreflang (en / ja / x-default=en) は htmlHead が静的 HTML に出力。en/ja ペアで同一セット
 - ヘッダー右上に言語トグル (en ページ→「日本語」、ja ページ→「English」)。クリックで選択を localStorage (`aicmp-lang`。github.io はオリジン共有のため名前空間付き) に保存
-- **初回訪問の言語リダイレクト (非対称)**: en ページの head スニペットが「保存済み選択なし + navigator.language=ja」で同一パスの /ja/ へ location.replace (search/hash 保持)。/ja/ 側では発火しない — Googlebot (en ロケール) が /ja/ を描画した際に / へ飛ばすと /ja/ のインデックスが壊れるため。404.html には載せない (soft 404 / ループ回避)。Googlebot は en ページでも条件不成立 (navigator=en) のため両言語のインデックスに影響しない
+- **初回訪問の言語リダイレクト (非対称)**: en ページの head スニペットが「保存済み選択が ja」または「保存済み選択なし + navigator.language=ja」で同一パスの /ja/ へ location.replace (search/hash 保持)。/ja/ 側では発火しない — Googlebot (en ロケール) が /ja/ を描画した際に / へ飛ばすと /ja/ のインデックスが壊れるため。404.html には載せない (soft 404 / ループ回避)。Googlebot は en ページでも条件不成立 (navigator=en) のため両言語のインデックスに影響しない
+- 404.html は英語のみ (GitHub Pages はルート 404.html 固定のため /ja/ 版を配信できない)
 
 ### 製品カタログ / データ更新
-- 収録対象は現行 IF + USB/配信ミキサー + 配信機。**プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限**に留めている (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, Lynx Aurora マトリクス, Ferrofish, MOTU AVB 等は未収録 = 将来候補)
+- 収録対象は現行 IF + USB/配信ミキサー + 配信機。**プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限**に留めている (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, Lynx Aurora マトリクス, Ferrofish, MOTU AVB 等は未収録)
 - 新製品の検出 (未収録機種の発見 → スペック収集 → 行追加 → 照合接続 → 測定レポート収集) はスキル discover-products で運用する (作業領域 tools/discover/work/)
 - 機種の削除 (生産終了) は根拠を確認してから行う (公式ページの 301/404・生産完了表記・公式 discontinued リスト・代理店の価格表/告知のいずれか + 操作者の同意)
 - 未公開の測定値 (DR/THD+N/EIN) は空欄にする (推測で埋めない)
 - プリアンプゲインレンジ列の正規形は符号付き `x to y` (例: `-18 to +70`, `+10 to +65`, `0 to +60`)。レンジ未公表 (ゲイン幅のみ公称) の機種は単一値のまま。ハイフン区切り (`0-65`) は負値と紛らわしいため新規記入に使わない
 - RCA Input / RCA Output 列 (アンバランス RCA 端子、ライン入出力とは分離して計数) は `tools/add-rca-columns.js` で追加した列で、build.js の COLUMNS と xlsx の両方にある
 - `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
-- `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)。既定は dry-run (機種ごとの書き込みプレビュー) で、`--apply` を付けたときだけ xlsx を書き込む (add-rca-columns.js / apply-corrections.js と同じ同意ゲート)
-- 測定レポート (Measurement Reports 列) の収集は skill collect-measurements で運用する (作業領域 tools/measurements/work/)。独立系の第三者ベンチ (ASR/APx・ProSound RMAA・測定系 YouTube〈Julian Krause 等〉・Sound on Sound bench・小規模ラボ) を優先し、無いときのみメーカー公称にフォールバック。世代・型番のミスマッチ (旧 Gen・姉妹機の測定の流用) を避ける。JS ゲートで直接読めない動画などを間接採用したときは確度フラグ (`verification: indirect` + 裏取り) を残す
-- `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして work/results/ に保存し、中断後は validate-results.js の nextIds から再開する。照合レポート (リポジトリ直下 product-page-verification-report.md) は git 管理外で、更新のたびに再生成・上書きし (ヘッダーの生成時刻で版を識別、最新版のみが残る)、照合サイクル完了後に削除する。削除予定/削除済みの機種名は removals.json の保存名 (brand/model) で照合・表示し、行削除で並びがずれる idx には依存しない
+- `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)。既定は dry-run (機種ごとの書き込みプレビュー) で、`--apply` を付けたときだけ xlsx を書き込む (`tools/add-rca-columns.js` / `tools/verify/apply-corrections.js` と同じ同意ゲート)
+- 測定レポート (Measurement Reports 列) の収集は skill collect-measurements で運用する (作業領域 tools/measurements/work/)。独立系の第三者ベンチ (ASR/APx・ProSound RMAA・測定系 YouTube〈Julian Krause 等〉・Sound on Sound bench・小規模ラボ) を優先し、無いときのみメーカー公称にフォールバック。グローバル規約「Claude の振る舞い」の「出典に小売・レビューサイトを使わない」は、この列ではレビューサイト内の測定データ (ASR のレビュースレッドの APx ベンチ・Sound on Sound のレビュー中の bench test 等) に限って上書きする。主観レビュー・購入ガイド・小売ページ・測定を伴わない動画は出典にしない。世代・型番のミスマッチ (旧 Gen・姉妹機の測定の流用) を避ける。JS ゲートで直接読めない動画などを間接採用したときは確度フラグ (`verification: indirect` + 裏取り) を残す
+- `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして tools/verify/work/results/ に保存し、中断後は tools/verify/validate-results.js の nextIds から再開する。照合レポート (リポジトリ直下 product-page-verification-report.md) は git 管理外で、更新のたびに再生成・上書きし (ヘッダーの生成時刻で版を識別、最新版のみが残る)、照合サイクル完了後に削除する。削除予定/削除済みの機種名は tools/verify/work/removals.json の保存名 (brand/model) で照合・表示し、行削除で並びがずれる idx には依存しない
 
 ### ホスティング: GitHub Pages
 - リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
 - AWS (S3, CloudFront, IAM) 一切不要
-- 制約: サイトサイズ上限 1GB、帯域 100GB/月。比較の動的化によりサイズは O(n) (製品 372 機種で dist ≈ 87MB、うち og 画像 ≈ 31MB)
+- 制約: サイトサイズ上限 1GB、帯域 100GB/月。比較の動的化によりサイズは製品数に比例する (O(n))
 - 旧比較 URL (/compare/...) は 404 のまま放置が正 (Google 公式ガイダンスと整合)。robots.txt で /compare/ をブロックしない (404 確認を妨げるため)。URL 削除ツールも使わない
 
 ### ビルドトリガー (GitHub Actions)
@@ -122,41 +125,25 @@ audio-interface-compare-site/
 - 手動 (`workflow_dispatch`)
 - main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
   - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
-- ワークフローの `uses:` は 40 桁のコミット SHA + バージョンコメント (`@<sha> # vX.Y.Z`) でピンする。`tests/workflow-pins.test.js` が yq で YAML を解析し、`jobs.<id>.uses` / `jobs.<id>.steps[*].uses` と `action.yml` / `action.yaml` の `runs.steps[*].uses` の値と同じ行のコメントを検査する (yq は環境変数 `YQ` で差し替え可。CI では必須で、ローカルに yq が無いときは 3 件ともスキップ)。検査対象のルートは環境変数 `WORKFLOW_ROOT` (未設定ならリポジトリ直下)
+- ワークフローの `uses:` の固定 (グローバル規約「CI / GitHub Actions / インフラ」) は `tests/workflow-pins.test.js` が検査する。yq で YAML を解析し、`jobs.<id>.uses` / `jobs.<id>.steps[*].uses` と `action.yml` / `action.yaml` の `runs.steps[*].uses` の値と同じ行のコメントが `@<sha> # vX.Y.Z` の形であることを確かめる (yq は環境変数 `YQ` で差し替え可。CI では必須で、ローカルに yq が無いときは yq を使うテストをスキップ)。検査対象のルートは環境変数 `WORKFLOW_ROOT` (未設定ならリポジトリ直下)
 - 全 PR で `.github/workflows/workflow-checks-main.yml` (ジョブ `workflow-tests-main`、main の必須チェック) が `tests/workflow-*.test.js` を実行する。`pull_request_target` で走り、ワークフロー定義・テストとも既定ブランチのものを使う (GitHub は `pull_request_target` の定義を常に既定ブランチから読むため、PR は自分を判定する検査を変えられない)。PR のワークフロー・action ファイルは head コミットから GitHub API (git trees / blobs) で取得して `WORKFLOW_ROOT` に置き、PR のコードは checkout も実行もしない。取得対象に通常ファイル以外 (シンボリックリンク等) があるとき、表記が小文字でない action ファイル名 (`Action.yml` 等。大文字小文字を区別しないファイルシステムでは `action.yml` として開かれる) があるとき、この検査のファイル (`workflow-checks-main.yml` と `tests/workflow-*.test.js`、環境変数 `PROTECTED_PATTERN`) のパス・mode・blob SHA が既定ブランチと一致しないとき、ワークフローのステップと複合 Action のステップに `./` 参照があるとき (runner の作業領域に対して解決されるため。同じリポジトリの Action は `$/` で参照し、ジョブ単位の再利用ワークフローは `./` / `$/` のどちらも呼び出し元と同じコミットから読まれる)、ローカル `./` と `$/` 参照のパスに `A-Z a-z 0-9 . _ -` と `/` 以外の文字、または空・`.`・`..`・末尾が `.` の要素があるとき、参照先までのいずれかの要素が git tree のシンボリックリンク (`120000`) かサブモジュール (`160000`) と一致するとき (ASCII の大文字小文字を区別せず、それらのパスの非 ASCII の要素は任意の要素と一致するものとして照合する) は失敗する。この検査のファイルを変更するときは、main の必須チェックを一時的に外してからマージする (バイパスは設定していない)。必須チェックはベースブランチへの追随を求める設定 (`strict_required_status_checks_policy: true`) で、チェックの合格後に main が進んだ PR は、ブランチを更新 (Update branch) して新しい head でチェックが通るまでマージできない (チェックの再実行だけでは解除されない)。public リポジトリの `pull_request_target` は明示的な許可ポリシーが無いと 2026-11-02 から無効化されるため、このワークフローを対象とした Actions の許可ポリシーを設定している (Settings → Actions → Policies)。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
 
 ### テスト基盤
 - `node:test` + `node:assert` で `tests/*.test.js` を実行
 - `package.json` の test スクリプトは `--test-concurrency=1` でシリアル実行 (build.js import 時副作用ガード併用)
-- `src/build.js` が末尾で export するのは `_slugify` / `_escapeHtml` / `_diffClass` / `_renderMeasurements` / `COLUMNS` のみ。これらを import するテストは `diffClass.test.js` / `renderMeasurements.test.js` の 2 本
+- `src/build.js` が末尾で export するのは `_slugify` / `_escapeHtml` / `_diffClass` / `_renderMeasurements` / `COLUMNS` のみ。これらを import するテストは `diffClass.test.js` / `renderMeasurements.test.js` / `compare-js.test.js`
 - `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` は **未 export**。該当テストは build() の副作用を避けるため同一ロジックをテスト側にインライン再現する (各テスト冒頭コメントに参照元の build.js 行番号を明記)
 - 監査由来のテスト多数: a11y 契約、JSON-LD エスケープ、canonical URL 契約、script 読込順序 (PAGE_JA → i18n.js → compare.js)、slug 衝突、sanitize URL probe など
-- `.github/tests/workflow-checks-test.sh` (bash + yq) は `workflow-checks-main.yml` の取得ステップを、偽の `gh` が返すフィクスチャの git tree に対して実行し、通るべき参照 (`$/` の通常の参照・ジョブ単位の `./` / `$/` の再利用ワークフロー・無関係なシンボリックリンクとサブモジュールがある状態) と失敗すべき参照 (ステップの `./`・別リポジトリを checkout した先への `./`・サブモジュール・シンボリックリンク・大文字小文字を変えた参照・`..`・文字種外) の判定と失敗理由を、ワークフローのステップと複合 Action のステップの双方で検査する。`npm test` には含まれず、`.github/workflows/workflow-checks-test.yml` がこれらのファイルを変更する PR と main への push で実行する。固定の検査は `tests/workflow-pins.test.js` 側にあるため、ワークフローが `WORKFLOW_CHECK_STEP=absent` を宣言して未固定参照の 2 ケースをスキップする (宣言の無い実行で検査ステップが見つからなければテストは失敗する)
-- 2026-07 の A4 移行で追加: `compare-js.test.js` (クライアント比較レンダラーの構文・埋め込み・配線)、`hub-pages.test.js` (ハブの内部リンク・ItemList)、`i18n-hreflang.test.js` (/ja/ 生成・hreflang 相互注釈・言語トグル)、`og-images.test.js` (og 画像生成・メタタグ配線)。比較静的ページ前提の 5 テスト (compare-pages / compare-pages-safety / compare-jsonld-safety / jsonld-canonical-contract / a11y-compare) は削除済み
+- `.github/tests/workflow-checks-test.sh` (bash + yq) は `workflow-checks-main.yml` の取得ステップを、偽の `gh` が返すフィクスチャの git tree に対して実行し、通るべき参照 (`$/` の通常の参照・ジョブ単位の `./` / `$/` の再利用ワークフロー・無関係なシンボリックリンクとサブモジュールがある状態) と失敗すべき参照 (ステップの `./`・別リポジトリを checkout した先への `./`・サブモジュール・シンボリックリンク・大文字小文字を変えた参照・`..`・文字種外) の判定と失敗理由を、ワークフローのステップと複合 Action のステップの双方で検査する。`npm test` には含まれず、`.github/workflows/workflow-checks-test.yml` がこれらのファイルを変更する PR と main への push で実行する。固定の検査は `tests/workflow-pins.test.js` 側にあるため、ワークフローが `WORKFLOW_CHECK_STEP=absent` を宣言して未固定参照のケース (ワークフローのステップ・複合 Action のステップ) をスキップする (宣言の無い実行で検査ステップが見つからなければテストは失敗する)
+- 動的比較・ハブ・多言語・og 画像: `compare-js.test.js` (クライアント比較レンダラーの構文・埋め込み・配線)、`hub-pages.test.js` (ハブの内部リンク・ItemList)、`i18n-hreflang.test.js` (/ja/ 生成・hreflang 相互注釈・言語トグル)、`og-images.test.js` (og 画像生成・メタタグ配線)
 
-## SEO 方針 (2026-07 A4 移行)
+## SEO 方針 (2026-07 の比較ページ動的化)
 
 - **比較クエリ (「A vs B」) の SEO は放棄**。全組合せの静的比較ページ (67,340 枚) は「クロール済み - インデックス未登録」2 万件超・登録 41 件という実績から品質評価を毀損しており、全廃した
-- インデックス対象: index + 製品 372 + ブランドハブ 45 + カテゴリハブ 7 (× en/ja = 850 URL)
-- 実装済み: meta description 全ページ / OGP + og:image (1200×630 共有カード、summary_large_image) / canonical 自己参照 / hreflang (en/ja/x-default) / sitemap.xml (850 URL) / robots.txt (Sitemap 行のみ) / カスタム 404.html (noindex、静的案内リンクのみ、自動リダイレクト禁止) / JSON-LD (Product + ItemList) / 製品ページのスペック要約文 (機械生成、固有テキスト増)
-- インデックス回復は数か月〜次回コアアップデート単位の長期戦。GSC の 404 レポートは過去 1 か月窓なので自然減衰する
-
-## 未解決・要対応
-
-### 1. xlsx のカラムマッピング
-build.js は `COLUMNS[].label` (英語ヘッダー名) と xlsx ヘッダーの完全一致で列を特定する。
-xlsx のヘッダー名が変わるとビルドが壊れるため、将来的にはヘッダー自動検出 or マッピング設定ファイル化を検討。
-
-### 2. 比較ビューのハイライトロジック (compare.js)
-- 「数値が大きい方が優位」な項目 (入出力数、DR 等) のみハイライト
-- THD+N・EIN (低い方が良い) は文字列フォーマット (例: "-88.0dB (0.0040%)") のため未対応
-- 価格は買い手の価値観次第なのでハイライト対象外
-- 片側のみ数値で他方が欠損のときは `diffClass` 側でハイライトを抑止 (誤優劣防止)
-
-### 3. 保留
-- ダークモード (`prefers-color-scheme: dark`) 未対応
-- 比較ビューのソーシャル共有カードはサイト共通 og:image になる (ページ単位の per-pair OGP は静的ページ廃止に伴い消滅、方針上許容)
-- 404.html は英語のみ (GitHub Pages はルート 404.html 固定のため /ja/ 版を配信できない)
+- インデックス対象: index + 製品 + ブランドハブ + カテゴリハブ (× en/ja)
+- 実装済み: meta description 全ページ / OGP + og:image (1200×630 共有カード、summary_large_image) / canonical 自己参照 / hreflang (en/ja/x-default) / sitemap.xml (インデックス対象の全 URL) / robots.txt (Sitemap 行のみ) / カスタム 404.html (noindex、静的案内リンクのみ、自動リダイレクト禁止) / JSON-LD (Product + ItemList) / 製品ページのスペック要約文 (機械生成、固有テキスト増)
+- 比較ビューのソーシャル共有カードはサイト共通 og:image (`og/site.png`) になる (ページ単位の per-pair OGP は静的ページ廃止に伴い消滅、方針上許容)
+- GSC の 404 レポートは過去 1 か月の窓で集計される
 
 ## ビルドコマンド
 
@@ -184,6 +171,7 @@ npm run build && npm run preview
 
 `data/audio_interfaces.xlsx` — 「Audio Interfaces」シート、1行目ヘッダー、2行目以降データ。
 ヘッダーは英語名で、`build.js` の `COLUMNS[].label` と一致させて列を特定する (日本語名ではない)。
+`COLUMNS[].label` と完全一致しないヘッダーの列は読み飛ばされ、エラーにならずにその列が全製品で空になる (Brand / Model の列なら全行が読み飛ばされる)。
 主な列: ブランド, モデル名, カテゴリ, 参考価格 (USD), マイクプリアンプ数, Combo入力,
 ライン入力, RCA入力, Hi-Z入力, ADAT入力, 光ポート/S/PDIF(同軸・光)/AES入力, アナログメイン出力, アナログライン出力,
 RCA出力, ヘッドフォン出力, ADAT出力, 光ポート/S/PDIF(同軸・光)/AES出力, ファンタム電源, 最大サンプリングレート,
