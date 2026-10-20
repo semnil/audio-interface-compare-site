@@ -14,6 +14,8 @@ flowchart LR
   root --> wfBuild[".github/workflows/build-deploy.yml<br>GitHub Actions (push / 手動でビルドし GitHub Pages へデプロイ)"]
   root --> wfMain[".github/workflows/workflow-checks-main.yml<br>全 PR の必須チェック workflow-tests-main (action の固定検査。pull_request_target で既定ブランチの定義を使う)"]
   root --> wfTest[".github/workflows/workflow-checks-test.yml<br>検査の取得ステップのフィクスチャテストを実行"]
+  root --> wfCi[".github/workflows/ci.yml<br>全 PR で npm ci・npm test・npm run build (デプロイなし)。main の必須チェック test"]
+  root --> wfAuto[".github/workflows/dependabot-auto-merge.yml<br>Dependabot の PR で更新が semver の patch なら自動マージを予約。main の必須チェック auto-merge"]
   root --> testSh[".github/tests/workflow-checks-test.sh<br>フィクスチャテスト本体 (bash + yq)"]
   root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ は追跡、skills/*-workspace/ は除外), tools/{verify,discover,measurements}/work/, product-page-verification-report.md"]
   root --> pkg["package.json<br>Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)"]
@@ -127,6 +129,8 @@ flowchart LR
   - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
 - ワークフローの `uses:` の固定 (グローバル規約「CI / GitHub Actions / インフラ」) は `tests/workflow-pins.test.js` が検査する。yq で YAML を解析し、`jobs.<id>.uses` / `jobs.<id>.steps[*].uses` と `action.yml` / `action.yaml` の `runs.steps[*].uses` の値と同じ行のコメントが `@<sha> # vX.Y.Z` の形であることを確かめる (yq は環境変数 `YQ` で差し替え可。CI では必須で、ローカルに yq が無いときは yq を使うテストをスキップ)。検査対象のルートは環境変数 `WORKFLOW_ROOT` (未設定ならリポジトリ直下)
 - 全 PR で `.github/workflows/workflow-checks-main.yml` (ジョブ `workflow-tests-main`、main の必須チェック) が `tests/workflow-*.test.js` を実行する。`pull_request_target` で走り、ワークフロー定義・テストとも既定ブランチのものを使う (GitHub は `pull_request_target` の定義を常に既定ブランチから読むため、PR は自分を判定する検査を変えられない)。PR のワークフロー・action ファイルは head コミットから GitHub API (git trees / blobs) で取得して `WORKFLOW_ROOT` に置き、PR のコードは checkout も実行もしない。取得対象に通常ファイル以外 (シンボリックリンク等) があるとき、表記が小文字でない action ファイル名 (`Action.yml` 等。大文字小文字を区別しないファイルシステムでは `action.yml` として開かれる) があるとき、この検査のファイル (`workflow-checks-main.yml` と `tests/workflow-*.test.js`、環境変数 `PROTECTED_PATTERN`) のパス・mode・blob SHA が既定ブランチと一致しないとき、ワークフローのステップと複合 Action のステップに `./` 参照があるとき (runner の作業領域に対して解決されるため。同じリポジトリの Action は `$/` で参照し、ジョブ単位の再利用ワークフローは `./` / `$/` のどちらも呼び出し元と同じコミットから読まれる)、ローカル `./` と `$/` 参照のパスに `A-Z a-z 0-9 . _ -` と `/` 以外の文字、または空・`.`・`..`・末尾が `.` の要素があるとき、参照先までのいずれかの要素が git tree のシンボリックリンク (`120000`) かサブモジュール (`160000`) と一致するとき (ASCII の大文字小文字を区別せず、それらのパスの非 ASCII の要素は任意の要素と一致するものとして照合する) は失敗する。この検査のファイルを変更するときは、main の必須チェックを一時的に外してからマージする (バイパスは設定していない)。必須チェックはベースブランチへの追随を求める設定 (`strict_required_status_checks_policy: true`) で、チェックの合格後に main が進んだ PR は、ブランチを更新 (Update branch) して新しい head でチェックが通るまでマージできない (チェックの再実行だけでは解除されない)。public リポジトリの `pull_request_target` は明示的な許可ポリシーが無いと 2026-11-02 から無効化されるため、このワークフローを対象とした Actions の許可ポリシーを設定している (Settings → Actions → Policies)。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
+- 全 PR で `.github/workflows/ci.yml` (ジョブ `test`、main の必須チェック) が `npm ci` → `npm test` → `npm run build` を実行する。ビルドには `BASE_PATH` などを渡さず、デプロイはしない
+- Dependabot の PR で更新が semver の patch のとき、`.github/workflows/dependabot-auto-merge.yml` (ジョブ `auto-merge`、main の必須チェック) が読んだ head コミットに固定して自動マージ (merge commit) を予約し、それ以外の種別では前の予約を解除する。他の PR ではステップを skip して成功を報告する。自動マージによるマージは `GITHUB_TOKEN` によるもので、main への push は `build-deploy.yml` を起動しない。依存の更新がサイトに出るのは、次にビルド対象のファイルを変える push か手動実行のとき
 
 ### テスト基盤
 - `node:test` + `node:assert` で `tests/*.test.js` を実行
