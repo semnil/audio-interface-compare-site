@@ -1,32 +1,32 @@
 /**
- * workflow.js — 製品ページ照合ワークフロー (Claude Code の Workflow ツール用スクリプト)
+ * workflow.js — product page verification workflow (a script for Claude Code's Workflow tool)
  *
- * node では実行しない。Claude Code から以下で起動する:
+ * Not run with node. Start it from Claude Code with:
  *   Workflow({ scriptPath: "<repo>/tools/verify/workflow.js",
  *              args: { workDir: "<repo>/tools/verify/work", ids: [0,1,...] } })
  *
- * 中断耐性の設計:
- *  - 各エージェントは結果を workDir/results/product-NNN.json に自分で書き込む (チェックポイント)。
- *    ワークフローが途中で死んでも完了分はファイルとして残る。
- *  - 復旧はワークフローのキャッシュに依存しない: validate-results.js が結果ファイルの
- *    有無と健全性から未完了 ids を算出し、その ids だけで本スクリプトを再起動する。
- *  - 既定は直列実行 (中断で失うのは実行中の 1 件のみ)。args.concurrency で並列化できる
- *    (中断で失うのは実行中の最大 concurrency 件。いずれも validate → nextIds で復旧する)。
- *  - 利用制限を検知するためのサーキットブレーカー: 完了順で連続 maxConsecFail 回の
- *    エージェント失敗で未着手分を打ち切る (制限中の無駄な連続失敗を防ぐ)。
- *  - args.model / args.effort でエージェントのモデル・エフォートを指定できる (省略時はセッション継承)。
+ * Design for resilience to interruption:
+ *  - Each agent writes its own result to workDir/results/product-NNN.json (a checkpoint).
+ *    Even if the workflow dies midway, completed items remain as files.
+ *  - Recovery does not depend on the workflow's cache: validate-results.js computes the incomplete ids
+ *    from the presence and soundness of the result files, and this script is restarted with only those ids.
+ *  - Serial by default (an interruption loses only the 1 item in progress). It can be parallelized with args.concurrency
+ *    (an interruption loses at most concurrency items in progress, all recovered via validate → nextIds).
+ *  - A circuit breaker for detecting usage limits: maxConsecFail consecutive agent failures in completion order
+ *    cut off the items not yet started (prevents pointless consecutive failures while limited).
+ *  - args.model / args.effort set the agents' model and effort (inherited from the session when omitted).
  */
 export const meta = {
   name: 'verify-product-pages-v2',
-  description: 'xlsx の製品スペックを公式ページと照合する (チェックポイント書込・打切り付き・並列度/モデル指定可)',
+  description: 'Verifies the product specs in the xlsx against the official pages (writes checkpoints, cuts off on failures, parallelism/model selectable)',
   phases: [
-    { title: 'Verify', detail: '製品 1 件につき 1 エージェント、並列度は args.concurrency (既定 1 = 直列)' },
+    { title: 'Verify', detail: 'One agent per product; parallelism is args.concurrency (default 1 = serial)' },
   ],
 }
 
 const input = typeof args === 'string' ? JSON.parse(args) : args
 const workDir = input.workDir
-// ids は配列指定または連続範囲 {idsFrom, idsTo} 指定 (引数の肥大回避)
+// ids is an array or a consecutive range {idsFrom, idsTo} (avoids bloated arguments)
 const ids = input.ids ?? Array.from({ length: input.idsTo - input.idsFrom + 1 }, (_, k) => input.idsFrom + k)
 const maxConsecFail = input.maxConsecFail ?? 5
 const concurrency = Math.max(1, input.concurrency ?? 1)
@@ -73,7 +73,7 @@ const SCHEMA = {
 }
 
 phase('Verify')
-log(ids.length + ' 件を照合 (並列 ' + concurrency + '、モデル ' + (model ?? 'セッション継承') + '、完了順で連続 ' + maxConsecFail + ' 失敗で打切り)')
+log('Verifying ' + ids.length + ' items (parallelism ' + concurrency + ', model ' + (model ?? 'inherited from the session') + ', cut off after ' + maxConsecFail + ' consecutive failures in completion order)')
 
 const done = []
 const agentFailed = []
@@ -133,17 +133,17 @@ async function verifyOne(i) {
     consecFail++
     if (consecFail >= maxConsecFail && !aborted) {
       aborted = true
-      log('完了順で連続 ' + consecFail + ' 件失敗のため未着手の ' + Math.max(0, ids.length - cursor) + ' 件を打切り (利用制限または workDir 誤設定の可能性)')
+      log('Cutting off the ' + Math.max(0, ids.length - cursor) + ' items not yet started after ' + consecFail + ' consecutive failures in completion order (a usage limit or a wrong workDir setting is possible)')
     }
   } else {
     consecFail = 0
     done.push({ idx: i, status: r.fetch_status, mismatches: r.mismatches.length })
   }
-  if (completed % 10 === 0 || completed === ids.length) log('進捗: ' + completed + '/' + ids.length + ' 完了')
+  if (completed % 10 === 0 || completed === ids.length) log('Progress: ' + completed + '/' + ids.length + ' done')
 }
 
-// ワーカープール: concurrency 本のワーカーが共有カーソルから次の id を取り、直列に処理する。
-// aborted が立ったら未着手分を取らずに終了する (実行中の分は完走させる)。
+// Worker pool: concurrency workers each take the next id from a shared cursor and process it serially.
+// Once aborted is set, they stop without taking items not yet started (items in progress run to completion).
 const workers = Array.from({ length: Math.min(concurrency, ids.length) }, () => async () => {
   while (!aborted) {
     const n = cursor++
@@ -160,5 +160,5 @@ return {
   agentFailed,
   inputMissing,
   aborted,
-  next: 'node tools/verify/validate-results.js で健全性検証と未完了 ids の算出を行うこと',
+  next: 'Run node tools/verify/validate-results.js to validate soundness and compute the incomplete ids',
 }

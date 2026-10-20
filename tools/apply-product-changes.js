@@ -1,10 +1,10 @@
 /**
- * apply-product-changes.js — xlsx へ製品行の削除 + 追加を一括適用する
+ * apply-product-changes.js — applies product row removals + additions to the xlsx in one pass
  *
  * usage: node tools/apply-product-changes.js <new-rows-json-path>
- * new-rows JSON は {Header:value} オブジェクトの配列 (キーは xlsx ヘッダー名と一致)。
- * 削除対象は REMOVALS に "Brand Model" で列挙 (サイクルごとに書き換える。追加のみなら空にする)。
- * 既存行を読み込み → 削除対象を除外 → 新規行を連結 → Brand,Model 順にソート → データ領域を書き直す。
+ * new-rows JSON is an array of {Header:value} objects (keys match the xlsx header names).
+ * Removals are listed in REMOVALS as "Brand Model" (rewritten for each cycle; empty when only adding).
+ * Reads the existing rows → excludes the removals → appends the new rows → sorts by Brand, Model → rewrites the data area.
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -14,16 +14,16 @@ import ExcelJS from "exceljs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
-// 生産終了・重複統合で削除する製品 ("Brand Model")。サイクルごとに書き換える
+// Products removed as discontinued or merged duplicates ("Brand Model"). Rewritten for each cycle
 const REMOVALS = new Set([
-  // 2026-10-10 再削除 (操作者承認済み)
-  "TASCAM SERIES 102i", // tascam.jp/jp/product/series_102i に「この製品は生産完了になりました。」
-  "TASCAM SERIES 208i", // tascam.jp/jp/product/series_208i に「この製品は生産完了になりました。」
+  // Removed again on 2026-10-10 (approved by the operator)
+  "TASCAM SERIES 102i", // tascam.jp/jp/product/series_102i says 「この製品は生産完了になりました。」 (this product has been discontinued)
+  "TASCAM SERIES 208i", // tascam.jp/jp/product/series_208i says 「この製品は生産完了になりました。」 (this product has been discontinued)
 ]);
 
-// 追加行のセル値を数値化する。new-rows JSON は全値が文字列になりがちで、そのまま
-// 書くと参照価格・入出力数・サンプルレート等が数値でなくテキストセルになる。純数値の
-// 文字列だけ Number 化する (テキスト列は除外 = MOTU 624/848 のような純数値の Model を壊さない)。
+// Turns cell values of added rows into numbers. new-rows JSON tends to hold every value as a string, and written
+// as is, the reference price, I/O counts, sample rate, etc. become text cells instead of numbers. Only purely numeric
+// strings are converted with Number (text columns are excluded, so purely numeric Models such as MOTU 624/848 are not broken).
 const TEXT_COLUMNS = new Set(["Brand", "Model", "Category"]);
 const NUMERIC_STRING = /^-?\d+(\.\d+)?$/;
 function coerceNumericCells(row) {
@@ -51,14 +51,14 @@ const wb = new ExcelJS.Workbook();
 await wb.xlsx.readFile(DATA_FILE);
 const ws = wb.worksheets[0];
 
-// ヘッダー: 列番号 → ヘッダー名
+// Headers: column number → header name
 const headerRow = ws.getRow(1);
 const headers = [];
 headerRow.eachCell((cell, colNumber) => { headers[colNumber] = String(cell.value).trim(); });
 const headerNames = headers.filter(Boolean);
 const lastCol = headers.length - 1;
 
-// 既存データ行をオブジェクト化
+// Turn the existing data rows into objects
 const existing = [];
 ws.eachRow((row, rowNumber) => {
   if (rowNumber === 1) return;
@@ -77,7 +77,7 @@ const beforeCount = existing.length;
 const kept = existing.filter((o) => !REMOVALS.has(`${o.Brand} ${o.Model}`));
 const removedCount = beforeCount - kept.length;
 
-// 新規行を検証しつつ連結
+// Append the new rows while validating them
 const dup = new Set(kept.map((o) => `${o.Brand} ${o.Model}`));
 const added = [];
 for (const r of newRows) {
@@ -89,14 +89,14 @@ for (const r of newRows) {
 }
 
 const combined = kept.concat(added);
-// Brand → Model の順でソート (既存の並びを踏襲)
+// Sort by Brand → Model (following the existing order)
 combined.sort((a, b) => {
   const bc = String(a.Brand).localeCompare(String(b.Brand), "en", { sensitivity: "base" });
   if (bc !== 0) return bc;
   return String(a.Model).localeCompare(String(b.Model), "en", { sensitivity: "base" });
 });
 
-// データ領域を消去して書き直す (spliceRows の一括削除は環境により不安定なため末尾から1行ずつ確実に削除)
+// Clear the data area and rewrite it (bulk deletion with spliceRows is unstable depending on the environment, so rows are deleted one at a time from the end)
 for (let r = ws.rowCount; r >= 2; r--) ws.spliceRows(r, 1);
 if (ws.rowCount !== 1) throw new Error(`data rows not cleared: rowCount=${ws.rowCount}`);
 for (const o of combined) {

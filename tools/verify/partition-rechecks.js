@@ -1,16 +1,16 @@
 /**
- * partition-rechecks.js — 精査 (第 2 段) の verdict を仕分けて第 3 段 (質問解決) の入力を作る
+ * partition-rechecks.js — sorts the verdicts of the examination (stage 2) into the input of stage 3 (resolving questions)
  *
  * usage: node tools/verify/partition-rechecks.js [rechecks-dir]
- *   rechecks-dir 省略時は work/rechecks/。出力 corrections-recheck.json は入力ディレクトリの親に書く
- *   (既定では work/ 直下。テスト時は別ディレクトリを渡せば work/ を汚さない)。
+ *   rechecks-dir defaults to work/rechecks/. The output corrections-recheck.json is written to the input directory's parent
+ *   (directly under work/ by default. Passing another directory when testing keeps work/ clean).
  *
- * work/rechecks/*.json を読み、corrections スキーマ互換の work/corrections-recheck.json を生成する:
- *  - verdict = xlsx_correct       → hold (確認済み。質問不要、apply でもスキップされる)
- *  - verdict = page_correct       → 修正候補 (unreviewed: true。操作者の確認までは apply 対象外)
- *  - verdict = judgement_required → 修正候補 or 保留 (unreviewed: true + note に判断材料)
- * 併せて質問バッチの下書き (機種 | 列 | 現在値 | 候補 | 根拠引用) をコンソールに出力する。
- * 操作者の決定は corrections-gen.py の新ラウンドに記録して確定させる (本ファイルは中間生成物)。
+ * Reads work/rechecks/*.json and generates work/corrections-recheck.json, compatible with the corrections schema:
+ *  - verdict = xlsx_correct       → hold (confirmed. No question needed, and apply skips it)
+ *  - verdict = page_correct       → proposed correction (unreviewed: true. Not applied until the operator confirms)
+ *  - verdict = judgement_required → proposed correction or held (unreviewed: true + the material for the decision in note)
+ * It also prints draft question batches (model | column | current value | proposal | quoted evidence) to the console.
+ * The operator's decisions are settled by recording them in a new round of corrections-gen.py (this file is intermediate output).
  */
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
@@ -30,7 +30,7 @@ for (const f of files) {
   const r = JSON.parse(readFileSync(join(RECHECKS, f), "utf8"));
   const row = rows[idx];
   if (!row || r.brand !== row.Brand || r.model !== row.Model) {
-    console.error(`skip ${f}: brand/model が rows-full と一致しない (idx シフト後の残骸の可能性。export-contested からやり直すこと)`);
+    console.error(`skip ${f}: brand/model does not match rows-full (possibly left over from an idx shift; start again from export-contested)`);
     continue;
   }
   if (r.fetch_status === "failed") { nFailed++; continue; }
@@ -39,7 +39,7 @@ for (const f of files) {
     const base = { idx, brand: r.brand, model: r.model, column: v.column, current };
     if (v.verdict === "xlsx_correct") {
       nAutoHold++;
-      entries.push({ ...base, proposed: current, hold: `精査で xlsx が正 (${v.reason}): ${v.quote}`.slice(0, 500) });
+      entries.push({ ...base, proposed: current, hold: `Examination found the xlsx correct (${v.reason}): ${v.quote}`.slice(0, 500) });
     } else {
       const judge = v.verdict === "judgement_required";
       judge ? nJudge++ : nFix++;
@@ -50,19 +50,19 @@ for (const f of files) {
 }
 
 writeFileSync(OUT_FILE, JSON.stringify(entries, null, 1));
-console.log(`${OUT_FILE}: ${entries.length} 件 (自動 hold ${nAutoHold} / 修正候補 ${nFix} / 要判断 ${nJudge} / 取得不能 ${nFailed} 機種)`);
+console.log(`${OUT_FILE}: ${entries.length} entries (automatic hold ${nAutoHold} / proposed corrections ${nFix} / judgement required ${nJudge} / could not be fetched ${nFailed} models)`);
 
 if (questions.length) {
-  console.log("\n== 質問バッチの下書き (機種単位でグルーピングし AskUserQuestion にかける) ==");
+  console.log("\n== Draft question batches (group by model and put to AskUserQuestion) ==");
   let prev = "";
   for (const q of questions) {
     const key = `${q.brand} ${q.model}`;
     if (key !== prev) { console.log(`\n--- ${key} (idx ${q.idx})`); prev = key; }
     console.log(`  [${q.verdict}/${q.reason}] ${q.column}: "${q.current}" -> "${q.proposed}"`);
-    console.log(`    根拠: ${q.quote.slice(0, 200)}`);
+    console.log(`    Evidence: ${q.quote.slice(0, 200)}`);
     if (q.note) console.log(`    note: ${q.note.slice(0, 150)}`);
   }
-  console.log("\n操作者の決定を corrections-gen.py の新ラウンドに記録 → 生成 → dry-run → --apply の順で確定する。");
+  console.log("\nSettle in this order: record the operator's decisions in a new round of corrections-gen.py → generate → dry-run → --apply.");
 } else {
-  console.log("質問対象なし (全争点が確認済みまたは取得不能)。");
+  console.log("Nothing to ask (every contested item is confirmed or could not be fetched).");
 }

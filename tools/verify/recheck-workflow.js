@@ -1,28 +1,28 @@
 /**
- * recheck-workflow.js — 相違の精査 (第 2 段) ワークフロー (Claude Code の Workflow ツール用スクリプト)
+ * recheck-workflow.js — workflow for examining discrepancies (stage 2) (a script for Claude Code's Workflow tool)
  *
- * node では実行しない。第 1 段 (workflow.js) の mismatch を export-contested.js で抽出した後に起動する:
+ * Not run with node. Start it after extracting stage 1's (workflow.js) mismatches with export-contested.js:
  *   Workflow({ scriptPath: "<repo>/tools/verify/recheck-workflow.js",
- *              args: { workDir: "<repo>/tools/verify/work", ids: <contested-index.json の配列>,
+ *              args: { workDir: "<repo>/tools/verify/work", ids: <the array in contested-index.json>,
  *                      concurrency: 2, model: "...", effort: "high" } })
  *
- * 並列度は既定 2・上限 2 に固定する。第 2 段は 1 エージェントあたりマニュアル PDF 解析 +
- * headless Chrome を併用しメモリ負荷が高く、並列 8 で Claude Code プロセスごと落ち、
- * 並列 4 でも高負荷だった実績がある (2026-07-12。チェックポイントにより完了分は保全され、
- * 未完了 ids の再起動で復旧できる)。
+ * Parallelism is fixed at default 2, maximum 2. Stage 2 combines manual PDF parsing + headless Chrome
+ * per agent and is memory-heavy: at parallelism 8 the whole Claude Code process crashed,
+ * and even 4 was a heavy load (2026-07-12. Completed items were kept by the checkpoints
+ * and it can recover by restarting the incomplete ids).
  *
- * 目的: 第 1 段が検出した相違 (争点列) だけを、マニュアル/データシート原文まで踏み込んで再検証し、
- * 偽陽性 (ページ側の記載省略・マーケ簡略表記・単位差・計数規約差) を判定付きで排除する。
- * 第 1 段と別のモデルを args.model に指定すると誤読の相関を切れる。
+ * Purpose: re-verify only the discrepancies (contested columns) found by stage 1, going down to the manual/datasheet original text,
+ * and eliminate false positives (omissions on the page, simplified marketing notation, unit differences, counting convention differences) with a verdict.
+ * Setting args.model to a model different from stage 1 breaks the correlation of misreadings.
  *
- * 中断耐性は workflow.js と同じ設計: 結果は workDir/rechecks/product-NNN.json にエージェント自身が
- * 書き込むチェックポイント。復旧は contested-index.json から未完了 ids を差し引いて再起動するだけ。
+ * Resilience to interruption is designed as in workflow.js: results are checkpoints the agents themselves write
+ * to workDir/rechecks/product-NNN.json. Recovery is just restarting with the incomplete ids taken from contested-index.json.
  */
 export const meta = {
   name: 'recheck-contested-v1',
-  description: '照合で検出された相違のみをマニュアル原文まで精査し偽陽性を排除する (第 2 段)',
+  description: 'Examines only the discrepancies found by verification, down to the manual\'s original text, and eliminates false positives (stage 2)',
   phases: [
-    { title: 'Recheck', detail: '争点のある機種 1 件につき 1 エージェント、並列度は args.concurrency (既定 2・上限 2)' },
+    { title: 'Recheck', detail: 'One agent per model with contested items; parallelism is args.concurrency (default 2, maximum 2)' },
   ],
 }
 
@@ -30,7 +30,7 @@ const input = typeof args === 'string' ? JSON.parse(args) : args
 const workDir = input.workDir
 const ids = input.ids
 const maxConsecFail = input.maxConsecFail ?? 5
-// 上限 2: メモリ負荷 (PDF 解析 + headless Chrome) により並列 8 でプロセス落ち、並列 4 でも高負荷の実績あり
+// Maximum 2: because of the memory load (PDF parsing + headless Chrome), parallelism 8 crashed the process and even 4 was a heavy load
 const concurrency = Math.max(1, Math.min(input.concurrency ?? 2, 2))
 const model = input.model
 const effort = input.effort
@@ -66,7 +66,7 @@ const SCHEMA = {
 }
 
 phase('Recheck')
-log(ids.length + ' 機種の争点を精査 (並列 ' + concurrency + '、モデル ' + (model ?? 'セッション継承') + ')')
+log('Examining the contested items of ' + ids.length + ' models (parallelism ' + concurrency + ', model ' + (model ?? 'inherited from the session') + ')')
 
 const done = []
 const agentFailed = []
@@ -113,13 +113,13 @@ async function recheckOne(i) {
     consecFail++
     if (consecFail >= maxConsecFail && !aborted) {
       aborted = true
-      log('完了順で連続 ' + consecFail + ' 件失敗のため未着手の ' + Math.max(0, ids.length - cursor) + ' 件を打切り (利用制限または workDir 誤設定の可能性)')
+      log('Cutting off the ' + Math.max(0, ids.length - cursor) + ' items not yet started after ' + consecFail + ' consecutive failures in completion order (a usage limit or a wrong workDir setting is possible)')
     }
   } else {
     consecFail = 0
     done.push({ idx: i, status: r.fetch_status, verdicts: r.verdicts.length })
   }
-  if (completed % 5 === 0 || completed === ids.length) log('進捗: ' + completed + '/' + ids.length + ' 完了')
+  if (completed % 5 === 0 || completed === ids.length) log('Progress: ' + completed + '/' + ids.length + ' done')
 }
 
 const workers = Array.from({ length: Math.min(concurrency, ids.length) }, () => async () => {
@@ -138,5 +138,5 @@ return {
   agentFailed,
   inputMissing,
   aborted,
-  next: 'node tools/verify/partition-rechecks.js で verdict を仕分けること',
+  next: 'Sort the verdicts with node tools/verify/partition-rechecks.js',
 }

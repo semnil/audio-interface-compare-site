@@ -49,7 +49,7 @@ Agents try fetching in the following order and leave a log of the attempts in th
 7. The Specifications page on the same official site, datasheet/manual PDFs (parsed with `pdftotext -layout`)
 8. Only when the domain of the listed URL has been retired, an official domain owned by the same brand (e.g. focusritepro.com → focusrite.com). Retail and review sites are forbidden
 
-Sites where every method fails, such as with Cloudflare Turnstile, are left as `failed`, and the report states them as "未照合 (データ誤りではない)" (unverified, not a data error).
+Sites where every method fails, such as with Cloudflare Turnstile, are left as `failed`, and the report lists them in its "Could not be fetched / unverified" section, stating that this does not mean the data is wrong.
 
 ## Contamination prevention and soundness validation
 
@@ -77,7 +77,7 @@ node tools/verify/export-products.js
 node tools/verify/validate-results.js
 
 # 4. Repeat 2-3 until nextIds (= missingIds) is empty.
-#    failed (bot protection, etc.) may remain: they are not in nextIds, and the report states them as 「未照合」 (unverified).
+#    failed (bot protection, etc.) may remain: they are not in nextIds, and the report lists them as unverified.
 #    Add --retry-failed / --include-partial only when you want to retry failed / partial
 #    (the old results of those targets are moved to results-retired/ and put into nextIds)
 
@@ -120,14 +120,14 @@ node tools/verify/propose-corrections.js          # --all also includes low
 #      - proposed: the corrected cell value. "" blanks the cell (the convention for not equipped / not applicable / unpublished is blank, not 0 or No)
 #      - note: a supplement shown in the report / hold: the reason to hold off applying (skipped by apply)
 #      - unreviewed: awaiting the operator's confirmation (skipped by apply. Removed by the boundary update of review-state)
-#      - missing: a mark for entries from filling blanks (rendered in the report's 「空欄追記の候補」 (candidates for filling blanks) section)
+#      - missing: a mark for entries from filling blanks (rendered in the report's "Candidates for filling blanks — unconfirmed" section)
 #      - Bulk corrections not derived from discrepancies (unifying formats, applying row merges, filling blanks, etc.) can also be added with the same schema
 #        (their confidence keys do not match, so they do not appear in the report's discrepancy tables and only take effect in apply)
 #    The progress of the operator's review is in work/review-state.json
 #    ({ highReviewedUntilIdx, lowReviewedUntilIdx, missingReviewedUntilIdx }).
 #    build-report.js hides discrepancy rows in the range already reached and shows only those not yet confirmed.
 #    Of missing_in_xlsx (filling blanks), items that cannot be converted mechanically are output as pending to
-#    work/missing-pending.json, and build-report.js renders only the pending ones in the 「空欄」 (blank) section
+#    work/missing-pending.json, and build-report.js renders only the pending ones in the "Stated on the official page but blank in the xlsx — held" section
 
 # 6'. Generating the report (product-page-verification-report.md at the repository root. Outside git,
 #    regenerated and overwritten on every update, and deleted once the verification cycle is complete)

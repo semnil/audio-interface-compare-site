@@ -1,11 +1,11 @@
 /**
- * update-xlsx.js — 測定レポート URL カラムを xlsx に書き込む (データ再収集時の移行ツール)
+ * update-xlsx.js — writes the measurement report URL column into the xlsx (a migration tool for when data is re-collected)
  *
  * usage: node tools/update-xlsx.js <result-json-path> [--apply]
- * result JSON は collect-measurements スキルの収集結果形式。
- * .result.products[] = {product, urls:[{source,url,measurementType,title}]} または {products:[...]} を受け付ける。
- * 冪等: 既存の "Measurement Reports" 列があれば上書き、なければ最終列に追加する。
- * 既定は dry-run (機種ごとの書き込みプレビューのみ)。--apply を付けたときだけ xlsx を書き込む。
+ * The result JSON is the collection result format of the collect-measurements skill.
+ * Accepts .result.products[] = {product, urls:[{source,url,measurementType,title}]} or {products:[...]}.
+ * Idempotent: overwrites the existing "Measurement Reports" column if there is one, otherwise appends it as the final column.
+ * Dry-run by default (only a per-model write preview). Writes the xlsx only with --apply.
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -24,7 +24,7 @@ if (!resultPath) {
   process.exit(1);
 }
 
-// ── result JSON を読み込み、product → urls[] に正規化 ──
+// ── Read the result JSON and normalize it into product → urls[] ──
 const raw = JSON.parse(readFileSync(resultPath, "utf8"));
 const products = (raw.result && raw.result.products) || raw.products || [];
 if (!Array.isArray(products) || products.length === 0) {
@@ -32,7 +32,7 @@ if (!Array.isArray(products) || products.length === 0) {
   process.exit(1);
 }
 
-// ── URL のホスト名から可読ラベルを導出 ──
+// ── Derive a readable label from the URL's host name ──
 function labelFor(u) {
   let host = "";
   try { host = new URL(u.url).hostname.replace(/^www\./, ""); } catch { host = ""; }
@@ -62,7 +62,7 @@ function labelFor(u) {
   return host || u.source || "Link";
 }
 
-// ── product ごとに markdown リンク列を組み立て。同一ラベル重複は (2),(3) を付与 ──
+// ── Assemble the markdown link column per product. Duplicate labels get (2),(3) ──
 function markdownFor(urls) {
   const counts = {};
   return urls
@@ -80,7 +80,7 @@ for (const p of products) {
   if (p.urls && p.urls.length > 0) mdByProduct[p.product] = markdownFor(p.urls);
 }
 
-// ── xlsx を読み込み、ヘッダー列を決めて書き込み ──
+// ── Read the xlsx, decide the header column and write ──
 const wb = new ExcelJS.Workbook();
 await wb.xlsx.readFile(DATA_FILE);
 const ws = wb.worksheets[0];
@@ -112,7 +112,7 @@ ws.eachRow((row, rowNumber) => {
   }
 });
 
-// result 側で xlsx 行に一致しなかった product を検出
+// Detect products in the result that matched no xlsx row
 const xlsxNames = new Set();
 ws.eachRow((row, rowNumber) => {
   if (rowNumber === 1) return;
@@ -140,4 +140,4 @@ if (unmatched.length) {
   console.log(`\nUNMATCHED (result product not found in xlsx):`);
   unmatched.forEach((u) => console.log(`  - ${u}`));
 }
-if (!apply) console.log(`\n(dry-run) 書き込むには --apply を付けて再実行`);
+if (!apply) console.log(`\n(dry-run) to write, run again with --apply`);

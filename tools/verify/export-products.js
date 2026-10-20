@@ -1,11 +1,11 @@
 /**
- * export-products.js — xlsx を照合用の製品別 JSON にエクスポートする
+ * export-products.js — exports the xlsx to per-product JSON for verification
  *
  * usage: node tools/verify/export-products.js
- * 出力:
- *   tools/verify/work/products/product-NNN.json — 照合入力 (Measurement Reports 除く全列)
- *   tools/verify/work/rows-full.json            — 全 273 行の全列 (idx→機種の逆引き・結果検証用)
- * idx は xlsx のデータ行順 (idx 0 = シート 2 行目)。work/ は git 管理外。
+ * Output:
+ *   tools/verify/work/products/product-NNN.json — verification input (every column except Measurement Reports)
+ *   tools/verify/work/rows-full.json            — every column of every row (for idx→model lookup and result validation)
+ * idx is the order of the xlsx data rows (idx 0 = sheet row 2). work/ is outside git.
  */
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -36,7 +36,7 @@ mkdirSync(join(WORK_DIR, "results"), { recursive: true });
 mkdirSync(join(WORK_DIR, "results-invalid"), { recursive: true });
 mkdirSync(join(WORK_DIR, "results-retired"), { recursive: true });
 
-// xlsx 更新の検知: 前回 export と内容が変わった行の既存結果を退避する (古い照合結果の混入防止)
+// Detecting xlsx updates: moves aside existing results of rows whose content changed since the previous export (keeps stale verification results out)
 let oldRows = null;
 if (existsSync(join(WORK_DIR, "rows-full.json"))) {
   try {
@@ -54,9 +54,9 @@ if (oldRows) {
     retired++;
     console.log(`row changed -> retire result idx ${i} (${obj.Brand} ${obj.Model})`);
   });
-  if (retired) console.log(`retired: ${retired} 件 (validate-results.js が nextIds に載せ直す)`);
+  if (retired) console.log(`retired: ${retired} (validate-results.js puts them back into nextIds)`);
   if (oldRows.length !== rows.length) {
-    console.log(`注意: 行数が ${oldRows.length} → ${rows.length} に変化。範囲外の旧結果は validate-results.js が退避する`);
+    console.log(`Note: the row count changed ${oldRows.length} → ${rows.length}. validate-results.js moves aside old results out of range`);
   }
 }
 

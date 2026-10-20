@@ -1,15 +1,15 @@
 /**
- * propose-corrections.js — 照合結果の mismatch から xlsx 修正案を生成する
+ * propose-corrections.js — generates xlsx correction proposals from the mismatches in the verification results
  *
  * usage: node tools/verify/propose-corrections.js [--all]
- *   既定は confidence=high の mismatch のみ。--all で low も含める。
+ *   By default only mismatches with confidence=high. --all also includes low.
  *
- * 出力: work/corrections-proposal.json — [{ idx, brand, model, column, current, proposed, confidence, evidence, notes }]
- * proposed はページ記載の生テキストであり、そのまま xlsx セル値に使える形式とは限らない。
- * 操作者 (または操作者の同意を得た Claude) が xlsx の既存フォーマットに合わせて編集し、
- * work/corrections-edited.json として保存して apply-corrections.js に渡すこと
- * (build-report.js も同ファイルを相違表の修正候補列に差し込む)。
- * 反映は必ず変更点を列挙して操作者の同意を得てから行う。
+ * Output: work/corrections-proposal.json — [{ idx, brand, model, column, current, proposed, confidence, evidence, notes }]
+ * proposed is the raw text stated on the page and is not necessarily in a form usable as an xlsx cell value.
+ * The operator (or Claude with the operator's consent) edits it to match the xlsx's existing format,
+ * saves it as work/corrections-edited.json and passes it to apply-corrections.js
+ * (build-report.js also inserts that file into the proposed-correction column of the discrepancy tables).
+ * Applying always happens only after listing the changes and getting the operator's consent.
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -40,5 +40,5 @@ for (const { idx, r } of scanResults()) {
 
 const dst = join(WORK_DIR, "corrections-proposal.json");
 writeFileSync(dst, JSON.stringify(proposals, null, 1));
-console.log(`proposals: ${proposals.length} 件 (${includeAll ? "high+low" : "high のみ"}) -> ${dst}`);
-console.log("次: 操作者が proposed をセル値の形式に編集 → apply-corrections.js で dry-run → 同意を得て --apply");
+console.log(`proposals: ${proposals.length} (${includeAll ? "high+low" : "high only"}) -> ${dst}`);
+console.log("Next: the operator edits proposed into the cell-value format → dry-run with apply-corrections.js → --apply after consent");

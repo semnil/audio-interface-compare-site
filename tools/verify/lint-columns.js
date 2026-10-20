@@ -1,10 +1,10 @@
 /**
- * lint-columns.js — xlsx 列間の整合を機械チェックする (エージェント不要の事前 lint)
+ * lint-columns.js — mechanically checks consistency between xlsx columns (a pre-lint that needs no agents)
  *
- * usage: node tools/verify/lint-columns.js   (事前に export-products.js で rows-full.json を最新化)
+ * usage: node tools/verify/lint-columns.js   (refresh rows-full.json with export-products.js first)
  *
- * 両辺が数値のときだけ検査する (空欄・テキスト値はスキップ)。違反は xlsx 内部の矛盾であり、
- * 照合スキャンにかける前に修正候補として洗い出せる。出力は助言のみ (exit 0)。
+ * Checks only when both sides are numeric (blanks and text values are skipped). A violation is a contradiction inside the xlsx
+ * and can be found as a proposed correction before the verification scan. The output is advice only (exit 0).
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,17 +13,17 @@ import { WORK_DIR } from "./lib.js";
 const rows = JSON.parse(readFileSync(join(WORK_DIR, "rows-full.json"), "utf8"));
 const num = (v) => (/^\d+(\.\d+)?$/.test(String(v ?? "").trim()) ? Number(v) : null);
 
-// [説明, 検査関数 (row) => 違反メッセージ | null]
+// [description, check function (row) => violation message | null]
 const RULES = [
   ...["Input", "Output"].flatMap((d) => [
     [`S/PDIF (Optical) ${d} ≤ Optical Ports (${d})`, (r) => {
       const s = num(r[`S/PDIF (Optical) ${d}`]), p = num(r[`Optical Ports (${d})`]);
       return s !== null && p !== null && s > p ? `S/PDIF (Optical) ${d}=${s} > Optical Ports=${p}` : null;
     }],
-    [`ADAT ${d} (ch@48kHz) は 8 の倍数かつ ≤ 8 × Optical Ports (${d})`, (r) => {
+    [`ADAT ${d} (ch@48kHz) is a multiple of 8 and ≤ 8 × Optical Ports (${d})`, (r) => {
       const a = num(r[`ADAT ${d} (ch@48kHz)`]), p = num(r[`Optical Ports (${d})`]);
       if (a === null) return null;
-      if (a % 8 !== 0) return `ADAT ${d}=${a} が 8 の倍数でない`;
+      if (a % 8 !== 0) return `ADAT ${d}=${a} is not a multiple of 8`;
       return p !== null && a > 8 * p ? `ADAT ${d}=${a} > 8 × Optical Ports (${p})` : null;
     }],
   ]),
@@ -39,4 +39,4 @@ for (const [i, r] of rows.entries()) {
     }
   }
 }
-console.log(findings ? `\n${findings} 件の列間矛盾候補 (照合前に確認を推奨)` : "列間の矛盾なし");
+console.log(findings ? `\n${findings} candidate contradictions between columns (check them before verifying)` : "No contradictions between columns");

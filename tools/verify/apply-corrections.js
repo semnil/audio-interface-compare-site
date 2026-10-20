@@ -1,18 +1,18 @@
 /**
- * apply-corrections.js — 同意済みの修正リストを xlsx に反映する
+ * apply-corrections.js — applies an agreed correction list to the xlsx
  *
  * usage: node tools/verify/apply-corrections.js <corrections.json> [--apply]
- *   既定は dry-run: 変更点 (機種 / 列 / 旧値 → 新値) を列挙するだけで書き込まない。
- *   --apply で data/audio_interfaces.xlsx に書き込む。
+ *   Dry-run by default: only lists the changes (model / column / old value → new value) and writes nothing.
+ *   With --apply it writes data/audio_interfaces.xlsx.
  *
- * corrections.json: [{ idx, column, current, proposed, hold?, unreviewed? }] (propose-corrections.js の出力を
- * 編集したもの。proposed が実際に書き込む値。hold (保留理由) と unreviewed (操作者の確認待ち) を持つ項目は
- * 反映せずスキップする。brand/model/evidence 等の余分なキーは無視される)
+ * corrections.json: [{ idx, column, current, proposed, hold?, unreviewed? }] (the output of propose-corrections.js,
+ * edited. proposed is the value actually written. Entries with hold (the reason for holding) or unreviewed (awaiting the operator's confirmation)
+ * are skipped without applying. Extra keys such as brand/model/evidence are ignored)
  *
- * 安全策:
- *  - 反映は必ず dry-run の変更点列挙を操作者が確認し、同意を得てから --apply する運用とする
- *  - 各項目の current が現在のセル値と一致しない場合は不整合として当該項目を拒否し、--apply 時は 1 件でもあれば中断
- *  - 書き込み後は export-products.js を再実行すること (変更行の旧照合結果が自動退避され再照合対象になる)
+ * Safeguards:
+ *  - Applying always means the operator checks the dry-run's list of changes, and --apply runs only after consent
+ *  - When an entry's current does not match the current cell value, that entry is rejected as inconsistent, and with --apply even one aborts the run
+ *  - After writing, re-run export-products.js (old verification results of changed rows are moved aside automatically and become re-verification targets)
  */
 import { readFileSync } from "node:fs";
 import ExcelJS from "exceljs";
@@ -26,7 +26,7 @@ if (!src) {
 }
 const corrections = JSON.parse(readFileSync(src, "utf8"));
 if (!Array.isArray(corrections) || !corrections.length) {
-  console.error("corrections.json が空か配列でない");
+  console.error("corrections.json is empty or not an array");
   process.exit(1);
 }
 
@@ -39,7 +39,7 @@ const TEXT_COLUMNS = new Set(["Brand", "Model", "Category"]);
 
 let ok = 0, bad = 0, held = 0, unrev = 0;
 for (const c of corrections) {
-  const rowNum = c.idx + 2; // idx 0 = シート 2 行目
+  const rowNum = c.idx + 2; // idx 0 = sheet row 2
   const col = headerCol[c.column];
   const label = `idx ${c.idx} (${c.brand ?? ""} ${c.model ?? ""}) [${c.column}]`;
   if (c.hold) {
@@ -48,19 +48,19 @@ for (const c of corrections) {
     continue;
   }
   if (c.unreviewed) {
-    console.log(`UNREVIEWED ${label}: 操作者の確認待ちのためスキップ`);
+    console.log(`UNREVIEWED ${label}: skipped, awaiting the operator's confirmation`);
     unrev++;
     continue;
   }
   if (!col) {
-    console.error(`NG ${label}: 列が見つからない`);
+    console.error(`NG ${label}: column not found`);
     bad++;
     continue;
   }
   const cell = ws.getRow(rowNum).getCell(col);
   const actual = plain(cell.value, c.column);
   if (String(c.current ?? "").trim() !== actual) {
-    console.error(`NG ${label}: current 不一致 (corrections="${c.current}" 実セル="${actual}")`);
+    console.error(`NG ${label}: current mismatch (corrections="${c.current}" actual cell="${actual}")`);
     bad++;
     continue;
   }
@@ -68,21 +68,21 @@ for (const c of corrections) {
   ok++;
   if (apply) {
     const v = String(c.proposed ?? "").trim();
-    // 数値セル、または空セルへの純数値は数値として書く。既存のテキストセルと Brand / Model / Category はテキストのまま
+    // A numeric cell, or a pure number into an empty cell, is written as a number. Existing text cells and Brand / Model / Category stay text
     const empty = cell.value === null || cell.value === undefined || cell.value === "";
     const asNum = (typeof cell.value === "number" || (empty && !TEXT_COLUMNS.has(c.column))) && /^-?\d+(\.\d+)?$/.test(v);
     cell.value = v === "" ? null : asNum ? Number(v) : v;
   }
 }
 
-console.log(`\n${apply ? "APPLY" : "DRY-RUN"}: 反映可 ${ok} 件 / 不整合 ${bad} 件 / 保留 ${held} 件 / 未確認 ${unrev} 件`);
+console.log(`\n${apply ? "APPLY" : "DRY-RUN"}: applicable ${ok} / inconsistent ${bad} / held ${held} / unreviewed ${unrev}`);
 if (!apply) {
-  console.log("書き込みは行っていない。変更点の列挙について操作者の同意を得てから --apply を付けて再実行すること。");
+  console.log("Nothing was written. Get the operator's consent on the list of changes, then run again with --apply.");
 } else if (bad) {
-  console.error("不整合があるため書き込みを中断した。corrections.json を修正して再実行すること。");
+  console.error("Writing was aborted because of inconsistencies. Fix corrections.json and run again.");
   process.exit(1);
 } else {
   await wb.xlsx.writeFile(DATA_FILE);
-  console.log(`書き込み完了: ${DATA_FILE}`);
-  console.log("次: node tools/verify/export-products.js (変更行の旧照合結果が自動退避される) → 対象行を再照合");
+  console.log(`Write complete: ${DATA_FILE}`);
+  console.log("Next: node tools/verify/export-products.js (old verification results of changed rows are moved aside automatically) → re-verify those rows");
 }
