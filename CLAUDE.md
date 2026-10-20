@@ -20,7 +20,7 @@ flowchart LR
   root --> wfAuto[".github/workflows/dependabot-auto-merge.yml<br>Schedules auto-merge on Dependabot PRs whose update is a semver patch. Required check auto-merge on main"]
   root --> testSh[".github/tests/workflow-checks-test.sh<br>Fixture test itself (bash + yq)"]
   root --> readme["README.md / README.ja.md<br>Overview of the site, building, tests and data maintenance (English / Japanese)"]
-  root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ tracked, skills/*-workspace/ excluded), tools/{verify,discover,measurements}/work/, product-page-verification-report.md"]
+  root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ tracked, skills/*-workspace/ excluded), tools/{verify,discover,measurements}/work/, work/, product-page-verification-report.md"]
   root --> pkg["package.json<br>Node >=18, dependencies: exceljs, @napi-rs/canvas (og:image generation)"]
   root --> xlsx["data/audio_interfaces.xlsx<br>Spec data (the source. Final column = Measurement Reports)"]
   root --> buildJs["src/build.js<br>Build script (generates JSON, static HTML, compare.js and og images from the xlsx)"]
