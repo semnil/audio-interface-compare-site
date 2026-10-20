@@ -1,10 +1,10 @@
 // tests/slug-collision.test.js
-// slugify の潜在的な衝突パターンを洗い出す境界値テスト
-// 現状のデータに衝突が無いことを保証し、将来の製品追加で早期に衝突を検知する
+// Boundary tests that enumerate potential slugify collision patterns
+// Guarantees the current data has no collisions and detects collisions early when products are added
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// build.js の slugify と同一ロジック (src/build.js:124-130)
+// Same logic as build.js slugify (src/build.js:124-130)
 function slugify(brand, model) {
   return `${brand}-${model}`
     .toLowerCase()
@@ -13,83 +13,83 @@ function slugify(brand, model) {
     .replace(/(^-|-$)/g, "");
 }
 
-describe("slugify: 衝突可能性のある組合せ (既知の制約の回帰固定)", () => {
-  // 以下のパターンは仕様上同一 slug を生成する。
-  // 現在の xlsx データでは衝突していないが、将来の製品追加で注意が必要。
-  // テストは「現実装の仕様」を明文化し、将来ロジック変更で差異検知する用。
+describe("slugify: combinations that can collide (regression pin of a known constraint)", () => {
+  // The following patterns produce the same slug by design.
+  // They do not collide in the current xlsx data, but need attention when products are added in the future.
+  // The tests document "the behavior of the current implementation" and detect differences when the logic changes.
 
-  test("空白とハイフンは区別されず、両者で同じ slug になりうる", () => {
+  test("whitespace and hyphens are not distinguished, so both can produce the same slug", () => {
     assert.equal(slugify("Brand", "A B"), "brand-a-b");
     assert.equal(slugify("Brand", "A-B"), "brand-a-b");
   });
 
-  test("アンダースコアとハイフンも区別されない", () => {
+  test("underscores and hyphens are not distinguished either", () => {
     assert.equal(slugify("Brand", "A_B"), "brand-a-b");
     assert.equal(slugify("Brand", "A-B"), "brand-a-b");
   });
 
-  test("ドットとハイフンも区別されない", () => {
+  test("dots and hyphens are not distinguished either", () => {
     assert.equal(slugify("Brand", "A.B"), "brand-a-b");
     assert.equal(slugify("Brand", "A-B"), "brand-a-b");
   });
 
-  test("連続区切り文字 vs 単一区切り文字: 同一 slug", () => {
+  test("consecutive separators vs a single separator: same slug", () => {
     assert.equal(slugify("Brand", "A---B"), "brand-a-b");
     assert.equal(slugify("Brand", "A   B"), "brand-a-b");
     assert.equal(slugify("Brand", "A _-_ B"), "brand-a-b");
   });
 
-  test("大文字小文字の差は吸収される", () => {
+  test("case differences are absorbed", () => {
     assert.equal(slugify("brand", "MODEL"), slugify("BRAND", "model"));
   });
 });
 
-describe("slugify: 日本語 (ひらがな・漢字) の保持", () => {
-  test("ひらがなは slug にそのまま残る (U+3040-U+309F は regex 許容)", () => {
+describe("slugify: preserving Japanese (hiragana and kanji)", () => {
+  test("hiragana stays in the slug as is (U+3040-U+309F is allowed by the regex)", () => {
     const r = slugify("brand", "ひらがな");
-    assert.ok(r.includes("ひらがな"), `ひらがなが消えた: ${r}`);
+    assert.ok(r.includes("ひらがな"), `hiragana was removed: ${r}`);
   });
 
-  test("漢字は slug にそのまま残る (U+4E00-U+9FFF は regex 許容)", () => {
+  test("kanji stays in the slug as is (U+4E00-U+9FFF is allowed by the regex)", () => {
     const r = slugify("brand", "漢字");
-    assert.ok(r.includes("漢字"), `漢字が消えた: ${r}`);
+    assert.ok(r.includes("漢字"), `kanji was removed: ${r}`);
   });
 
-  test("カタカナは除去される (U+30A0-U+30FF は regex 範囲外)", () => {
-    // regex: [a-z0-9\u3040-\u9fff]+ - カタカナ (U+30A0+) は含まれるか?
-    // 実は U+30A0-U+30FF は \u3040-\u9fff の範囲に含まれる
+  test("katakana stays in the slug as is (U+30A0-U+30FF is within the regex range)", () => {
+    // regex: [a-z0-9\u3040-\u9fff]+ - is katakana (U+30A0+) included?
+    // In fact U+30A0-U+30FF is within the \u3040-\u9fff range
     const r = slugify("brand", "カタカナ");
-    assert.ok(r.includes("カタカナ"), `カタカナが消えた: ${r}`);
+    assert.ok(r.includes("カタカナ"), `katakana was removed: ${r}`);
   });
 });
 
-describe("slugify: 先頭・末尾の非英数字", () => {
-  test("先頭の連続非英数字 + 末尾の連続非英数字は両方除去される", () => {
+describe("slugify: leading and trailing non-alphanumerics", () => {
+  test("leading consecutive non-alphanumerics and trailing consecutive non-alphanumerics are both removed", () => {
     assert.equal(slugify("!!!Brand!!!", "???Model???"), "brand-model");
   });
 
-  test("先頭に - があるブランドも slug 先頭 - は除去される", () => {
+  test("for a brand with a leading -, the leading - of the slug is removed", () => {
     assert.equal(slugify("-Brand", "Model"), "brand-model");
   });
 
-  test("完全に非英数字だけの入力は空文字になる", () => {
+  test("input made only of non-alphanumerics becomes an empty string", () => {
     assert.equal(slugify("!!!", "???"), "");
   });
 });
 
-describe("slugify: + 記号の処理順序", () => {
-  test("+ を -plus に変換後、非英数字正規化が走る", () => {
+describe("slugify: processing order of the + sign", () => {
+  test("after + is converted to -plus, non-alphanumeric normalization runs", () => {
     // "A+" → "a-plus" → "a-plus"
     assert.equal(slugify("Brand", "A+"), "brand-a-plus");
   });
 
-  test("'+'+空白の組合せ: 'A + B' → 'a-plus-b' (+ → -plus、残り空白 → -)", () => {
+  test("'+' + whitespace combination: 'A + B' -> 'a-plus-b' (+ -> -plus, remaining whitespace -> -)", () => {
     // "A + B" → "a -plus b" → "a-plus-b"
     const r = slugify("brand", "A + B");
     assert.equal(r, "brand-a-plus-b");
   });
 
-  test("複数 + が連続: 'A++' → 'a-plus-plus'", () => {
+  test("multiple consecutive +: 'A++' -> 'a-plus-plus'", () => {
     // "A++" → "a-plus-plus"
     assert.equal(slugify("Brand", "A++"), "brand-a-plus-plus");
   });

@@ -1,7 +1,7 @@
 // tests/entrypoint-guard.test.js
-// build.js の L1 修正で追加された entrypoint ガード (src/build.js:1104) の検証
-// テストから import しても build() が自動実行されないこと、
-// および Windows 環境での既知の互換性制約を明示する。
+// Checks the entrypoint guard added by the L1 fix of build.js (src/build.js:1104)
+// Confirms that build() does not run automatically when imported from tests,
+// and states the known compatibility constraint on Windows.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -12,52 +12,52 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const BUILD_SRC = join(ROOT, "src", "build.js");
 
-describe("build.js: エントリポイントガード", () => {
-  test("import.meta.url と pathToFileURL(process.argv[1]).href を比較するガードが存在する", () => {
+describe("build.js: entrypoint guard", () => {
+  test("a guard comparing import.meta.url with pathToFileURL(process.argv[1]).href exists", () => {
     const src = readFileSync(BUILD_SRC, "utf8");
     assert.ok(/import\.meta\.url\s*===\s*pathToFileURL\(\s*process\.argv\[1\]\s*\)\.href/.test(src),
-      "pathToFileURL ベースのエントリポイントガードが src/build.js に存在しない");
+      "the pathToFileURL-based entrypoint guard does not exist in src/build.js");
   });
 
-  test("build() 呼び出しがガード内にあり、top-level には出ないこと", () => {
+  test("the build() call is inside the guard and does not appear at the top level", () => {
     const src = readFileSync(BUILD_SRC, "utf8");
-    // build() 呼び出しの前に必ずガード文が存在する
+    // A guard statement always exists before the build() call
     const buildCallIdx = src.indexOf("build();");
-    assert.ok(buildCallIdx > 0, "build() 呼び出しが見つからない");
-    // ガード文は build() 呼び出しの直前にある
+    assert.ok(buildCallIdx > 0, "build() call not found");
+    // The guard statement is right before the build() call
     const snippetBefore = src.slice(Math.max(0, buildCallIdx - 200), buildCallIdx);
     assert.ok(/if\s*\([^)]*import\.meta\.url/.test(snippetBefore),
-      `build() 呼び出しの直前にガード文が無い: ${snippetBefore}`);
+      `no guard statement right before the build() call: ${snippetBefore}`);
   });
 
-  test("動的 import ({/* no-op */}) すると build() は起動せず exports のみ取得できる", async () => {
-    // 既存テスト (diffClass.test.js) は import が副作用なしに行えることを前提にしている
-    // 副作用が走ると 20 秒以上のビルド時間がかかるため、短時間で import 完了するかで判定
+  test("a dynamic import ({/* no-op */}) does not start build() and only obtains the exports", async () => {
+    // Existing tests (diffClass.test.js) assume that the import can be done without side effects
+    // If the side effect runs, the build takes more than 20 seconds, so this judges by whether the import finishes quickly
     const start = Date.now();
     const mod = await import(BUILD_SRC);
     const elapsed = Date.now() - start;
-    // 1 秒以内に import 完了することを確認 (xlsx 読み込みは数秒かかる)
-    assert.ok(elapsed < 1500, `import が ${elapsed}ms と遅い → build() が副作用で走った可能性`);
-    // export 確認
+    // Confirm the import finishes within 1 second (reading the xlsx takes several seconds)
+    assert.ok(elapsed < 1500, `import is slow at ${elapsed}ms -> build() may have run as a side effect`);
+    // Check the exports
     assert.equal(typeof mod._slugify, "function");
     assert.equal(typeof mod._escapeHtml, "function");
     assert.equal(typeof mod._diffClass, "function");
     assert.ok(Array.isArray(mod.COLUMNS));
   });
 
-  test("Windows 互換性: pathToFileURL を利用してバックスラッシュ形式の argv[1] を正規化すること", () => {
-    // Node.js 公式イディオム: url.pathToFileURL(process.argv[1]).href === import.meta.url
-    // 旧実装の `file://${process.argv[1]}` 文字列連結では Windows の
+  test("Windows compatibility: uses pathToFileURL to normalize a backslash-style argv[1]", () => {
+    // Official Node.js idiom: url.pathToFileURL(process.argv[1]).href === import.meta.url
+    // With the old implementation's `file://${process.argv[1]}` string concatenation, on Windows
     //   process.argv[1]: C:\\path\\to\\build.js
     //   `file://${...}`: file://C:\\path\\to\\build.js
     //   import.meta.url: file:///C:/path/to/build.js
-    // で不一致となり、直接実行でも build() が起動しなかった。
-    // 現実装は pathToFileURL で URL 化して比較するため Windows でも動作する。
+    // did not match, so build() did not start even when run directly.
+    // The current implementation converts it to a URL with pathToFileURL before comparing, so it works on Windows too.
     const src = readFileSync(BUILD_SRC, "utf8");
     assert.ok(/pathToFileURL/.test(src),
-      "ガードが pathToFileURL を利用していない (Windows 互換性のため必須)");
-    // 旧来の文字列連結 `file://${process.argv[1]}` は残っていないこと
+      "the guard does not use pathToFileURL (required for Windows compatibility)");
+    // The old string concatenation `file://${process.argv[1]}` does not remain
     assert.equal(/`file:\/\/\$\{process\.argv\[1\]\}`/.test(src), false,
-      "旧来の file:// 文字列連結が残存 (Windows では誤判定する)");
+      "the old file:// string concatenation remains (misjudges on Windows)");
   });
 });

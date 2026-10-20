@@ -1,10 +1,10 @@
 // tests/escapeHtml.test.js
-// build.js の escapeHtml 関数のユニットテスト
-// build.js を import すると xlsx 読み込みが走るため、同等ロジックをインライン定義してテストする
+// Unit tests for the escapeHtml function of build.js
+// Importing build.js reads the xlsx, so equivalent logic is defined inline and tested
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// build.js の escapeHtml と同一ロジック (src/build.js:132-139)
+// Same logic as escapeHtml of build.js (src/build.js:132-139)
 function escapeHtml(str) {
   if (str == null) return "";
   return String(str)
@@ -14,73 +14,73 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-describe("escapeHtml: XSS 対策", () => {
-  test("<script> タグがエスケープされる", () => {
+describe("escapeHtml: XSS protection", () => {
+  test("a <script> tag is escaped", () => {
     assert.equal(
       escapeHtml("<script>alert(1)</script>"),
       "&lt;script&gt;alert(1)&lt;/script&gt;"
     );
   });
 
-  test("< と > がそれぞれエスケープされる", () => {
+  test("< and > are each escaped", () => {
     assert.equal(escapeHtml("<div>"), "&lt;div&gt;");
   });
 
-  test('ダブルクォートがエスケープされる (属性値インジェクション対策)', () => {
+  test('double quotes are escaped (protection against attribute value injection)', () => {
     assert.equal(escapeHtml('"quoted"'), "&quot;quoted&quot;");
   });
 
-  test("img onerror パターンがエスケープされる", () => {
+  test("an img onerror pattern is escaped", () => {
     const input = '<img src="x" onerror="alert(1)">';
     const result = escapeHtml(input);
-    assert.equal(result.includes("<"), false, "< が残っている");
-    assert.equal(result.includes(">"), false, "> が残っている");
+    assert.equal(result.includes("<"), false, "< remains");
+    assert.equal(result.includes(">"), false, "> remains");
   });
 });
 
-describe("escapeHtml: アンパサンド", () => {
-  test("アンパサンドが &amp; にエスケープされる", () => {
+describe("escapeHtml: ampersand", () => {
+  test("an ampersand is escaped to &amp;", () => {
     assert.equal(escapeHtml("Allen & Heath"), "Allen &amp; Heath");
   });
 
-  test("二重エスケープにならない (& は 1 回だけ変換)", () => {
-    // "A & B" → "A &amp; B" (& が 5 文字の &amp; になる)
-    // もし再度 escapeHtml にかけると &amp; の & が再エスケープされてしまう
-    // build.js では htmlHead 内で escapeHtml を 1 回だけ呼ぶ設計を確認
+  test("no double escaping (& is converted only once)", () => {
+    // "A & B" -> "A &amp; B" (& becomes the 5-character &amp;)
+    // Passing it through escapeHtml again would escape the & of &amp; again
+    // Confirms the design in build.js that calls escapeHtml only once inside htmlHead
     const once = escapeHtml("A & B");
     assert.equal(once, "A &amp; B");
   });
 });
 
-describe("escapeHtml: null/undefined の安全な処理", () => {
-  test("null は空文字を返す", () => {
+describe("escapeHtml: safe handling of null/undefined", () => {
+  test("null returns an empty string", () => {
     assert.equal(escapeHtml(null), "");
   });
 
-  test("undefined は空文字を返す", () => {
+  test("undefined returns an empty string", () => {
     assert.equal(escapeHtml(undefined), "");
   });
 
-  test("数値は文字列化される", () => {
+  test("a number is converted to a string", () => {
     assert.equal(escapeHtml(42), "42");
   });
 
-  test("0 は '0' を返す (falsy だが null ではない)", () => {
+  test("0 returns '0' (falsy but not null)", () => {
     assert.equal(escapeHtml(0), "0");
   });
 
-  test("空文字は空文字を返す", () => {
+  test("an empty string returns an empty string", () => {
     assert.equal(escapeHtml(""), "");
   });
 });
 
-describe("escapeHtml: 通常文字列の保持", () => {
-  test("ASCII 英数字はそのまま保持される", () => {
+describe("escapeHtml: ordinary strings are preserved", () => {
+  test("ASCII alphanumerics are kept as is", () => {
     assert.equal(escapeHtml("Focusrite Scarlett 2i2"), "Focusrite Scarlett 2i2");
   });
 
-  test("シングルクォートはエスケープされない (HTML 属性に ' は使わない設計)", () => {
-    // build.js の属性値はすべてダブルクォートで囲まれているため ' のエスケープは不要
+  test("single quotes are not escaped (the design does not use ' for HTML attributes)", () => {
+    // All attribute values in build.js are enclosed in double quotes, so escaping ' is unnecessary
     assert.equal(escapeHtml("it's"), "it's");
   });
 });

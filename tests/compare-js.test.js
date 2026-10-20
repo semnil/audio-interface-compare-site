@@ -1,6 +1,6 @@
 // tests/compare-js.test.js
-// クライアント動的比較 (dist/compare.js) と index の比較ビュー配線の検証
-// dist/ が未生成の場合はスキップ
+// Checks for the client-side dynamic comparison (dist/compare.js) and the comparison view wiring of the index
+// Skipped when dist/ is not built
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -15,39 +15,39 @@ const COMPARE_JS = join(ROOT, "dist", "compare.js");
 const INDEX_PATH = join(ROOT, "dist", "index.html");
 const distExists = existsSync(COMPARE_JS) && existsSync(INDEX_PATH);
 
-describe("compare.js: クライアント比較レンダラー", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("JS として構文が有効 (new Function で parse 可能)", () => {
+describe("compare.js: client comparison renderer", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("is syntactically valid JS (parsable with new Function)", () => {
     const src = readFileSync(COMPARE_JS, "utf8");
-    // IIFE 本体は実行されない (new Function は生成のみで呼び出さない) ため DOM 非依存で構文だけ検査できる
-    assert.doesNotThrow(() => new Function(src), "compare.js が構文エラー");
+    // The IIFE body is not executed (new Function only creates the function and does not call it), so only the syntax is checked, without depending on the DOM
+    assert.doesNotThrow(() => new Function(src), "compare.js has a syntax error");
   });
 
-  test("build.js のヘルパーが埋め込まれていること (単一の真実の共有)", () => {
+  test("the build.js helpers are embedded (sharing a single source of truth)", () => {
     const src = readFileSync(COMPARE_JS, "utf8");
     for (const fn of ["function escapeHtml", "function sanitizeUrl", "function displayValue",
       "function renderMeasurements", "function parseNumeric", "function diffClass"]) {
-      assert.ok(src.includes(fn), `${fn} が compare.js に埋め込まれていない`);
+      assert.ok(src.includes(fn), `${fn} is not embedded in compare.js`);
     }
   });
 
-  test("フラグメントルーティング・データ取得・i18n 適用の要素を含むこと", () => {
+  test("contains the pieces for fragment routing, data fetching, and applying i18n", () => {
     const src = readFileSync(COMPARE_JS, "utf8");
-    assert.ok(src.includes("products.json"), "products.json の fetch がない");
-    assert.ok(/location\.hash/.test(src), "location.hash 参照がない");
-    assert.ok(src.includes("hashchange"), "hashchange リスナーがない");
-    assert.ok(src.includes("__i18n"), "window.__i18n の利用がない");
+    assert.ok(src.includes("products.json"), "no fetch of products.json");
+    assert.ok(/location\.hash/.test(src), "no reference to location.hash");
+    assert.ok(src.includes("hashchange"), "no hashchange listener");
+    assert.ok(src.includes("__i18n"), "no use of window.__i18n");
   });
 
-  test("URL 由来 slug は map 参照で解決し、未知 slug は not-found 表示 (生 echo しない)", () => {
+  test("slugs from the URL are resolved by map lookup, and unknown slugs show not-found (not echoed raw)", () => {
     const src = readFileSync(COMPARE_JS, "utf8");
-    // slug は map[slugA] のルックアップで解決し、見つからなければ notFound を表示する
-    assert.ok(/map\[slug[AB]\]/.test(src), "slug の map ルックアップがない");
-    assert.ok(src.includes("notFound"), "not-found ハンドリングがない");
+    // A slug is resolved by the map[slugA] lookup, and notFound is shown when it is not found
+    assert.ok(/map\[slug[AB]\]/.test(src), "no map lookup of the slug");
+    assert.ok(src.includes("notFound"), "no not-found handling");
   });
 
-  test("最小 DOM スタブ上でロード実行できること (埋め込み関数の自由変数欠落を実行で検知)", () => {
-    // .toString() 埋め込みは build.js のヘルパーに新しいモジュールスコープ依存が増えると
-    // 構文有効なまま実行時 ReferenceError になる。ロードパス (route → showSelector) を実走して検知する
+  test("loads and runs on a minimal DOM stub (detects missing free variables of the embedded functions by running them)", () => {
+    // With .toString() embedding, when a build.js helper gains a new module-scope dependency,
+    // the syntax stays valid but it becomes a ReferenceError at run time. Detected by actually running the load path (route -> showSelector)
     const src = readFileSync(COMPARE_JS, "utf8");
     const noop = () => {};
     const sandbox = {
@@ -59,15 +59,15 @@ describe("compare.js: クライアント比較レンダラー", { skip: !distExi
       URLSearchParams,
     };
     assert.doesNotThrow(() => vm.runInNewContext(src, sandbox),
-      "compare.js がロード実行で throw (自由変数の欠落または DOM 前提の破れ)");
+      "compare.js throws when loaded (a missing free variable or a broken DOM assumption)");
   });
 
-  test("埋め込み diffClass / renderMeasurements が build.js 実装と同一出力 (単一の真実の等価性)", () => {
+  test("the embedded diffClass / renderMeasurements give the same output as the build.js implementation (equivalence of the single source of truth)", () => {
     const src = readFileSync(COMPARE_JS, "utf8");
-    // 埋め込みブロック (HIGHER_BETTER 〜 withMark 直前) を切り出して評価する
+    // Cut out and evaluate the embedded block (from HIGHER_BETTER to just before withMark)
     const start = src.indexOf("var HIGHER_BETTER=");
     const end = src.indexOf("function withMark");
-    assert.ok(start > 0 && end > start, "埋め込みブロックの境界が見つからない");
+    assert.ok(start > 0 && end > start, "the boundaries of the embedded block not found");
     const embedded = new Function(`${src.slice(start, end)}; return { diffClass, renderMeasurements };`)();
     const diffCases = [
       ["micPre", 2, 4],
@@ -77,7 +77,7 @@ describe("compare.js: クライアント比較レンダラー", { skip: !distExi
       ["drIn", "116", "120"],
     ];
     for (const [key, a, b] of diffCases) {
-      assert.deepEqual(embedded.diffClass(key, a, b), _diffClass(key, a, b), `diffClass(${key}, ${a}, ${b}) が不一致`);
+      assert.deepEqual(embedded.diffClass(key, a, b), _diffClass(key, a, b), `diffClass(${key}, ${a}, ${b}) does not match`);
     }
     const measureCases = [
       "[ASR](https://example.com/x) / [RMAA](http://example.org/y)",
@@ -85,32 +85,32 @@ describe("compare.js: クライアント比較レンダラー", { skip: !distExi
       "",
     ];
     for (const val of measureCases) {
-      assert.equal(embedded.renderMeasurements(val), _renderMeasurements(val), `renderMeasurements(${JSON.stringify(val)}) が不一致`);
+      assert.equal(embedded.renderMeasurements(val), _renderMeasurements(val), `renderMeasurements(${JSON.stringify(val)}) does not match`);
     }
   });
 });
 
-describe("index.html: 比較ビューの配線", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("compare-view コンテナと selector-view が存在すること", () => {
+describe("index.html: comparison view wiring", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("the compare-view container and selector-view exist", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(html.includes('id="compare-view"'), "compare-view コンテナがない");
-    assert.ok(html.includes('id="selector-view"'), "selector-view ラッパーがない");
+    assert.ok(html.includes('id="compare-view"'), "no compare-view container");
+    assert.ok(html.includes('id="selector-view"'), "no selector-view wrapper");
   });
 
-  test("compare.js を読み込むこと", () => {
+  test("loads compare.js", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/<script src="[^"]*compare\.js"/.test(html), "compare.js の script タグがない");
+    assert.ok(/<script src="[^"]*compare\.js"/.test(html), "no script tag for compare.js");
   });
 
-  test("比較ボタンが location.hash (フラグメント) に遷移すること (静的ページ遷移しない)", () => {
+  test("the compare button navigates to location.hash (fragment) (no navigation to a static page)", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/location\.hash\s*=\s*'#a='/.test(html), "compare ボタンが location.hash を設定していない");
+    assert.ok(/location\.hash\s*=\s*'#a='/.test(html), "the compare button does not set location.hash");
     assert.equal(/window\.location\.href\s*=\s*BASE_PATH\s*\+\s*'compare\//.test(html), false,
-      "旧: 静的 compare ページへの遷移コードが残存");
+      "old: navigation code to the static compare page remains");
   });
 
-  test("静的 /compare/ URL を一切含まないこと", () => {
+  test("contains no static /compare/ URL at all", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
-    assert.equal(html.includes("/compare/"), false, "index に静的 /compare/ URL が残存");
+    assert.equal(html.includes("/compare/"), false, "a static /compare/ URL remains in index");
   });
 });
