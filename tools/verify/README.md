@@ -132,7 +132,7 @@ node tools/verify/propose-corrections.js          # --all also includes low
 # 6'. Generating the report (product-page-verification-report.md at the repository root. Outside git,
 #    regenerated and overwritten on every update, and deleted once the verification cycle is complete)
 #    The column layout of the discrepancy tables (the value after the change goes on the left) and the display rules follow what build-report.js generates
-#    (operational details in the 「レポート」 (report) section of .claude/skills/verify-products/SKILL.md).
+#    (operational details in the "Report" section of .claude/skills/verify-products/SKILL.md).
 #    Matches with known holds (known-holds.json) are excluded automatically, and price discrepancies are split into a separate section
 node tools/verify/build-report.js
 

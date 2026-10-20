@@ -1,91 +1,91 @@
 ---
 name: collect-measurements
-description: data/audio_interfaces.xlsx の Measurement Reports 列に、各機種の客観測定を公開するページの URL を収集して tools/update-xlsx.js で反映する運用スキル。対象ソースは ASR(APx)・RMAA/ProSound(ixbt)・測定系 YouTube(Julian Krause 等)・Sound on Sound のベンチ・小規模ラボ・メーカー公称測定など測定レポート全般 (独立系の第三者ベンチを優先)。「測定レポートを収集」「RMAA を集めて」「ASR のベンチを追加」「Julian Krause の測定を貼って」「Measurement Reports を埋めて」「測定データのリンクを付けて」「DR/THD+N の実測ソースを探して」「測定リンクが空の機種を埋めて」など、Measurement Reports 列の URL 収集・測定ソースの追加に関する依頼では必ずこのスキルを使う。スペック本体 (数値列) の照合は verify-products、未収録機種の発見は discover-products が担当 (本スキルは測定リンク列に特化)。
+description: Operational skill that collects, into the Measurement Reports column of data/audio_interfaces.xlsx, the URLs of pages publishing each model's objective measurements and applies them with tools/update-xlsx.js. Target sources are measurement reports in general, such as ASR (APx), RMAA/ProSound (ixbt), measurement YouTube channels (Julian Krause, etc.), Sound on Sound benches, small labs and manufacturers' published measurements (independent third-party benches take priority). Always use this skill for requests about collecting URLs for the Measurement Reports column or adding measurement sources, such as 「測定レポートを収集」 (collect measurement reports), 「RMAA を集めて」 (gather RMAA), 「ASR のベンチを追加」 (add the ASR bench), 「Julian Krause の測定を貼って」 (add Julian Krause's measurements), 「Measurement Reports を埋めて」 (fill in Measurement Reports), 「測定データのリンクを付けて」 (add links to measurement data), 「DR/THD+N の実測ソースを探して」 (find measured sources for DR/THD+N) or 「測定リンクが空の機種を埋めて」 (fill in the models with no measurement links). Verification of the spec body (the numeric columns) is handled by verify-products, and finding unlisted models by discover-products (this skill specializes in the measurement link column).
 ---
 
-# 測定レポート収集の運用
+# Operating measurement report collection
 
-xlsx の最終列 `Measurement Reports` に、各機種の客観測定を公開するページへの markdown リンクを収集して反映する。作業領域は `tools/measurements/work/` (git 管理外)。反映は `tools/update-xlsx.js` 経由で、**操作者の同意後に `--apply`** で書き込む。
+Collect and apply, into the final xlsx column `Measurement Reports`, markdown links to pages publishing each model's objective measurements. The work area is `tools/measurements/work/` (outside git). Application goes through `tools/update-xlsx.js`, writing with **`--apply` after the operator's consent**.
 
-## スコープ (何を測定ソースとして載せるか)
+## Scope (what to list as a measurement source)
 
-`Measurement Reports` はスペック本体の根拠列ではなく、客観測定を公開するページを集約する列。**この列に限り公式以外の測定ソースを載せてよい** (discover-products と同じ規約)。載せる/載せないの線引きは「測定の実データを提示しているか」で決める。
+`Measurement Reports` is not a column of grounds for the spec body; it is a column that gathers pages publishing objective measurements. **For this column only, measurement sources other than the manufacturer may be listed** (the same convention as discover-products). The line between listing and not listing is drawn by "does it present real measurement data".
 
-- 対象 (実データ = APx/RMAA のグラフ・数値・測定表を掲載しているページ)。**独立系の第三者ベンチを最優先**し、メーカー公称は他に無いときの代替に留める:
-  - **ASR** (audiosciencereview.com) — APx555 ベンチのレビュースレッド (最有力)
-  - **RMAA / ProSound** (prosound.ixbt.com) 及び個人の RMAA レポート
-  - **測定系 YouTube チャンネル** — Julian Krause 等が APx 相当のフルベンチ (DR/THD+N/クロストーク/ゲイン等) を公開する動画。**開封・使用レビュー動画とは区別する**。現行機の独立測定はここにしか無いことが多く、既存カタログでも多用 (source は YouTube)
-  - **Sound on Sound** (soundonsound.com) のレビュー中「bench test」測定
-  - **小規模ラボ / 個人測定** — Virtins, Igor's Lab, Soundgale, Reference Audio Analyzer, AV Watch (av.watch.impress.co.jp) 実測, Archimago, Audiofanzine のベンチ等、update-xlsx.js の `labelFor` が既知ラベル化するソース
-  - **メーカー公称測定 (代替)** — 上記が見つからない場合のみ。DR/THD+N/EIN を数値公開する仕様ページ・データシート PDF (source は `Manufacturer`)
-- 除外 (測定を伴わないもの):
-  - 主観レビュー・購入ガイド・比較まとめ・小売の商品ページ・フォーラムの雑談・開封/セットアップ動画
-  - 「測定っぽい」が実データを出していないページ (スペック転載だけ、グラフ無し)
-- **世代・型番のミスマッチに注意**: 独立ベンチが対象機種とは別世代・別型番を測っていることがある (例: ASR の初代機レビューを Gen2 行に流用しない / Volt 276 の RMAA を Volt 2 に流用しない / CQ-18T のレビューを CQ-12T に使わない)。変換部が再設計された世代は数値が変わるため、対象機種そのものを測っていない限り採用しない。姉妹機で**ハードが同一 (DSP コア数のみ相違など)** と確認できる場合に限り同一ソースを両方へ載せてよい (根拠を note に書く)
-- 1 機種あたりの掲載は代表的な **1〜数本に絞る** (網羅リンク列にしない)。優先度: ASR > ProSound/RMAA > 測定系 YouTube (Julian Krause 等) > SoS bench > 小規模ラボ > メーカー公称 (代替)
+- Targets (real data = pages that publish APx/RMAA graphs, figures or measurement tables). **Independent third-party benches take top priority**, and the manufacturer's published figures are only a substitute when there is nothing else:
+  - **ASR** (audiosciencereview.com) — review threads with APx555 benches (the strongest)
+  - **RMAA / ProSound** (prosound.ixbt.com) and individuals' RMAA reports
+  - **Measurement YouTube channels** — videos in which Julian Krause and others publish a full bench equivalent to APx (DR/THD+N/crosstalk/gain, etc.). **Distinguish them from unboxing and usage review videos**. Independent measurements of current models often exist only here, and the existing catalog uses them heavily (source is YouTube)
+  - **Sound on Sound** (soundonsound.com) "bench test" measurements within reviews
+  - **Small labs / individual measurements** — sources that update-xlsx.js's `labelFor` turns into known labels, such as Virtins, Igor's Lab, Soundgale, Reference Audio Analyzer, AV Watch (av.watch.impress.co.jp) measurements, Archimago and Audiofanzine benches
+  - **Manufacturer's published measurements (substitute)** — only when none of the above is found. Spec pages and datasheet PDFs that publish DR/THD+N/EIN figures (source is `Manufacturer`)
+- Excluded (anything without measurements):
+  - Subjective reviews, buying guides, comparison roundups, retail product pages, forum chatter, unboxing/setup videos
+  - Pages that "look like measurements" but give no real data (only reposted specs, no graphs)
+- **Watch out for generation/model-number mismatches**: an independent bench sometimes measured a different generation or model number from the target (e.g. do not reuse ASR's review of the first-generation unit for a Gen2 row / do not reuse Volt 276's RMAA for Volt 2 / do not use the CQ-18T review for CQ-12T). Figures change for generations whose conversion section was redesigned, so do not adopt one unless it measured the target model itself. Only when sibling models are confirmed to have **identical hardware (differing only in the number of DSP cores, etc.)** may the same source be listed for both (write the grounds in note)
+- Narrow what is listed per model to **one or a few** representative ones (do not make it an exhaustive link column). Priority: ASR > ProSound/RMAA > measurement YouTube (Julian Krause, etc.) > SoS bench > small labs > manufacturer's published figures (substitute)
 
-## 対象機種の把握 (最初に必ずやる)
+## Grasping the target models (always do this first)
 
-既定は **gap-fill** (`Measurement Reports` が空の機種を埋める)。操作者が機種リストや刷新対象を指定した場合はそれに従う。discover-products の手順 7 から回すときは、そのサイクルで追加した行 (`[Manufacturer]` のリンクしか無い行を含む) が対象。
+The default is **gap-fill** (fill in models whose `Measurement Reports` is empty). When the operator specifies a model list or what to refresh, follow that. When run from step 7 of discover-products, the targets are the rows added in that cycle (including rows that have only a `[Manufacturer]` link).
 
 ```bash
-node tools/verify/export-products.js   # rows-full.json を最新化 (Measurement Reports 含む全列)
-node -e "const r=require('./tools/verify/work/rows-full.json'); const fs=require('fs'); const miss=r.filter(x=>!x['Measurement Reports']||!String(x['Measurement Reports']).trim()).map(x=>({product:x.Brand+' '+x.Model, url:x['Product Page URL']||''})); fs.mkdirSync('tools/measurements/work',{recursive:true}); fs.writeFileSync('tools/measurements/work/targets.json', JSON.stringify(miss,null,1)); console.log(miss.length+' / '+r.length+' 機種が Measurement Reports 空')"
+node tools/verify/export-products.js   # refreshes rows-full.json (every column, including Measurement Reports)
+node -e "const r=require('./tools/verify/work/rows-full.json'); const fs=require('fs'); const miss=r.filter(x=>!x['Measurement Reports']||!String(x['Measurement Reports']).trim()).map(x=>({product:x.Brand+' '+x.Model, url:x['Product Page URL']||''})); fs.mkdirSync('tools/measurements/work',{recursive:true}); fs.writeFileSync('tools/measurements/work/targets.json', JSON.stringify(miss,null,1)); console.log(miss.length+' / '+r.length+' models have empty Measurement Reports')"
 ```
 
-`product` は必ず xlsx の `Brand` + 半角スペース + `Model` と完全一致させる (update-xlsx.js のマッチキー)。
+`product` must always exactly match the xlsx's `Brand` + one half-width space + `Model` (update-xlsx.js's match key).
 
-## 収集 (並列エージェント)
+## Collection (parallel agents)
 
-Agent ツール (general-purpose, model: sonnet) を数機種/バッチで分割し、全バッチを 1 メッセージで並列起動する。各エージェントのプロンプトに必ず含める要素:
+Split the Agent tool (general-purpose, model: sonnet) into batches of a few models each, and launch all batches in parallel in a single message. Elements that must be included in each agent's prompt:
 
-- **「Do NOT delegate or spawn subagents — do the work yourself」** (マルチ機種指示だと委譲/監視しようとする実績あり)
-- 担当機種 (`Brand Model` + `Product Page URL`)
-- 上記「スコープ」の対象/除外を**本文ごと転記** (エージェントは他ファイルを読めない)
-- 各 URL は WebFetch 等で開き、**実在すること + 測定データ (グラフ/数値/測定表) を含むこと**を確認してから採用する。デッドリンク・測定なしページ・推測 URL は載せない
-- 結果はエージェント自身が `tools/measurements/work/collect-<batch>.json` に Write する (チェックポイント。/tmp・scratchpad 禁止)。同じ内容を最終テキストでも返す
-- 出力スキーマ (機種ごとの配列):
+- **"Do NOT delegate or spawn subagents — do the work yourself"** (with multi-model instructions, agents have tried to delegate and monitor)
+- The assigned models (`Brand Model` + `Product Page URL`)
+- **Copy the full text** of the targets/exclusions of "Scope" above (agents cannot read other files)
+- Open each URL with WebFetch or the like and adopt it only after confirming **it exists + contains measurement data (graphs/figures/measurement tables)**. Do not list dead links, pages without measurements or guessed URLs
+- The agent itself Writes the result to `tools/measurements/work/collect-<batch>.json` (a checkpoint. /tmp and scratchpads are forbidden). It also returns the same content in its final text
+- Output schema (an array per model):
 
 ```json
 [{ "product": "Focusrite Scarlett 2i2 4th Gen",
    "urls": [{ "source": "ASR|Manufacturer|...", "url": "https://...",
               "measurementType": "APx|RMAA|SoS bench|manufacturer spec|...",
-              "title": "ページ見出し (任意)",
-              "verification": "direct|indirect: 確認の根拠 (下記ルール)" }],
-   "notes": "見つからなければ urls:[] + 探した範囲を 1 文で" }]
+              "title": "page heading (optional)",
+              "verification": "direct|indirect: grounds for the confirmation (rule below)" }],
+   "notes": "if nothing is found, urls:[] + the range searched in one sentence" }]
 ```
 
-- `source` はホスト名から `labelFor` が自動ラベル化するので厳密でなくてよい。ただし**公式メーカー測定は `source:"Manufacturer"`** (ホストが公式ドメインでもラベルを固定するため)
-- 見つからない機種は捏造せず `urls: []`。**推測 URL 禁止** (照合と同じく捏造防止が最優先)
-- **確度フラグ (`verification`)**: 測定データを**自分で直接読めたら `direct`** (ページ/PDF を開いて数値・グラフを確認)。**直接読めず間接的に採用したら `indirect` + 裏取り根拠**を必ず残す。特に**測定系 YouTube は JS ゲートで本文の測定表を取得できないことが多い**ため、oEmbed/noembed で著者 (Julian Krause 等) を確認 + 対象機種名の一致 + フォーラム/`yt-dlp` 説明文で測定の存在を裏取り、という形になりがち。この場合 `indirect` とし、根拠を `verification` と `notes.md` の両方に書いて操作者がレビュー時に確度を判断できるようにする (採用は妨げないが、無検証の丸呑みと区別する)。読めるテキスト測定ソース (ASR/ProSound 等) が併存するならそれも併記して確度を補う
-- 取得ラダー (bot 保護対策) の正本は tools/verify/README.ja.md「未照合 (failed) を減らす取得ラダー」
+- `source` is turned into a label automatically by `labelFor` from the host name, so it need not be strict. However, **official manufacturer measurements use `source:"Manufacturer"`** (to fix the label even when the host is the official domain)
+- For models where nothing is found, do not fabricate; use `urls: []`. **Guessed URLs are forbidden** (as in verification, preventing fabrication comes first)
+- **Confidence flag (`verification`)**: **`direct` if you could read the measurement data directly yourself** (opened the page/PDF and confirmed the figures/graphs). **If you adopted it indirectly without reading it directly, always leave `indirect` + the corroborating grounds**. In particular, **for measurement YouTube channels the measurement table in the body often cannot be fetched behind a JS gate**, so it tends to take the form of confirming the author (Julian Krause, etc.) via oEmbed/noembed + the target model name matching + corroborating that measurements exist via a forum or the `yt-dlp` description. In that case use `indirect`, and write the grounds in both `verification` and `notes.md` so the operator can judge the confidence when reviewing (this does not prevent adoption, but distinguishes it from swallowing it unverified). If a readable text measurement source (ASR/ProSound, etc.) coexists, list it alongside to support the confidence
+- The authoritative fetch ladder (countermeasures to bot protection) is tools/verify/README.md "Fetch ladder for reducing unverified (failed) items"
 
-## 反映 (要・操作者の同意)
+## Application (requires the operator's consent)
 
-全バッチを 1 ファイルに連結してから dry-run で内容を確認し、同意を得てから `--apply`:
+Concatenate all batches into one file, check the content with a dry-run, and `--apply` after getting consent:
 
 ```bash
-node -e "const fs=require('fs'); const dir='tools/measurements/work'; const files=fs.readdirSync(dir).filter(f=>/^collect-.*\.json$/.test(f)); const products=files.flatMap(f=>JSON.parse(fs.readFileSync(dir+'/'+f,'utf8'))).filter(p=>p.urls&&p.urls.length); fs.writeFileSync(dir+'/collect-result.json', JSON.stringify({products},null,1)); console.log(products.length+' 機種に URL 収集')"
+node -e "const fs=require('fs'); const dir='tools/measurements/work'; const files=fs.readdirSync(dir).filter(f=>/^collect-.*\.json$/.test(f)); const products=files.flatMap(f=>JSON.parse(fs.readFileSync(dir+'/'+f,'utf8'))).filter(p=>p.urls&&p.urls.length); fs.writeFileSync(dir+'/collect-result.json', JSON.stringify({products},null,1)); console.log(products.length+' models with collected URLs')"
 
-node tools/update-xlsx.js tools/measurements/work/collect-result.json         # dry-run: 機種ごとの markdown プレビュー + matched/unmatched
-# → PREVIEW と UNMATCHED を操作者に提示して同意を得る
-node tools/update-xlsx.js tools/measurements/work/collect-result.json --apply  # 同意後のみ書き込み
-npm run build   # renderMeasurements の描画 (比較ページ/個別ページのリンク) を確認
+node tools/update-xlsx.js tools/measurements/work/collect-result.json         # dry-run: per-model markdown preview + matched/unmatched
+# → present PREVIEW and UNMATCHED to the operator and get consent
+node tools/update-xlsx.js tools/measurements/work/collect-result.json --apply  # writes only after consent
+npm run build   # check the rendering of renderMeasurements (links on comparison/individual pages)
 ```
 
-- update-xlsx.js は冪等・**セル単位の上書き**。result に含めた機種のセルを丸ごと置換し、含めない機種は保持する。既存 URL を残したまま足したい場合は result にも既存分を含める (差分追記ではない)
-- `UNMATCHED` (result の機種名が xlsx に無い) が出たら `Brand`/`Model` の表記ゆれを疑い、targets.json の綴りに揃える
-- `renderMeasurements` は `sanitizeUrl` で http(s) 以外を落とすため、収集段階で http(s) 以外のスキームを載せない
+- update-xlsx.js is idempotent and **overwrites per cell**. It replaces the whole cell of the models included in the result and keeps the models not included. To add while keeping existing URLs, include the existing ones in the result too (it is not a diff append)
+- If `UNMATCHED` appears (a model name in the result is not in the xlsx), suspect notation variants of `Brand`/`Model` and align with the spelling in targets.json
+- `renderMeasurements` drops anything other than http(s) via `sanitizeUrl`, so do not list schemes other than http(s) at the collection stage
 
-## 照合パイプラインとの関係 (混同しない)
+## Relation to the verification pipeline (do not confuse them)
 
-- `Measurement Reports` 列は verify-products の照合対象外 (export-products が除外)。ここで足した URL は照合結果に影響しない。照合の再実行は不要
-- 測定レポートで見つかった**公称値 (DR/THD+N/EIN 等) の数値そのもの**は Measurement Reports 列ではなく本体スペック列の話。数値の xlsx 反映は verify-products / discover-products の管轄なので、このスキルでは数値列を書き換えない (リンク列に専念する)
+- The `Measurement Reports` column is not verified by verify-products (export-products excludes it). URLs added here do not affect the verification results. Re-running verification is not needed
+- **The published figures themselves (DR/THD+N/EIN, etc.)** found in measurement reports concern the spec body columns, not the Measurement Reports column. Applying figures to the xlsx is the responsibility of verify-products / discover-products, so this skill does not rewrite the numeric columns (it concentrates on the link column)
 
-## 禁止事項
+## Prohibitions
 
-- 収集入力・結果を /tmp やセッション別 scratchpad に置かない (置き場所は `tools/measurements/work/`)
-- エージェントに xlsx を直接編集させない (反映は必ず update-xlsx.js 経由、操作者の同意後 `--apply`)
-- 測定を伴わないページ (主観レビュー・購入ガイド・小売・フォーラム・非測定動画) を測定ソースとして載せない
-- 推測 URL・未確認リンク・デッドリンクを載せない。開いて測定データを確認してから採用する
-- 本体スペックの数値列を書き換えない (このスキルはリンク列専用)
+- Do not put collection inputs or results in /tmp or a per-session scratchpad (their place is `tools/measurements/work/`)
+- Do not let agents edit the xlsx directly (application always goes through update-xlsx.js, `--apply` after the operator's consent)
+- Do not list pages without measurements (subjective reviews, buying guides, retail, forums, non-measurement videos) as measurement sources
+- Do not list guessed URLs, unconfirmed links or dead links. Adopt them only after opening them and confirming the measurement data
+- Do not rewrite the numeric columns of the spec body (this skill is for the link column only)

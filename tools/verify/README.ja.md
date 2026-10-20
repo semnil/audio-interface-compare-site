@@ -132,7 +132,7 @@ node tools/verify/propose-corrections.js          # --all で low も含める
 # 6'. レポート生成 (リポジトリ直下 product-page-verification-report.md。git 管理外で、
 #    更新のたびに再生成・上書きし、照合サイクル完了後に削除する)
 #    相違表の列構成 (変更後の値を左に置く) と表示規則は build-report.js の生成に従う
-#    (運用の詳細は .claude/skills/verify-products/SKILL.md の「レポート」節)。
+#    (運用の詳細は .claude/skills/verify-products/SKILL.md の「Report」節)。
 #    既知 hold (known-holds.json) 一致分は自動で除外され、価格の相違は独立セクションに分離される
 node tools/verify/build-report.js
 

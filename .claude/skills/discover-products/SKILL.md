@@ -1,115 +1,115 @@
 ---
 name: discover-products
-description: data/audio_interfaces.xlsx に未収録の新製品 (オーディオインターフェース・USB/配信ミキサー・配信機) を公式サイトから検出し、スペック収集 → 行追加 → 照合まで進めるカタログ監査の運用スキル。「新製品を検出」「新機種を探して」「カタログ監査」「未収録機種の発見」「ラインナップの更新チェック」「生産終了になっていないか確認」など、収録製品の追加・カタログの網羅性に関する依頼では必ずこのスキルを使う。既存データの正確性検証は verify-products スキルの対象 (本スキルは「無いものを見つける」側)。
+description: Operational skill for catalog audits, which detects new products not yet listed in data/audio_interfaces.xlsx (audio interfaces, USB/streaming mixers, streaming devices) from official sites and carries them through spec collection → adding rows → verification. Always use this skill for requests about adding listed products or the completeness of the catalog, such as 「新製品を検出」 (detect new products), 「新機種を探して」 (look for new models), 「カタログ監査」 (catalog audit), 「未収録機種の発見」 (find unlisted models), 「ラインナップの更新チェック」 (check for lineup updates) or 「生産終了になっていないか確認」 (check whether anything was discontinued). Verifying the accuracy of existing data is the scope of the verify-products skill (this skill is the side that "finds what is missing").
 ---
 
-# 新製品検出 (カタログ監査) の運用
+# Operating new product detection (catalog audit)
 
-xlsx に未収録の現行製品をブランド公式サイトから検出し、操作者の収録判断 → スペック収集 → 行追加 → 照合接続まで回す。作業領域は `tools/discover/work/` (git 管理外)。
+Detect current products not yet listed in the xlsx from the brands' official sites, and run them through the operator's listing decision → spec collection → adding rows → connecting to verification. The work area is `tools/discover/work/` (outside git).
 
-## スコープ (収録判断の前提)
+## Scope (premises of the listing decision)
 
-- 収録対象: 現行オーディオインターフェース + USB/配信ミキサー + 配信機
-- **プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限** (CLAUDE.md のキュレーション方針)。発見しても既定では収録せず、候補として報告し操作者判断を仰ぐ
-- 公式リストから消えた収録済み機種は削除候補として**報告のみ** (削除の根拠規則と REMOVALS への記録は verify-products スキル参照)
+- What is listed: current audio interfaces + USB/streaming mixers + streaming devices
+- **Pro Dante/MADI/AVB/converter/PCIe-class gear is deliberately kept to a minimum** (the curation policy in CLAUDE.md). Even when found, it is not listed by default; report it as a candidate and ask for the operator's decision
+- Listed models that disappeared from the official list are **only reported** as removal candidates (for the evidence rules of removal and recording in REMOVALS, see the verify-products skill)
 
-## 手順
+## Procedure
 
-### 0. 既存カタログの把握
+### 0. Grasping the existing catalog
 
 ```bash
-node tools/verify/export-products.js        # xlsx 更新後は必ず再実行 (rows-full.json を最新化)
+node tools/verify/export-products.js        # always re-run after an xlsx update (refreshes rows-full.json)
 node -e "const rows=require('./tools/verify/work/rows-full.json'); const by={}; for(const r of rows)(by[r.Brand]??=[]).push(r.Model); require('fs').mkdirSync('tools/discover/work',{recursive:true}); require('fs').writeFileSync('tools/discover/work/catalog-by-brand.json', JSON.stringify(by,null,1)); console.log(Object.keys(by).length + ' brands')"
 ```
 
-### 1. ブランドスイープ (並列エージェント)
+### 1. Brand sweep (parallel agents)
 
-Agent ツール (general-purpose, model: sonnet) を 1 バッチ = 5〜8 ブランドで分割し、全バッチを 1 メッセージで並列起動する。各エージェントのプロンプトに必ず含める要素:
+Split the Agent tool (general-purpose, model: sonnet) into batches of 5–8 brands each, and launch all batches in parallel in a single message. Elements that must be included in each agent's prompt:
 
-- **「Do NOT delegate or spawn subagents — do the work yourself」** (マルチブランド指示だとサブエージェントに委譲/監視しようとする実績あり)
-- 担当ブランドと各ブランドの収録済みモデル一覧 (catalog-by-brand.json から転記)
-- 公式サイトの製品一覧/カテゴリページを取得し、スコープ内の現行ラインナップを列挙 → 収録済みとの diff。**一次ソースは公式サイトのみ** (小売店・レビューサイト・コミュニティは禁止)
-- 結果はエージェント自身が `tools/discover/work/sweep-<batch>.json` に Write する (チェックポイント。/tmp・scratchpad 禁止)。同じ内容を最終テキストでも返す
-- 出力スキーマ (ブランドごとの配列):
+- **"Do NOT delegate or spawn subagents — do the work yourself"** (with multi-brand instructions, agents have tried to delegate to and monitor subagents)
+- The assigned brands and each brand's list of listed models (copied from catalog-by-brand.json)
+- Fetch the official site's product list/category pages, enumerate the current in-scope lineup → diff against what is listed. **The only primary source is the official site** (retailers, review sites and communities are forbidden)
+- The agent itself Writes the result to `tools/discover/work/sweep-<batch>.json` (a checkpoint. /tmp and scratchpads are forbidden). It also returns the same content in its final text
+- Output schema (an array per brand):
 
 ```json
-[{ "brand": "...", "sources": ["確認した一覧ページ URL"],
-   "new_candidates": [{ "model": "...", "url": "製品ページ", "category": "...", "note": "スコープ判定の根拠" }],
-   "discontinued_candidates": [{ "model": "...", "evidence": "一覧から消えている等" }],
-   "notes": "取得に使った手段・留意点 (3 文以内)" }]
+[{ "brand": "...", "sources": ["URLs of the list pages checked"],
+   "new_candidates": [{ "model": "...", "url": "product page", "category": "...", "note": "grounds for the scope judgement" }],
+   "discontinued_candidates": [{ "model": "...", "evidence": "gone from the list, etc." }],
+   "notes": "means used for fetching, caveats (3 sentences or fewer)" }]
 ```
 
-取得不能なブランドは new_candidates を捏造せず notes に「未確認」と書かせる。r.jina.ai リーダープロキシの出力は公式ページを変換した本文で、iframe の中身は含まれず (`x-with-iframe` は API キーが必要)、`x-no-cache: true` を付けないとキャッシュされた応答のこともある。プロキシ出力だけで得た一覧からは「新製品なし」も一覧からの消失も確定しない。一覧の欠けは公式の別表示 (カテゴリ別ページ・検索結果)・スクリーンショット・個別の製品ページで補完し、補完できない部分は discontinued_candidates に入れず notes に「未確認」と書かせる。取得ラダーの正本は tools/verify/README.ja.md「未照合 (failed) を減らす取得ラダー」(WebFetch → curl + UA → headless Chrome dump-dom → r.jina.ai リーダープロキシ → **headless Chrome スクリーンショット + 画像視認** → sitemap 探索 → PDF → 公式ドメイン移行)。dump-dom まで 403 のサイト (実績: fender.com) もスクリーンショット (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + ブラウザ UA) なら描画されることがあり、画像を Read で視認して実在・現行性・主要値を確認する。
+For brands that cannot be fetched, have the agent write 「未確認」 (unconfirmed) in notes instead of fabricating new_candidates. The output of the r.jina.ai reader proxy is a body converted from the official page, without iframe contents (`x-with-iframe` requires an API key), and without `x-no-cache: true` the response may be cached. A list obtained only from proxy output settles neither "no new products" nor disappearance from the list. Gaps in a list are filled from another official presentation (per-category pages, search results), a screenshot or the individual product page, and for parts that cannot be filled, have the agent not put them into discontinued_candidates and write 「未確認」 (unconfirmed) in notes. The authoritative fetch ladder is tools/verify/README.md "Fetch ladder for reducing unverified (failed) items" (WebFetch → curl + UA → headless Chrome dump-dom → r.jina.ai reader proxy → **headless Chrome screenshot + viewing the image** → sitemap search → PDF → move to an official domain). Even sites that return 403 up to dump-dom (track record: fender.com) can sometimes be rendered with a screenshot (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + a browser UA); view the image with Read to confirm existence, currency and the main values.
 
-### 2. 新ブランドの探索 (任意)
+### 2. Exploring new brands (optional)
 
-WebSearch で当年の新製品・新規参入ブランドを探す (例: "audio interface 2026 new releases")。ヒットしたら公式サイトで実在とスコープを確認してから候補に加える。収録可否はキュレーション方針に照らして操作者判断。
+Use WebSearch to look for this year's new products and newly entering brands (e.g. "audio interface 2026 new releases"). On a hit, confirm existence and scope on the official site before adding it as a candidate. Whether to list it is the operator's decision in light of the curation policy.
 
-### 2b. 小売カテゴリランキングからの候補 seed (任意)
+### 2b. Candidate seeds from retail category rankings (optional)
 
-ブランドスイープ (手順1) は catalog-by-brand.json の既存ブランドしか巡回しないため、種リストに無いブランドは構造的に漏れる (実例: Audio-Technica AT-UMX3 は既収録 40 ブランドに含まれず未検出だった)。これを補うため、小売のカテゴリランキングを **候補モデル名の seed に限って** 使う。ランキングはスペック・ラインナップ・生産状況の根拠には使わない (禁止事項参照)。
+The brand sweep (step 1) only visits the existing brands in catalog-by-brand.json, so brands not in the seed list are structurally missed (real case: Audio-Technica AT-UMX3 was not among the 40 listed brands and went undetected). To compensate, use retail category rankings **only as seeds of candidate model names**. Rankings are not used as grounds for specs, lineups or production status (see Prohibitions).
 
-- 取得先 (JP 市場・カテゴリを跨いで両方取る):
-  - 価格.com オーディオインターフェース: `kakaku.com/gakki/audio-interface/ranking_0172/` と同 `/hot/`
-  - 価格.com ミキサー (楽器): `kakaku.com/gakki/mixing-machine/ranking_2705/` と同 `/hot/`
-  - **配信ミキサー/配信機はメーカーにより IF ではなくミキサーカテゴリに分類されるため両カテゴリ必須** (AT-UMX3 は kakaku 上「ミキサー」カテゴリで、IF ランキングには出ない。ミキサーランキングでは売れ筋 7 位・注目度 5 位で捕捉できた)
-  - Amazon.co.jp ベストセラー等は bot 対策 (Cloudflare/CAPTCHA/503) で WebFetch/curl が弾かれやすい。取得は取得ラダー (headless Chrome) が要る場合あり
-- 手順: ランキングから型番を抽出 → catalog-by-brand.json と突合して未収録のみ残す → **各候補を公式サイトで実在・スコープ・スペック・生産状況を確認** してから手順3の候補表に載せる。小売のカテゴリ分類・スペック表記はそのまま採らない (誤記・カラー違い品番・生産終了・OEM・アナログ専用機の混在があるため)
-- **公式確認ゲートで落とすもの (報告のみ・追加しない)**: ①スコープ外 (実例: Audio-Technica AT-PMX5P は USB 非搭載のアナログ携帯ミキサー) ②公式ページで生産完了と判定できるもの — 削除規則と同じ根拠 (公式 301/404・生産完了表記・公式 discontinued リスト) を seed 候補にも適用する (実例: YAMAHA QL1 は Yamaha が 2024-09 に CL/QL シリーズ生産終了を告知済みのため、ランキングに出ても収集しない)。ランキングは売れ筋でも生産完了品を載せ続けるため、seed の型番は必ず現行性を公式で確認する
-- 取得したランキングは seed として `tools/discover/work/` に置き (例: `seed-mixer-ranking.json`)、根拠としてコミット/レポートに転記しない。ランキングは日次変動 (特に hot) するため定期実行の都度取得する
+- Where to fetch (JP market; take both, across categories):
+  - 価格.com (Kakaku.com) audio interfaces: `kakaku.com/gakki/audio-interface/ranking_0172/` and the same `/hot/`
+  - 価格.com (Kakaku.com) mixers (musical instruments): `kakaku.com/gakki/mixing-machine/ranking_2705/` and the same `/hot/`
+  - **Streaming mixers/streaming devices are classified by some manufacturers in the mixer category rather than IF, so both categories are required** (AT-UMX3 is in the 「ミキサー」 (mixer) category on kakaku and does not appear in the IF ranking. It was caught at 7th in best sellers and 5th in attention in the mixer ranking)
+  - Amazon.co.jp best sellers and the like tend to block WebFetch/curl with bot countermeasures (Cloudflare/CAPTCHA/503). Fetching may need the fetch ladder (headless Chrome)
+- Procedure: extract model numbers from the ranking → match against catalog-by-brand.json and keep only unlisted ones → **confirm each candidate's existence, scope, specs and production status on the official site** before putting it in step 3's candidate table. Do not take the retailer's category classification or spec notation as is (errors, color-variant part numbers, discontinued items, OEM and analog-only devices are mixed in)
+- **What the official confirmation gate drops (report only, do not add)**: ① out of scope (real case: Audio-Technica AT-PMX5P is a portable analog mixer without USB) ② items that the official page shows to be discontinued — the same evidence as the removal rules (official 301/404, a discontinued notice, the official discontinued list) also applies to seed candidates (real case: YAMAHA QL1 is not collected even when it appears in the ranking, because Yamaha announced the end of production of the CL/QL series in 2024-09). Rankings keep listing discontinued items even as best sellers, so always confirm the currency of seed model numbers with the manufacturer
+- Put the fetched rankings in `tools/discover/work/` as seeds (e.g. `seed-mixer-ranking.json`), and do not copy them into commits/reports as grounds. Rankings change daily (especially hot), so fetch them each time a periodic run happens
 
-### 3. 候補レビュー (操作者判断)
+### 3. Candidate review (operator's decision)
 
-全バッチの new_candidates を catalog-by-brand.json と突合して既収録の表記ゆれを除外した上で、「ブランド / 機種 / カテゴリ / URL / スコープ判定」の表で提示し、収録可否の判断を仰ぐ。discontinued_candidates は根拠を確認して削除候補として別掲する。
+Match all batches' new_candidates against catalog-by-brand.json to exclude notation variants of already-listed models, then present them in a table of "brand / model / category / URL / scope judgement" and ask for a decision on whether to list them. discontinued_candidates are shown separately as removal candidates after confirming the evidence.
 
-### 4. スペック収集 (並列エージェント)
+### 4. Spec collection (parallel agents)
 
-承認された機種のみ、数機種/バッチで並列収集する。プロンプトに必ず含める要素:
+Collect only the approved models in parallel, a few models per batch. Elements that must be included in the prompt:
 
-- 委譲禁止 (手順 1 と同じ)
-- 行 JSON のキー = xlsx ヘッダー名の完全一致。ヘッダー一覧は契約の正本 `src/build.js` の COLUMNS から生成して渡す (xlsx を読む再実装をしない):
+- No delegation (same as step 1)
+- Row JSON keys = exact matches of the xlsx header names. Generate the header list from COLUMNS in `src/build.js`, the authoritative contract, and pass it (do not reimplement reading the xlsx):
 
 ```bash
 node -e "import('./src/build.js').then(m=>console.log(JSON.stringify(m.COLUMNS.map(c=>c.label))))"
 ```
 
-- セル書式規約は verify-products スキルの「セル書式規約」が正本。収集エージェントは他スキルを読めないため、プロンプトには正本の規約本文を転記して渡す
-- **未公開の測定値 (DR/THD+N/EIN) は空欄。推測で埋めない** (捏造防止)
-- `Product Page URL` は必須 (照合パイプラインの照合先になる)
-- `Measurement Reports` は見つかった場合のみ `[ラベル](url) / ...` 形式で。測定ソース (ASR/RMAA/Sound on Sound 等) はこの列に限り公式以外も可。第三者ベンチの探索は手順 7 で行う
-- 結果は `tools/discover/work/rows-<batch>.json` ({Header:value} の配列) にエージェント自身が Write する
+- The authoritative cell format conventions are "Cell format conventions" in the verify-products skill. Collection agents cannot read other skills, so copy the authoritative text of the conventions into the prompt
+- **Unpublished measurements (DR/THD+N/EIN) are blank. Never fill them in by guessing** (prevents fabrication)
+- `Product Page URL` is required (it becomes what the verification pipeline verifies against)
+- `Measurement Reports` only when found, in the form `[label](url) / ...`. For this column only, measurement sources (ASR/RMAA/Sound on Sound, etc.) other than the manufacturer are allowed. The search for third-party benches is done in step 7
+- The agent itself Writes the result to `tools/discover/work/rows-<batch>.json` (an array of {Header:value})
 
-### 5. 行追加の適用 (要・操作者の同意)
+### 5. Applying the row additions (requires the operator's consent)
 
-全バッチの行 JSON を 1 ファイルに連結し、内容 (機種と主要値) を操作者に提示して同意を得てから適用する:
+Concatenate all batches' row JSON into one file, present the content (models and main values) to the operator and get consent before applying:
 
 ```bash
-# tools/apply-product-changes.js の REMOVALS をサイクルごとに書き換える (追加のみなら空に。前サイクルの残骸を使い回さない)
+# Rewrite REMOVALS in tools/apply-product-changes.js for each cycle (empty if only adding. Do not reuse leftovers from the previous cycle)
 node tools/apply-product-changes.js tools/discover/work/new-rows.json
-npm run build     # slug 衝突 fail fast とページ数 (O(n²)) の確認
+npm run build     # check the slug collision fail-fast and the page count (O(n²))
 ```
 
-### 6. 照合への接続
+### 6. Connecting to verification
 
-追加行は収集エージェントの誤りを検出する網として必ず照合を通す:
+Always put added rows through verification, as a net that catches the collection agents' errors:
 
 ```bash
-node tools/verify/export-products.js        # 新規行が nextIds に入る
-# 以降は verify-products スキルの手順 (Workflow → validate → build-report)
+node tools/verify/export-products.js        # new rows go into nextIds
+# from here on, the verify-products skill's procedure (Workflow → validate → build-report)
 ```
 
-### 7. 測定レポートの収集への接続
+### 7. Connecting to measurement report collection
 
-照合の後、new-rows.json で追加した行に collect-measurements スキルを回して `Measurement Reports` を埋める。対象は `Measurement Reports` が空の行と、`[Manufacturer]` のリンクしか無い行の両方で、対象リストは new-rows.json の Brand + Model から作る (collect-measurements の既定の gap-fill は空の行だけを拾い、メーカーのリンクだけの行を対象にしない)。第三者ベンチが見つかった行は、既存のメーカーのリンクを残したまま追加する。収集・反映の手順 (update-xlsx.js の dry-run → 操作者の同意 → `--apply`) は collect-measurements スキルに従う。
+After verification, run the collect-measurements skill on the rows added with new-rows.json to fill `Measurement Reports`. The targets are both rows where `Measurement Reports` is empty and rows that have only a `[Manufacturer]` link, and the target list is made from the Brand + Model of new-rows.json (collect-measurements' default gap-fill picks up only empty rows and does not target rows with only a manufacturer link). For rows where a third-party bench is found, add it while keeping the existing manufacturer link. The collection and application procedure (update-xlsx.js dry-run → the operator's consent → `--apply`) follows the collect-measurements skill.
 
-## エージェント運用ノウハウ (過去の実績)
+## Agent operation know-how (past track record)
 
-- API セッション上限に当たったエージェントは日付跨ぎで復活する。失敗したエージェントは agentId への SendMessage で文脈を保ったまま再開できる
-- 公式ページ自体の誤記・言語版による記載差があり得る (検証ラダーは verify-products 参照)
+- Agents that hit the API session limit revive after the date changes. A failed agent can be resumed with its context kept via SendMessage to its agentId
+- The official page itself can be wrong, and statements can differ between language versions (for the verification ladder, see verify-products)
 
-## 禁止事項
+## Prohibitions
 
-- 照合入力・収集結果を /tmp やセッション別 scratchpad に置かない (置き場所は `tools/discover/work/`)
-- エージェントに xlsx を直接編集させない (反映は必ず tools/apply-product-changes.js 経由、操作者の同意後)
-- ラインナップ・スペック・生産状況の根拠に小売・レビューサイトを使わない (例外は 2 つ: Measurement Reports 列の測定ソース / 手順2b の候補 seed = モデル名の抽出のみ・公式確認必須で根拠には使わない)
-- 未確認のブランドについて new_candidates を空配列で「新製品なし」と報告させない (notes に未確認と明示させ、レポートでも未確認と区別する)
+- Do not put verification inputs or collection results in /tmp or a per-session scratchpad (their place is `tools/discover/work/`)
+- Do not let agents edit the xlsx directly (application always goes through tools/apply-product-changes.js, after the operator's consent)
+- Do not use retail or review sites as grounds for lineups, specs or production status (two exceptions: measurement sources for the Measurement Reports column / candidate seeds in step 2b = extraction of model names only, official confirmation required, never used as grounds)
+- Do not let agents report "no new products" with an empty new_candidates array for unconfirmed brands (have them state unconfirmed in notes, and distinguish it as unconfirmed in the report too)
