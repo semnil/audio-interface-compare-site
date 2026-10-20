@@ -1,15 +1,15 @@
 /**
- * build.js – xlsx → 静的HTML比較サイト生成
+ * build.js – generates the static HTML comparison site from the xlsx
  *
- * 処理:
- * 1. data/audio_interfaces.xlsx を読み込み
- * 2. dist/products.json を出力 (クライアント検索 + 動的比較のデータソース)
- * 3. dist/index.html を出力 (トップページ: 製品選択 + 検索 + クライアント動的比較)
- * 4. dist/compare.js を出力 (フラグメント URL /#a=..&b=.. で比較表をブラウザ描画)
- * 5. dist/products/{slug}/index.html を製品数分出力 (個別スペックページ)
+ * Steps:
+ * 1. Read data/audio_interfaces.xlsx
+ * 2. Write dist/products.json (data source for client-side search + dynamic comparison)
+ * 3. Write dist/index.html (top page: product selection + search + client-side dynamic comparison)
+ * 4. Write dist/compare.js (renders the comparison table in the browser from the fragment URL /#a=..&b=..)
+ * 5. Write dist/products/{slug}/index.html for each product (individual spec pages)
  *
- * 比較は全組合せの静的ページ生成を廃止し、クライアントサイドのフラグメント URL に移行した。
- * 比較 URL はクローラーに別 URL として扱われず、インデックス対象は index + 製品ページに限定される。
+ * Comparisons no longer generate static pages for every pair; they moved to client-side fragment URLs.
+ * Crawlers do not treat comparison URLs as separate URLs, so the indexed pages are limited to index + product pages.
  */
 
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
@@ -19,21 +19,21 @@ import { setPriority, constants } from "node:os";
 import ExcelJS from "exceljs";
 import { createCanvas } from "@napi-rs/canvas";
 
-// ビルドプロセスの CPU 優先度を下げ、他のアプリケーションへの影響を軽減
+// Lower the build process's CPU priority to reduce the impact on other applications
 try { setPriority(constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const DATA_FILE = join(ROOT, "data", "audio_interfaces.xlsx");
-// 出力先: 環境変数 DIST_DIR があればそちらを使用 (CI / ローカルテスト切替用)
+// Output directory: uses the environment variable DIST_DIR when set (for switching between CI / local tests)
 const DIST = process.env.DIST_DIR
   ? join(process.env.DIST_DIR)
   : join(ROOT, "dist");
 
-// ベースパス: GitHub Pages のサブディレクトリ対応
-// カスタムドメイン → "/"、repo pages → "/repo-name/"
-// 末尾スラッシュを保証 + 前後空白除去 + 連続スラッシュ畳み込み
+// Base path: supports GitHub Pages subdirectories
+// custom domain → "/", repo pages → "/repo-name/"
+// Guarantees a trailing slash + trims surrounding whitespace + collapses consecutive slashes
 const BASE_PATH = (() => {
   let bp = (process.env.BASE_PATH || "/").trim();
   if (bp === "") bp = "/";
@@ -44,7 +44,7 @@ const BASE_PATH = (() => {
 })();
 console.log(`BASE_PATH = "${BASE_PATH}"`);
 
-// サイト URL: OGP / canonical 用の絶対 URL ベース
+// Site URL: the absolute URL base for OGP / canonical
 const SITE_URL = process.env.SITE_URL || "https://semnil.github.io/audio-interface-compare-site";
 
 // ─── Column mapping ────────────────────────────────────────────────────
@@ -153,24 +153,24 @@ function displayValue(val) {
   return escapeHtml(String(val));
 }
 
-// key → {en, ja} ラベル。ビルド側 (製品ページ) と compare.js 埋め込みで共用する単一のテーブル
+// key → {en, ja} labels. A single table shared by the build side (product pages) and the compare.js embedding
 const KEY_LABELS = {};
 for (const c of COLUMNS) KEY_LABELS[c.key] = { en: c.label, ja: c.labelJa };
 
-// 価格表示の唯一のフォーマッタ (compare.js には .toString() で埋め込む)
+// The only formatter for displaying prices (embedded into compare.js via .toString())
 function fmtPrice(v) {
   return "$" + Number(v).toLocaleString("en-US");
 }
 
-// スペック表セルの描画分岐 (measurements / price / その他)。
-// 静的製品ページと動的比較ビュー (compare.js 埋め込み) の両方が使う単一実装
+// Rendering branches for spec table cells (measurements / price / others).
+// A single implementation used by both the static product pages and the dynamic comparison view (embedded in compare.js)
 function cellFor(p, key) {
   if (key === "measurements") return renderMeasurements(p[key]);
   if (key === "price" && p[key] != null && p[key] !== "") return fmtPrice(p[key]);
   return displayValue(p[key]);
 }
 
-// 主要スペックの 1 行要素 (og:image のスペック行と meta description が共用)
+// One-line items of the key specs (shared by the og:image spec line and the meta description)
 function keySpecParts(p) {
   const parts = [];
   if (p.micPre != null && p.micPre !== "") parts.push(`${p.micPre} mic preamp${Number(p.micPre) === 1 ? "" : "s"}`);
@@ -179,8 +179,8 @@ function keySpecParts(p) {
   return parts;
 }
 
-// 測定レポート列: markdown "[label](url) / [label](url)" を外部リンクの HTML に変換
-// URL は sanitizeUrl で http(s) のみ許可し、ラベル・URL とも escapeHtml する
+// Measurement reports column: converts markdown "[label](url) / [label](url)" into HTML external links
+// URLs are limited to http(s) by sanitizeUrl, and both labels and URLs go through escapeHtml
 function renderMeasurements(val) {
   const naSpan = '<span class="na" aria-label="No data">—</span>';
   if (val == null || val === "") return naSpan;
@@ -190,15 +190,15 @@ function renderMeasurements(val) {
   while ((m = re.exec(String(val))) !== null) {
     const url = sanitizeUrl(m[2]);
     if (!url) continue;
-    // ↗ で外部サイトへの遷移を明示 (サイト全体の外部リンク慣習に合わせる)。矢印は aria-hidden、
-    // スクリーンリーダー向けには sr-only テキストで外部サイトである旨を補足する
+    // ↗ marks navigation to an external site (matching the site-wide convention for external links). The arrow is aria-hidden,
+    // and sr-only text tells screen readers that it is an external site
     links.push(`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(m[1])}<span class="ext-arrow" aria-hidden="true"> ↗</span><span class="sr-only" data-i18n="extSite"> (external site)</span></a>`);
   }
   if (links.length === 0) return naSpan;
   return `<span class="measure-links">${links.join('<span class="sep" aria-hidden="true"> / </span>')}</span>`;
 }
 
-// <script> タグ内への JSON 埋め込み向けに、</script> 脱出と U+2028/U+2029 をエスケープ
+// For embedding JSON inside a <script> tag: escapes </script> breakouts and U+2028/U+2029
 function safeJsonForScript(obj) {
   return JSON.stringify(obj)
     .replace(/</g, "\\u003c")
@@ -206,19 +206,19 @@ function safeJsonForScript(obj) {
     .replace(/\u2029/g, "\\u2029");
 }
 
-// JSON-LD (application/ld+json) 埋め込み向け。上記に加え & も \u0026 にエスケープする
+// For embedding JSON-LD (application/ld+json). In addition to the above, also escapes & as \u0026
 function safeJsonForScriptLD(obj) {
   return safeJsonForScript(obj).replace(/&/g, "\\u0026");
 }
 
-// PAGE_JA → i18n.js の読み込み順契約を 1 箇所に集約する。値のエスケープは
-// safeJsonForScript が機械的に担保する (手書きのクォートエスケープを持ち込まない)
+// Keeps the load-order contract PAGE_JA → i18n.js in one place. Escaping the value is
+// guaranteed mechanically by safeJsonForScript (no hand-written quote escaping)
 function i18nScripts(pageJa) {
   return `<script>var PAGE_JA=${safeJsonForScript(pageJa)};</script>
 <script src="${BASE_PATH}i18n.js"></script>`;
 }
 
-// 外部 URL を http(s) スキームに限定してサニタイズ。不正なら空文字を返す
+// Sanitizes an external URL by limiting it to the http(s) schemes. Returns an empty string when invalid
 function sanitizeUrl(u) {
   if (u == null) return "";
   const s = String(u).trim();
@@ -389,8 +389,8 @@ function generateFaviconIco() {
 }
 
 // ─── og:image generation (1200x630 share card) ──────────────────────────
-// SNS 共有カード。ランキング要因ではなく共有 CTR 向け。favicon と同じ配色 (D4 デザイン) で統一。
-// テキスト描画に @napi-rs/canvas を使用 (フォントは OS の sans-serif にフォールバック)。
+// Social share cards. For share CTR, not a ranking factor. Uses the same colors as the favicon (D4 design).
+// Uses @napi-rs/canvas to draw text (the font falls back to the OS's sans-serif).
 const OG_W = 1200;
 const OG_H = 630;
 
@@ -407,7 +407,7 @@ function ogWrapText(ctx, text, maxWidth, maxLines) {
       lines.push(line);
       line = word;
     } else {
-      // 最終行が埋まった。残りは省略記号で丸める
+      // The last line is full. The rest is cut off with an ellipsis
       overflow = true;
       break;
     }
@@ -421,10 +421,10 @@ function ogWrapText(ctx, text, maxWidth, maxLines) {
   return lines;
 }
 
-// 描画のみを行い canvas を返す。PNG エンコードは呼び出し側が canvas.encode("png") (非同期) で
-// バッチ並列実行する — 同期 toBuffer はエンコード (17ms/枚 × 309 枚) がビルド時間の 8 割を占めた。
-// 注意: エンコードが in-flight の間に別 canvas を描画すると @napi-rs/canvas 1.x でクラッシュするため、
-// バッチ内は「全描画完了 → 全エンコード」の順序を守ること (build() の og ループ参照)
+// Only draws and returns the canvas. The caller does the PNG encoding with canvas.encode("png") (async),
+// run in parallel per batch — with the synchronous toBuffer, encoding (17ms/card × 309 cards) took 80% of the build time.
+// Caution: drawing another canvas while an encode is in flight crashes @napi-rs/canvas 1.x, so
+// within a batch keep the order "finish all drawing → encode all" (see the og loop in build())
 function drawOgCard({ title, subtitle = "", specLine = "" }) {
   const canvas = createCanvas(OG_W, OG_H);
   const ctx = canvas.getContext("2d");
@@ -435,7 +435,7 @@ function drawOgCard({ title, subtitle = "", specLine = "" }) {
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, OG_W, OG_H);
 
-  // 3 バーのロゴモチーフ (favicon と同配色)
+  // The 3-bar logo motif (same colors as the favicon)
   const bars = [
     { x: 64, y: 76, w: 18, h: 56, color: "#3b82f6" },
     { x: 90, y: 90, w: 18, h: 42, color: "#818cf8" },
@@ -489,7 +489,7 @@ async function readXlsx() {
   await wb.xlsx.readFile(DATA_FILE);
   const ws = wb.worksheets[0];
 
-  // 1行目をヘッダーとして読み取り
+  // Read row 1 as the header
   const headerRow = ws.getRow(1);
   const headerMap = {}; // colNumber → internal key
   headerRow.eachCell((cell, colNumber) => {
@@ -498,7 +498,7 @@ async function readXlsx() {
     if (col) headerMap[colNumber] = col.key;
   });
 
-  // 2行目以降をデータとして読み取り
+  // Read rows from row 2 on as data
   const products = [];
   ws.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
@@ -517,15 +517,15 @@ async function readXlsx() {
 
 // ─── Templates ──────────────────────────────────────────────────────────
 
-// 言語選択の保存キー。semnil.github.io はプロジェクト間でオリジンを共有するため名前空間を付ける
+// Storage key for the language choice. semnil.github.io shares one origin between projects, so it is namespaced
 const LANG_PREF_KEY = "aicmp-lang";
 
-// 初回訪問の言語リダイレクト (英語ページ専用・非対称)。
-// 保存済み選択が無く navigator.language が ja のとき、同一パスの /ja/ へ location.replace する。
-// /ja/ 側では発火させない: Googlebot (en ロケール) が /ja/ を描画した際に / へ飛ばすと
-// /ja/ のインデックスが壊れるため。en ページは Googlebot では条件不成立 (navigator=en) で無害。
-// トグル操作 (i18n.js で localStorage に保存) を以後尊重する。
-// 注: 変数は `var BP = ` (スペース入り) とし localizeToJa の `="..."` / `const BASE_PATH = ` パターンに一致させない
+// Language redirect on the first visit (English pages only, asymmetric).
+// When there is no saved choice and navigator.language is ja, location.replace to the same path under /ja/.
+// It does not fire on the /ja/ side: sending Googlebot (en locale) to / when it renders /ja/
+// would break the /ja/ index. On en pages the condition does not hold for Googlebot (navigator=en), so the redirect does not fire.
+// After that, the toggle choice (saved to localStorage by i18n.js) is respected.
+// Note: the variable is written `var BP = ` (with spaces) so it does not match localizeToJa's `="..."` / `const BASE_PATH = ` patterns
 function langRedirectSnippet() {
   return `<script>(function(){
 if(document.documentElement.lang==='ja')return;
@@ -537,9 +537,9 @@ location.replace(BP+'ja/'+location.pathname.slice(BP.length)+location.search+loc
 })();</script>`;
 }
 
-// alternates: { enUrl, jaUrl } (絶対 URL)。指定時に hreflang alternate + x-default と
-// 初回訪問の言語リダイレクトスニペットを出力する (404 など alternates 無しのページには出力しない)。
-// lang 属性は常に "en" で出力し、/ja/ ページは localizeToJa() が "ja" に書き換える。
+// alternates: { enUrl, jaUrl } (absolute URLs). When given, outputs hreflang alternate + x-default and
+// the first-visit language redirect snippet (not output for pages without alternates, such as 404).
+// The lang attribute is always output as "en", and localizeToJa() rewrites it to "ja" for /ja/ pages.
 function htmlHead(title, extra = "", ogp = null, alternates = null) {
   const ogpTags = ogp ? (() => {
     const t = escapeHtml(ogp.title || title);
@@ -581,65 +581,65 @@ ${extra}
 </head>`;
 }
 
-// 言語トグル。target は切替先言語 ("ja" → 「日本語」 / "en" → 「English」)。
-// テンプレートと localizeToJa() の両方がこの関数を使い、マークアップの真実を 1 箇所に保つ
+// Language toggle. target is the language to switch to ("ja" → 「日本語」 / "en" → 「English」).
+// Both the template and localizeToJa() use this function, keeping the markup's single source of truth in one place
 function langToggle(href, target) {
   const label = target === "ja" ? "日本語" : "English";
   return `<a class="lang-toggle" href="${escapeHtml(href)}" hreflang="${target}">${label}</a>`;
 }
 
-// 置換が期待件数に満たなければ throw する。regex 後処理方式 (localizeToJa) の既知の脆さを
-// 「テンプレート変更で静かに本番へ出る」から「ビルドが落ちる」に変える fail-fast ガード
+// Throws when the replacements fall short of the expected count. A fail-fast guard that turns the known fragility of the
+// regex post-processing approach (localizeToJa) from "a template change silently reaches production" into "the build fails"
 function mustReplace(html, pattern, replacement, minCount, label) {
   const found = typeof pattern === "string"
     ? html.split(pattern).length - 1
     : (html.match(pattern) || []).length;
   if (found < minCount) {
-    throw new Error(`localizeToJa: パターン不一致 (${label}): expected >= ${minCount}, found ${found}`);
+    throw new Error(`localizeToJa: pattern mismatch (${label}): expected >= ${minCount}, found ${found}`);
   }
   return html.replace(pattern, replacement);
 }
 
-// 英語ページの生成済み HTML を /ja/ ページに変換する。
-// - <html lang> を ja に
-// - 内部ページリンク (home / products / brands / categories / 比較フラグメント) を /ja/ 配下へ
-// - canonical / og:url を /ja/ URL へ (自己参照)
-// - index インラインスクリプトの PAGE_BASE を /ja/ へ (specs-link 用)
-// - 言語トグルを英語版へのリンクに差し替え
-// アセット (style.css / i18n.js / compare.js / favicon / products.json / sitemap.xml) は distinct な
-// ファイル名でルート配信のため、下記パターンには一致せず据え置かれる。
-// 本文テキストは i18n.js が lang=ja を見てクライアント翻訳する (Googlebot も lang 条件で可視)。
-// 全ページで必ず存在する結合点 (lang / canonical / og:url / トグル / index の PAGE_BASE) は
-// mustReplace で件数を検証する。件数がページ種別に依存するリンク書き換えは通常の replace。
+// Converts the generated HTML of an English page into the /ja/ page.
+// - <html lang> to ja
+// - internal page links (home / products / brands / categories / comparison fragment) under /ja/
+// - canonical / og:url to the /ja/ URL (self-referencing)
+// - PAGE_BASE in the index inline script to /ja/ (for specs-link)
+// - replaces the language toggle with a link to the English version
+// Assets (style.css / i18n.js / compare.js / favicon / products.json / sitemap.xml) are served from the root with distinct
+// file names, so they do not match the patterns below and are left as they are.
+// Body text is translated on the client by i18n.js from lang=ja (visible to Googlebot too through the lang condition).
+// The joints present on every page (lang / canonical / og:url / toggle / index's PAGE_BASE) have their counts
+// verified with mustReplace. Link rewrites whose count depends on the page kind use an ordinary replace.
 function localizeToJa(enHtml, enHref, jaHref, { hasInlineBase = false } = {}) {
   const bp = BASE_PATH;
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   let html = enHtml;
-  html = mustReplace(html, '<html lang="en">', '<html lang="ja">', 1, "lang 属性");
-  // 内部ページリンク: ="${bp}products/ 等 → ="${bp}ja/products/
+  html = mustReplace(html, '<html lang="en">', '<html lang="ja">', 1, "lang attribute");
+  // Internal page links: ="${bp}products/ etc. → ="${bp}ja/products/
   for (const seg of ["products/", "brands/", "categories/"]) {
     html = html.replace(new RegExp(`="${esc(bp + seg)}`, "g"), `="${bp}ja/${seg}`);
   }
-  // 比較フラグメント: ="${bp}#... → ="${bp}ja/#...
+  // Comparison fragment: ="${bp}#... → ="${bp}ja/#...
   html = html.replace(new RegExp(`="${esc(bp)}#`, "g"), `="${bp}ja/#`);
-  // ホームリンク (完全一致 ="${bp}") → ="${bp}ja/"
+  // Home link (exact match ="${bp}") → ="${bp}ja/"
   html = html.replace(new RegExp(`="${esc(bp)}"`, "g"), `="${bp}ja/"`);
   html = mustReplace(html, new RegExp(`(rel="canonical" href="${esc(SITE_URL + bp)})`, "g"), `$1ja/`, 1, "canonical");
   html = mustReplace(html, new RegExp(`(property="og:url" content="${esc(SITE_URL + bp)})`, "g"), `$1ja/`, 1, "og:url");
   html = mustReplace(html,
     `const PAGE_BASE = ${JSON.stringify(bp)};`,
     `const PAGE_BASE = ${JSON.stringify(bp + "ja/")};`,
-    hasInlineBase ? 1 : 0, "インライン PAGE_BASE");
+    hasInlineBase ? 1 : 0, "inline PAGE_BASE");
   html = mustReplace(html, langToggle(jaHref, "ja"), langToggle(enHref, "en"), 1, "lang-toggle");
   return html;
 }
 
 // Shared i18n script (written to dist/i18n.js)
 // PAGE_JA is expected to be set by each page before loading this script
-// 言語は URL で分離する (/ = 英語, /ja/ = 日本語)。i18n は navigator.language ではなく
-// <html lang> を見て動作する。これにより /ja/ ページは Googlebot (en ロケール) でも常に
-// 日本語化され、逆に / は常に英語のまま (hreflang + 言語トグルで相互誘導)。
-// window.__i18n.apply(root) を公開し、compare.js が挿入した DOM 部分木にも翻訳を適用する。
+// Languages are separated by URL (/ = English, /ja/ = Japanese). i18n works from <html lang>,
+// not navigator.language. So /ja/ pages are always shown in Japanese even to Googlebot (en locale),
+// and / always stays English (hreflang + the language toggle lead between them).
+// Exposes window.__i18n.apply(root) and also applies the translation to DOM subtrees inserted by compare.js.
 const I18N_JS = `(function(){
 var isJa=document.documentElement.lang==='ja';
 var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告',extSite:' (外部サイト)'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
@@ -659,23 +659,23 @@ el.addEventListener('click',function(){try{localStorage.setItem('${LANG_PREF_KEY
 })();`;
 
 // ─── Client-side compare renderer (dist/compare.js) ─────────────────────
-// 比較表をブラウザで描画するスクリプト。build.js のヘルパー (escapeHtml / sanitizeUrl /
-// displayValue / renderMeasurements / parseNumeric / diffClass) を .toString() で埋め込み、
-// サーバー生成の旧比較ページと同一のロジック・マークアップでレンダリングする (二重管理を避ける)。
-// data-i18n / data-i18n-label 付きで生成し、挿入後に window.__i18n.apply() で日本語化する。
-// 注: この方式は build.js が非トランスパイルの素の ESM として実行されることに依存する。
+// Script that renders the comparison table in the browser. Embeds build.js's helpers (escapeHtml / sanitizeUrl /
+// displayValue / renderMeasurements / parseNumeric / diffClass) via .toString() and
+// renders with the same logic and markup as the old server-generated comparison pages (avoids maintaining two copies).
+// Generates markup with data-i18n / data-i18n-label and translates it into Japanese with window.__i18n.apply() after insertion.
+// Note: this approach depends on build.js running as plain, untranspiled ESM.
 function compareJs() {
-  // 前提ガード: .toString() 埋め込みはトランスパイル/バンドルで '[native code]' 化すると壊れる
+  // Precondition guard: embedding via .toString() breaks if transpiling/bundling turns it into '[native code]'
   const embedded = [escapeHtml, sanitizeUrl, displayValue, renderMeasurements, parseNumeric, diffClass, fmtPrice, cellFor];
   for (const fn of embedded) {
     if (fn.toString().includes("[native code]")) {
-      throw new Error(`compareJs: ${fn.name} が native code 化されており埋め込めない`);
+      throw new Error(`compareJs: ${fn.name} has become native code and cannot be embedded`);
     }
   }
   return `(function(){
 "use strict";
 var ROOT_BASE=${JSON.stringify(BASE_PATH)};
-// products.json 等の共有アセットは常にルート。ページリンク (back-link) は現在言語のホームへ。
+// Shared assets such as products.json are always at the root. Page links (back-link) go to the current language's home.
 var PAGE_BASE=(location.pathname.indexOf(ROOT_BASE+'ja/')===0)?ROOT_BASE+'ja/':ROOT_BASE;
 var GROUPS=${safeJsonForScript(SPEC_GROUPS)};
 var LABELS=${safeJsonForScript(KEY_LABELS)};
@@ -757,7 +757,7 @@ function showCompare(slugA,slugB){
   cv.hidden=false;
   showStatus(cv,'loading','Loading\\u2026');
   ensureData().then(function(map){
-    // 取得完了までに別ペアへ遷移/離脱していたら stale 描画を中断
+    // Abort the stale render if the user navigated to another pair or left before the fetch completed
     var cur=parseHash();
     if(!cur||cur.a!==slugA||cur.b!==slugB)return;
     var a=map[slugA],b=map[slugB];
@@ -785,8 +785,8 @@ document.addEventListener('click',function(e){
     var first=document.getElementById('search-a');if(first)first.focus();
   }
 });
-// pushState 経路はクリックハンドラが直接 showSelector() を呼び、hash 遷移と履歴の戻る/進むは
-// いずれも hashchange で拾える (popstate を併用すると毎遷移で二重描画になる)
+// On the pushState path the click handler calls showSelector() directly, and hash navigation and history back/forward
+// are both caught by hashchange (also using popstate would render twice on every navigation)
 window.addEventListener('hashchange',route);
 route();
 })();`;
@@ -937,7 +937,7 @@ main { padding: 32px 0 64px; }
 .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.4); }
 .compare-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .product-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -2px; }
-/* 選択済み項目は accent 背景なので、白い内リングで focus ring を可視化する */
+/* The selected item has an accent background, so a white inner ring makes the focus ring visible */
 .product-item.selected:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px #fff, 0 0 0 3px var(--accent);
@@ -998,7 +998,7 @@ main { padding: 32px 0 64px; }
 .product-item .brand { font-weight: 600; }
 .product-item .meta {
   font-size: 0.8rem;
-  /* accent-light hover 背景 (#eff6ff) 上 5.6:1 / 白地 6.53:1 のコントラストを確保 */
+  /* Keeps a contrast of 5.6:1 on the accent-light hover background (#eff6ff) / 6.53:1 on white */
   color: #475569;
   margin-top: 2px;
 }
@@ -1029,7 +1029,7 @@ main { padding: 32px 0 64px; }
 
 /* ─ Comparison view (client-rendered) ─ */
 [hidden] { display: none !important; }
-/* コンテナへのプログラム的フォーカス (SR 読み上げ順制御) にリングは不要 */
+/* No ring is needed for programmatic focus on the container (controlling the SR reading order) */
 .compare-view:focus { outline: none; }
 .compare-status {
   padding: 32px 16px;
@@ -1119,7 +1119,7 @@ main { padding: 32px 0 64px; }
 }
 .spec-table .val-col { width: 36%; }
 .spec-table thead th { background: #f8fafc; }
-/* #94a3b8 は白地に対して 3.03:1 — 装飾用途として十分な可読性 */
+/* #94a3b8 is 3.03:1 against white — readable enough for decorative use */
 .spec-table .na { color: #94a3b8; }
 .spec-table .highlight { background: var(--accent-light); font-weight: 600; }
 .spec-table .highlight .hl-mark {
@@ -1146,7 +1146,7 @@ footer {
   text-align: center;
   padding: 32px 0;
   font-size: 0.8rem;
-  /* body bg (#f8f9fa) 上で 6.16:1 のコントラスト (WCAG AA 準拠) */
+  /* 6.16:1 contrast on the body bg (#f8f9fa) (meets WCAG AA) */
   color: #475569;
 }
 footer a { color: #475569; }
@@ -1256,7 +1256,7 @@ footer a:hover { color: var(--accent); }
 .notfound p { color: var(--text-secondary); }
 .notfound .compare-btn { color: #fff; margin: 16px 0 8px; }
 
-/* 減速モーションを好むユーザーのために transition / animation を最小化 */
+/* Minimizes transitions / animations for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     transition-duration: 0.01ms !important;
@@ -1290,8 +1290,8 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
   const headExtra = `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${SITE_URL}${BASE_PATH}">`;
   const alternates = { enUrl: `${SITE_URL}${BASE_PATH}`, jaUrl: `${SITE_URL}${BASE_PATH}ja/` };
 
-  // 静的なブラウズ導線 (ブランド別 / カテゴリ別ハブへのリンク)。製品ページへの
-  // レンダリング非依存のクロール経路を作り、リスト系クエリを取りに行く
+  // Static browse paths (links to the per-brand / per-category hubs). They create a crawl path to the product pages
+  // that does not depend on rendering, and target list-type queries
   const brandLinks = brandGroups.map((g) => `<li><a href="${BASE_PATH}brands/${g.slug}/">${escapeHtml(g.name)} <span class="count">(${g.items.length})</span></a></li>`).join("");
   const catLinks = categoryGroups.map((g) => `<li><a href="${BASE_PATH}categories/${g.slug}/">${escapeHtml(g.name)} <span class="count">(${g.items.length})</span></a></li>`).join("");
   const browseSection = `<section class="browse" aria-labelledby="browse-heading">
@@ -1372,7 +1372,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
   }
 
   const state = { a: null, b: null };
-  // listbox ごとの現在フォーカス中 option (aria-activedescendant 管理)
+  // The currently focused option per listbox (managing aria-activedescendant)
   const activeIdx = { a: -1, b: -1 };
   const lastResults = { a: [], b: [] };
 
@@ -1382,13 +1382,13 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
 
   function renderList(containerId, results, side) {
     const el = document.getElementById(containerId);
-    // 再描画前のアクティブ slug を保持し、絞り込み後に同一製品を追跡して idx を振り直す
+    // Keeps the active slug from before the re-render, and after filtering tracks the same product and renumbers idx
     const prevResults = lastResults[side];
     const prevIdx = activeIdx[side];
     const prevSlug = (prevIdx >= 0 && prevResults && prevResults[prevIdx]) ? prevResults[prevIdx].slug : null;
     lastResults[side] = results;
     if (results.length === 0) {
-      // role="presentation" にして listbox の option 数から除外 (aria-live で別途 0 件アナウンス)
+      // role="presentation" excludes it from the listbox's option count (aria-live announces 0 results separately)
       el.innerHTML = '<div role="presentation" style="padding:16px;color:#64748b;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
       activeIdx[side] = -1;
       syncActiveDescendant(side);
@@ -1398,7 +1398,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     el.innerHTML = results.map(p => {
       var sel = state[side] === p.slug ? ' selected' : '';
       var isDisabled = state[otherSide] === p.slug;
-      // button 要素の disabled 属性があれば SR は disabled 状態を正しく読むため aria-disabled は重複
+      // With the disabled attribute on the button element, SRs read the disabled state correctly, so aria-disabled would be redundant
       var ariaSel = sel ? ' aria-selected="true"' : ' aria-selected="false"';
       var priceStr = p.price ? '$' + Number(p.price).toLocaleString('en-US') : '';
       var specsLabel = isJa ? '仕様 ↗' : 'Specs ↗';
@@ -1418,7 +1418,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     el.querySelectorAll('.specs-link').forEach(link => {
       link.addEventListener('click', e => e.stopPropagation());
     });
-    // 絞り込み後も以前のアクティブ製品が残っていればその新 idx を追跡、なければクリア
+    // If the previously active product remains after filtering, track its new idx; otherwise clear it
     if (prevSlug) {
       var newIdx = -1;
       for (var i = 0; i < results.length; i++) {
@@ -1432,7 +1432,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
   }
 
   function syncActiveDescendant(side) {
-    // WAI-ARIA APG Combobox パターン準拠: aria-activedescendant は focusable な input 側に付ける
+    // Following the WAI-ARIA APG Combobox pattern: aria-activedescendant goes on the focusable input
     const inputEl = document.getElementById('search-' + side);
     const idx = activeIdx[side];
     const results = lastResults[side];
@@ -1460,11 +1460,11 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     } else {
       idx = idx + step;
     }
-    // 端まで disabled だけが続く場合は wrap せずに停止する
+    // When only disabled options continue to the end, stop without wrapping
     while (idx >= 0 && idx < results.length && isOptionDisabled(side, idx)) {
       idx += step;
     }
-    if (idx < 0 || idx >= results.length) return; // 有効な option が見つからなければ現状維持
+    if (idx < 0 || idx >= results.length) return; // Keep the current state if no enabled option is found
     activeIdx[side] = idx;
     syncActiveDescendant(side);
     scrollActiveIntoView(side);
@@ -1473,7 +1473,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
   function setActive(side, idx) {
     const results = lastResults[side];
     if (idx < 0 || idx >= results.length) return;
-    // disabled 先頭/末尾を飛ばして最初の有効 option を選ぶ
+    // Skip disabled options at the start/end and pick the first enabled option
     if (isOptionDisabled(side, idx)) {
       const step = idx === 0 ? 1 : -1;
       let i = idx + step;
@@ -1501,7 +1501,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     if (idx < 0 || idx >= results.length) return;
     const slug = results[idx].slug;
     const otherSide = side === 'a' ? 'b' : 'a';
-    if (state[otherSide] === slug) return; // 他方で選択済みなら無視
+    if (state[otherSide] === slug) return; // Ignore if already selected on the other side
     const opt = document.getElementById(optionId(side, slug));
     if (opt) selectItem(opt, side);
   }
@@ -1518,7 +1518,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     renderList('list-a', search(document.getElementById('search-a').value), 'a');
     renderList('list-b', search(document.getElementById('search-b').value), 'b');
     updateBtn();
-    // innerHTML 再描画で click 元 button が消えるため、combobox パターンに従って input にフォーカスを戻す
+    // The innerHTML re-render removes the clicked button, so focus goes back to the input as the combobox pattern says
     const inputEl = document.getElementById('search-' + side);
     if (inputEl) inputEl.focus();
   }
@@ -1567,10 +1567,10 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
 
   function bindListKeyboard(side) {
     const inputEl = document.getElementById('search-' + side);
-    // Combobox パターン: キーボード操作は input に集約 (listbox は非 focusable)
-    // テキスト編集を優先し、listbox ナビゲーションキーのみ捕捉する
+    // Combobox pattern: keyboard handling is consolidated on the input (the listbox is not focusable)
+    // Text editing takes priority; only the listbox navigation keys are captured
     inputEl.addEventListener('keydown', function(e) {
-      // 日本語 IME 変換確定中の Enter / 矢印キーでハンドラが誤発火するのを防ぐ
+      // Prevents the handler from firing by mistake on Enter / arrow keys while a Japanese IME conversion is being committed
       if (e.isComposing || e.keyCode === 229) return;
       const results = lastResults[side];
       switch (e.key) {
@@ -1583,7 +1583,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
           moveActive(side, -1);
           break;
         case 'Home':
-          // キャレット先頭移動よりも listbox 先頭ハイライトを優先
+          // Highlighting the first listbox option takes priority over moving the caret to the start
           if (results.length > 0) {
             e.preventDefault();
             setActive(side, 0);
@@ -1602,7 +1602,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
           }
           break;
         case 'Escape':
-          // type=search のブラウザデフォルトクリアを上書きし、常に検索ワードもリセットする
+          // Overrides the browser's default clearing for type=search and always resets the search term too
           e.preventDefault();
           clearActive(side);
           if (inputEl.value !== '') {
@@ -1631,7 +1631,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
 
   document.getElementById('compare-btn').addEventListener('click', () => {
     if (!state.a || !state.b) return;
-    // フラグメント URL に遷移。compare.js が hashchange を受けて比較表を描画する
+    // Navigate to the fragment URL. compare.js receives hashchange and renders the comparison table
     location.hash = '#a=' + encodeURIComponent(state.a) + '&b=' + encodeURIComponent(state.b);
   });
 })();
@@ -1675,15 +1675,15 @@ const HIGHER_BETTER = new Set(["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "a
 function diffClass(key, valA, valB) {
   if (!HIGHER_BETTER.has(key)) return ["", ""];
   const nA = parseNumeric(valA), nB = parseNumeric(valB);
-  // 片側でも NaN なら比較対象外 (欠損を「優位」とは見なさない)
+  // If either side is NaN it is not compared (a missing value is never treated as "better")
   if (isNaN(nA) || isNaN(nB)) return ["", ""];
   if (nA === nB) return ["", ""];
   return nA > nB ? [" highlight", ""] : ["", " highlight"];
 }
 
 // ─── Spec summary (machine-generated, data-driven) ─────────────────────────
-// xlsx の既存データのみから 2〜4 文の英日サマリーを生成する (推測で埋めない)。
-// 製品ページ固有のテキスト量を増やし、準重複ページ評価を緩和する狙い。
+// Generates a 2-4 sentence English/Japanese summary only from existing xlsx data (never filled in by guessing).
+// The aim is to increase the amount of text unique to each product page and ease near-duplicate page assessments.
 function specSummary(product) {
   const num = (v) => (v != null && v !== "" && !isNaN(Number(v)) ? Number(v) : null);
   const yes = (v) => v != null && String(v).trim().toLowerCase().startsWith("yes");
@@ -1745,7 +1745,7 @@ function specSummary(product) {
 function productPage(product, allProducts, buildDate) {
   const pageUrl = `${SITE_URL}${BASE_PATH}products/${product.slug}/`;
 
-  // Key specs for meta description (og:image のスペック行と同一のビルダーを共用)
+  // Key specs for meta description (shares the same builder as the og:image spec line)
   const specParts = keySpecParts(product);
   const priceStr = product.price ? fmtPrice(product.price) : "";
   const specSuffix = specParts.length ? `: ${specParts.join(", ")}${priceStr ? `, ${priceStr}` : ""}` : (priceStr ? `: ${priceStr}` : "");
@@ -1767,7 +1767,7 @@ function productPage(product, allProducts, buildDate) {
   if (extUrl) jsonLdObj.url = extUrl;
   const jsonLd = safeJsonForScriptLD(jsonLdObj);
 
-  // Spec table (2-column: label | value)。セル描画は compare.js と共用の cellFor
+  // Spec table (2-column: label | value). Cells are rendered by cellFor, shared with compare.js
   let tableRows = "";
   for (const group of SPEC_GROUPS) {
     tableRows += `<tr class="group-header" id="${group.id}"><td colspan="2"><a href="#${group.id}" data-i18n-label="${escapeHtml(group.titleJa)}">${escapeHtml(group.title)}</a></td></tr>\n`;
@@ -1790,8 +1790,8 @@ function productPage(product, allProducts, buildDate) {
   sameBrand.sort((x, y) => x.displayName.localeCompare(y.displayName));
   otherBrand.sort((x, y) => x.displayName.localeCompare(y.displayName));
 
-  // 比較は index ページのフラグメント URL に集約。現製品を左 (a) に置いた表示順で開く。
-  // フラグメントはクローラーに別 URL として扱われないため、正規順ソートは不要
+  // Comparisons are consolidated in the index page's fragment URL. It opens with the current product on the left (a).
+  // Crawlers do not treat fragments as separate URLs, so no canonical-order sorting is needed
   function compareHref(other) {
     return `${BASE_PATH}#a=${encodeURIComponent(product.slug)}&b=${encodeURIComponent(other.slug)}`;
   }
@@ -1869,8 +1869,8 @@ ${i18nScripts({
 }
 
 // ─── Hub pages (brand / category listings) ─────────────────────────────────
-// 製品ページへの静的な内部リンクを提供し、クロール経路とリスト系クエリの両方を取りに行く。
-// kind: "brand" | "category"。items は当該ブランド/カテゴリの製品配列 (表示順ソート済み)。
+// Provides static internal links to the product pages, targeting both the crawl path and list-type queries.
+// kind: "brand" | "category". items is the array of that brand's/category's products (already sorted in display order).
 function hubPage(kind, name, slug, items, totalProducts, buildDate) {
   const isBrand = kind === "brand";
   const dir = isBrand ? "brands" : "categories";
@@ -1895,7 +1895,7 @@ function hubPage(kind, name, slug, items, totalProducts, buildDate) {
 
   const listItems = items.map((p) => {
     const price = p.price ? ` · ${fmtPrice(p.price)}` : "";
-    // ブランドハブでは製品名 (モデル) を主表示、カテゴリハブではブランド+モデルを主表示
+    // Brand hubs show the product name (model) as the main label; category hubs show brand+model
     const primary = isBrand
       ? `<span class="brand">${escapeHtml(p.brand)}</span> ${escapeHtml(p.model)}`
       : `<span class="brand">${escapeHtml(p.displayName)}</span>`;
@@ -1946,9 +1946,9 @@ ${i18nScripts({
 }
 
 // ─── 404 page ────────────────────────────────────────────────────────────
-// GitHub Pages が任意パスの 404 で配信する静的ページ。旧比較 URL (フラグメント移行前) や
-// slug 変更由来の旧 URL に着地したユーザーを index / sitemap へ静的リンクで誘導する。
-// 自動リダイレクトは soft 404 のアンチパターンなので行わない。noindex で自身の登録を防ぐ。
+// The static page GitHub Pages serves for a 404 on any path. Leads users who land on old comparison URLs (before the move to fragments)
+// or old URLs from slug changes to index / sitemap with static links.
+// No automatic redirect, since that is the soft 404 anti-pattern. noindex keeps the page itself from being indexed.
 function notFoundPage() {
   const extra = `<meta name="robots" content="noindex">`;
   return `${htmlHead("Page not found — Audio Interface Comparator", extra)}
@@ -1994,7 +1994,7 @@ async function build() {
 
   const buildDate = new Date().toISOString().split("T")[0];
 
-  // Clean dist (既存ファイルを削除。OneDrive 等でロックされる場合はリトライ/スキップ)
+  // Clean dist (deletes existing files. Retries/skips when they are locked, e.g. by OneDrive)
   if (existsSync(DIST)) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -2034,7 +2034,7 @@ async function build() {
   writeFileSync(jsonPath, JSON.stringify(products, null, 2));
   console.log("Wrote products.json");
 
-  // ブランド / カテゴリのグルーピング (ハブページ + index のブラウズ導線用)
+  // Grouping by brand / category (for the hub pages + index's browse paths)
   const hubSlug = (name) => slugify(name, "");
   const groupBy = (getKey) => {
     const m = new Map();
@@ -2051,8 +2051,8 @@ async function build() {
   const brandGroups = groupBy((p) => p.brand);
   const categoryGroups = groupBy((p) => p.category);
 
-  // ハブ slug 衝突の fail-fast ガード (製品 slug と同じ不変条件をハブ名前空間にも適用)。
-  // 別名が同一 slug に潰れると writePair と og 画像がサイレント上書きになるため生成前に検出する
+  // Fail-fast guard for hub slug collisions (applies the same invariant as product slugs to the hub namespace).
+  // Detected before generation, because distinct names collapsing into one slug would make writePair and the og images silently overwrite each other
   for (const groups of [brandGroups, categoryGroups]) {
     const seen = new Map();
     for (const g of groups) {
@@ -2063,8 +2063,8 @@ async function build() {
     }
   }
 
-  // 各ページを英語 (ルート) と日本語 (/ja/) の 2 版で書き出すヘルパー。
-  // 日本語版は localizeToJa() で英語 HTML の lang / 内部 URL / canonical / トグルを書き換える。
+  // Helper that writes each page in 2 versions, English (root) and Japanese (/ja/).
+  // For the Japanese version, localizeToJa() rewrites the English HTML's lang / internal URLs / canonical / toggle.
   const writePair = (enHtml, relPath) => {
     const enHref = `${BASE_PATH}${relPath}`;
     const jaHref = `${BASE_PATH}ja/${relPath}`;
@@ -2073,7 +2073,7 @@ async function build() {
     writeFileSync(join(enDir, "index.html"), minifyHtml(enHtml));
     const jaDir = join(DIST, "ja", relPath);
     mkdirSync(jaDir, { recursive: true });
-    // インライン PAGE_BASE (specs-link 用) を持つのは index のみ
+    // Only index has the inline PAGE_BASE (for specs-link)
     const jaHtml = localizeToJa(enHtml, enHref, jaHref, { hasInlineBase: relPath === "" });
     writeFileSync(join(jaDir, "index.html"), minifyHtml(jaHtml));
   };
@@ -2082,12 +2082,12 @@ async function build() {
   writePair(indexPage(products, brandGroups, categoryGroups, buildDate), "");
   console.log("Wrote index.html (+ ja/)");
 
-  // 3. Client-side compare renderer (dist/compare.js, 共有)
+  // 3. Client-side compare renderer (dist/compare.js, shared)
   writeFileSync(join(DIST, "compare.js"), compareJs());
   console.log("Wrote compare.js");
 
-  // slug 衝突の fail-fast ガード。製品ページ (dist/products/{slug}/) は衝突時に
-  // サイレント上書きになるため、生成前に必ず検出する (build の不変条件)
+  // Fail-fast guard for slug collisions. Product pages (dist/products/{slug}/) would be silently
+  // overwritten on a collision, so it is always detected before generation (a build invariant)
   const slugMap = new Map();
   for (const p of products) {
     if (slugMap.has(p.slug)) {
@@ -2114,8 +2114,8 @@ async function build() {
   }
   console.log(`Generated ${brandGroups.length} brand + ${categoryGroups.length} category hub pages (+ ja/)`);
 
-  // 6. sitemap.xml (index + product + hub、各 en + ja)
-  // 比較はフラグメント URL でクロール対象外のため sitemap には載せない
+  // 6. sitemap.xml (index + product + hub, each en + ja)
+  // Comparisons are fragment URLs and not crawl targets, so they are not in the sitemap
   const pagePaths = ["", ...products.map((p) => `products/${p.slug}/`),
     ...hubSets.flatMap(({ dir, groups }) => groups.map((g) => `${dir}/${g.slug}/`))];
   let sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
@@ -2128,9 +2128,9 @@ async function build() {
   writeFileSync(join(DIST, "sitemap.xml"), sitemap);
   console.log(`Wrote sitemap.xml (${pagePaths.length * 2} URLs: ${pagePaths.length} paths × en/ja)`);
 
-  // 7. og:image (SNS 共有カード。en/ja 共用のため言語別には生成しない)
-  // PNG エンコードが og 工程の実測 9 割超を占めるため、バッチ単位で非同期並列化する。
-  // バッチ内は「全描画完了 → 全エンコード開始」の順序が必須 (drawOgCard のコメント参照)
+  // 7. og:image (social share cards. Shared by en/ja, so not generated per language)
+  // PNG encoding takes over 90% of the measured og step, so it is parallelized asynchronously per batch.
+  // Within a batch the order "finish all drawing → start all encoding" is required (see drawOgCard's comment)
   mkdirSync(join(DIST, "og", "products"), { recursive: true });
   for (const { dir } of hubSets) mkdirSync(join(DIST, "og", dir), { recursive: true });
   const ogJobs = [
@@ -2161,34 +2161,34 @@ async function build() {
   const OG_BATCH = 8;
   for (let i = 0; i < ogJobs.length; i += OG_BATCH) {
     const batch = ogJobs.slice(i, i + OG_BATCH);
-    // 全 canvas 描画 → 一括 encode の順序を守る。描画と encode のインターリーブは
-    // @napi-rs/canvas が darwin arm64 で SIGSEGV する (100% 再現) ため変更禁止
+    // Keep the order: draw every canvas → encode all at once. Interleaving drawing and encoding makes
+    // @napi-rs/canvas SIGSEGV on darwin arm64 (100% reproducible), so do not change it
     const canvases = batch.map((job) => drawOgCard(job.opts));
     const bufs = await Promise.all(canvases.map((c) => c.encode("png")));
     batch.forEach((job, k) => writeFileSync(job.file, bufs[k]));
   }
   console.log(`Wrote og images (${ogJobs.length}: 1 site + ${products.length} products + ${brandGroups.length + categoryGroups.length} hubs)`);
 
-  // 8. robots.txt (Sitemap 行のみ。比較 URL のクロールをブロックしない — 404 確認を妨げないため)
+  // 8. robots.txt (Sitemap line only. Does not block crawling of comparison URLs — so as not to prevent the 404 from being confirmed)
   const robots = `User-agent: *\nAllow: /\nSitemap: ${SITE_URL}${BASE_PATH}sitemap.xml\n`;
   writeFileSync(join(DIST, "robots.txt"), robots);
   console.log("Wrote robots.txt");
 
-  // 9. 404.html (GitHub Pages のカスタム 404。自動リダイレクトはしない)
+  // 9. 404.html (GitHub Pages' custom 404. No automatic redirect)
   writeFileSync(join(DIST, "404.html"), minifyHtml(notFoundPage()));
   console.log("Wrote 404.html");
 
   console.timeEnd("build");
 }
 
-// エントリポイントとして直接実行された場合のみビルドを起動
-// (テストから import したときに副作用で xlsx 読み込みが走るのを防ぐ)
-// pathToFileURL を使い Windows (C:\\path\\to\\build.js) でも正しく一致させる
+// Start the build only when run directly as the entry point
+// (prevents reading the xlsx as a side effect when a test imports it)
+// pathToFileURL makes it match correctly on Windows (C:\\path\\to\\build.js) too
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   build();
 }
 
-// テスト用エクスポート (本番ビルドには影響しない)
+// Exports for tests (no effect on the production build)
 export function _slugify(brand, model) { return slugify(brand, model); }
 export function _escapeHtml(str) { return escapeHtml(str); }
 export { COLUMNS, diffClass as _diffClass };

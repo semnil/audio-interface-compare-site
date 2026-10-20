@@ -1,9 +1,9 @@
 name: Build & Deploy to GitHub Pages
 
 on:
-  # 手動トリガー
+  # Manual trigger
   workflow_dispatch:
-  # ビルド結果に影響するファイル更新時に自動ビルド
+  # Build automatically when files that affect the build output are updated
   push:
     paths:
       - "data/audio_interfaces.xlsx"
@@ -44,8 +44,8 @@ jobs:
       - run: npm ci
         timeout-minutes: 10
 
-      # BASE_PATH を渡してビルド
-      # カスタムドメインなら "/" 、repo pages なら "/repo-name/" になる
+      # Build with BASE_PATH
+      # It becomes "/" for a custom domain and "/repo-name/" for repo pages
       - run: npm run build
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/

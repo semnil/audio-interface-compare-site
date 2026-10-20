@@ -1,8 +1,8 @@
 name: CI
 
-# 全 PR で依存のインストール・テスト・ビルドを実行する。デプロイはしない (build-deploy.yml の役割)。
-# ビルドには BASE_PATH などを渡さず、src/build.js の既定値を使う。
-# ジョブ test は main の必須チェック。トリガーにフィルタを付けない (フィルタで起動しなかった PR では必須チェックが報告されず、マージできなくなる)。
+# Installs dependencies, runs the tests and builds on every PR. Does not deploy (that is build-deploy.yml's role).
+# The build is given no BASE_PATH or the like and uses src/build.js's defaults.
+# The job test is a required check on main. The trigger has no filter (on a PR that a filter kept from starting, the required check would not be reported and the PR could not be merged).
 on:
   pull_request:
 
