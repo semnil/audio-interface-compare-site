@@ -4,38 +4,38 @@
   {
    "id": 0,
    "prompt": "オーディオインターフェースのスペック照合、こないだ途中で止まってた気がする。今どこまで終わってるか確認して、再開に必要な対象 ids と Workflow の起動引数を JSON で resume-plan.json に書き出して。ワークフロー自体はまだ起動しないで。",
-   "expected_output": "validate-results.js を実行し、state.json の nextIds と一致する ids、workflow.js の scriptPath、workDir を含む resume-plan.json を出力する",
+   "expected_output": "Runs validate-results.js and outputs resume-plan.json containing ids matching nextIds in state.json, the scriptPath of workflow.js and the workDir",
    "files": [],
    "assertions": [
-    "resume-plan.json が存在し有効な JSON である",
-    "再開対象 ids が work/state.json の nextIds と集合一致する",
-    "起動引数に tools/verify/workflow.js の scriptPath と tools/verify/work の workDir (絶対パス) が含まれる",
-    "照合を実行していない (work/results/ のファイル数が実行前から増えていない)",
-    "summary.md の照合済み/未完了件数が work/state.json の集計と一致している"
+    "resume-plan.json exists and is valid JSON",
+    "The ids to resume match the nextIds in work/state.json as a set",
+    "The start arguments include the scriptPath of tools/verify/workflow.js and the workDir of tools/verify/work (absolute paths)",
+    "Verification was not run (the number of files in work/results/ has not increased since before the run)",
+    "The verified/incomplete counts in summary.md match the tallies in work/state.json"
    ]
   },
   {
    "id": 1,
    "prompt": "スペック照合のレポートを最新の結果から作り直して report.md に置いて。ok/partial/wrong_page/failed の件数と相違検出の機種数も教えて。",
-   "expected_output": "validate を通してから build-report.js で report.md を生成し、byStatus と相違機種数が結果ファイルの実態と一致する",
+   "expected_output": "Runs validate first, then generates report.md with build-report.js, with byStatus and the number of models with discrepancies matching the actual result files",
    "files": [],
    "assertions": [
-    "report.md が指定パスに生成されている",
-    "report.md の取得ステータス件数が work/state.json の byStatus と一致する",
-    "summary.md の報告件数が report.md の内容と矛盾しない",
-    "相違検出の機種数が結果ファイルの実態 (mismatches 非空の件数) と一致する"
+    "report.md is generated at the given path",
+    "The fetch-status counts in report.md match byStatus in work/state.json",
+    "The counts reported in summary.md do not contradict the content of report.md",
+    "The number of models with detected discrepancies matches the actual result files (the count with non-empty mismatches)"
    ]
   },
   {
    "id": 2,
    "prompt": "照合できてない (failed) 機種の一覧をブランド別に集計して教えて。再挑戦するときのコマンドと引数も。結果は failed-summary.md に保存して。",
-   "expected_output": "failed の全機種をブランド別に正しく集計し、--retry-failed による再挑戦手順と Workflow 起動引数を示す",
+   "expected_output": "Correctly tallies every failed model by brand, and shows the retry procedure with --retry-failed and the Workflow start arguments",
    "files": [],
    "assertions": [
-    "failed-summary.md に failed の全機種が列挙されている (state.json の failed と一致)",
-    "ブランド別集計の合計が state.json の failed 件数と一致する",
-    "再挑戦手順として validate-results.js --retry-failed (または nextIds 経由) と Workflow 起動引数が正しく示されている",
-    "work/results/ の failed 結果が退避・削除されずに残っている"
+    "failed-summary.md lists every failed model (matching failed in state.json)",
+    "The total of the per-brand tally matches the failed count in state.json",
+    "The retry procedure correctly shows validate-results.js --retry-failed (or via nextIds) and the Workflow start arguments",
+    "The failed results in work/results/ remain, neither moved aside nor deleted"
    ]
   }
  ]

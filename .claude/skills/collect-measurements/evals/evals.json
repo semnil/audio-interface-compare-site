@@ -4,7 +4,7 @@
     {
       "id": "found-data-single",
       "prompt": "Universal Audio Volt 2 の測定レポート（ASR や RMAA など客観測定）のリンクを、data/audio_interfaces.xlsx の Measurement Reports 列に追加したい。収集して反映の手前まで進めて。",
-      "expected_output": "Volt 2 の客観測定ページ（ASR の APx ベンチ等）を 1〜数本、update-xlsx.js 形式の collect-result.json に {product, urls:[{source,url,...}]} でまとめ、dry-run プレビューを提示。--apply は打たない。推測 URL を載せない。",
+      "expected_output": "Gathers one or a few objective measurement pages for Volt 2 (ASR's APx bench, etc.) into a collect-result.json in update-xlsx.js format as {product, urls:[{source,url,...}]}, and presents the dry-run preview. Does not run --apply. Lists no guessed URLs.",
       "files": [],
       "assertions": [
         "collect-result.json exists and parses as update-xlsx.js format (products[] with product + urls[])",
@@ -18,7 +18,7 @@
     {
       "id": "batch-gapfill",
       "prompt": "Measurement Reports 列が空になっている Universal Audio Apollo Twin X DUO Gen2 と Apollo Twin X QUAD Gen2 に、客観測定のリンクを付けて。",
-      "expected_output": "2 機種分を 1 つの collect-result.json にまとめる。product 名は xlsx の Brand+Model と完全一致。測定を含むページのみ採用し、dry-run で 2 機種の PREVIEW が出る（測定が無い機種は urls:[] で正直に）。",
+      "expected_output": "Gathers both models into a single collect-result.json. Product names exactly match the xlsx's Brand+Model. Adopts only pages containing measurements, and the dry-run shows PREVIEW for both models (a model without measurements honestly gets urls:[]).",
       "files": [],
       "assertions": [
         "collect-result.json contains both products with exact xlsx names ('Universal Audio Apollo Twin X DUO Gen2' and 'Universal Audio Apollo Twin X QUAD Gen2')",
@@ -30,7 +30,7 @@
     {
       "id": "honesty-empty",
       "prompt": "Allen & Heath CQ-12T の測定レポートを Measurement Reports に足しておいて。",
-      "expected_output": "CQ-12T はデジタルミキサーで第三者の APx/RMAA ベンチが乏しい想定。客観測定が見つからなければ urls:[] を返し、推測 URL や主観レビュー・小売ページを測定ソースとして捏造しない。見つかった場合のみ採用。",
+      "expected_output": "CQ-12T is a digital mixer, assumed to have few third-party APx/RMAA benches. If no objective measurement is found, returns urls:[] and does not fabricate guessed URLs or pass off subjective reviews or retail pages as measurement sources. Adopts one only if found.",
       "files": [],
       "assertions": [
         "collect-result.json exists with product == 'Allen & Heath CQ-12T'",

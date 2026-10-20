@@ -1,190 +1,193 @@
 # Audio Interface Compare Site
 
-## プロジェクト概要
+## Project overview
 
-オーディオインターフェースの仕様比較サイト。xlsx スプレッドシートから製品ページ・ハブページを静的生成し、比較はクライアントサイドのフラグメント URL で動的描画する。GitHub Pages で無料配信。
+A spec comparison site for audio interfaces. Product pages and hub pages are statically generated from an xlsx spreadsheet, and comparisons are rendered dynamically on the client side through fragment URLs. Served for free on GitHub Pages.
 
-2026-07 に比較ページの静的生成 (全組合せ 67,340 枚、dist 1.0GB) を全廃した。Google のインデックス評価 (登録 41/認識 21,900) とクロールバジェット、GitHub Pages の 1GB 上限に対する対応で、比較クエリの SEO は意図的に放棄している (経緯は GSC 分析による)。
+In 2026-07 the static generation of comparison pages (every pair, 67,340 pages, dist 1.0GB) was abolished entirely. This responds to Google's indexing assessment (41 indexed / 21,900 discovered), the crawl budget and GitHub Pages' 1GB limit; SEO for comparison queries is deliberately given up (the history comes from the GSC analysis).
 
-## アーキテクチャ
+- **Override of the global CLAUDE.md's 「ドキュメント」 language rule**: this file is written entirely in English, and human-facing documents are written in English, each with a Japanese counterpart beside it (`<name>.ja.md`, e.g. `README.md` / `README.ja.md`, `tools/verify/README.md` / `tools/verify/README.ja.md`). The skills under `.claude/skills/` are agent instructions and are written in English only, with no Japanese counterpart; the Japanese phrases in their `description` and the `prompt` of their evals stay in Japanese, because they are what the operator types. Commit messages and PR titles/bodies are in English, keeping the existing conventional-commit prefixes (`fix:` / `feat:` / `docs:` / `ci:` / `chore(deps):`). The site's own Japanese (the `/ja/` mirror and `i18n.js`) is product UI, not documentation — see "Multilingual (/ja/ + hreflang)"
+
+## Architecture
 
 ```mermaid
 flowchart LR
   root["audio-interface-compare-site/"]
-  root --> wfBuild[".github/workflows/build-deploy.yml<br>GitHub Actions (push / 手動でビルドし GitHub Pages へデプロイ)"]
-  root --> wfMain[".github/workflows/workflow-checks-main.yml<br>全 PR の必須チェック workflow-tests-main (action の固定検査。pull_request_target で既定ブランチの定義を使う)"]
-  root --> wfTest[".github/workflows/workflow-checks-test.yml<br>検査の取得ステップのフィクスチャテストを実行"]
-  root --> wfCi[".github/workflows/ci.yml<br>全 PR で npm ci・npm test・npm run build (デプロイなし)。main の必須チェック test"]
-  root --> wfAuto[".github/workflows/dependabot-auto-merge.yml<br>Dependabot の PR で更新が semver の patch なら自動マージを予約。main の必須チェック auto-merge"]
-  root --> testSh[".github/tests/workflow-checks-test.sh<br>フィクスチャテスト本体 (bash + yq)"]
-  root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ は追跡、skills/*-workspace/ は除外), tools/{verify,discover,measurements}/work/, product-page-verification-report.md"]
-  root --> pkg["package.json<br>Node >=18, 依存: exceljs, @napi-rs/canvas (og:image 生成)"]
-  root --> xlsx["data/audio_interfaces.xlsx<br>スペックデータ (ソース。最終列=Measurement Reports)"]
-  root --> buildJs["src/build.js<br>ビルドスクリプト (xlsx から JSON・静的HTML・compare.js・og画像を生成)"]
-  root --> skills[".claude/skills/<br>運用スキル (verify-products: スペック照合、discover-products: 新製品検出、collect-measurements: Measurement Reports 収集。*-workspace/ は git 管理外)"]
-  root --> tools["tools/<br>xlsx 移行スクリプト (apply-product-changes.js: 行の追加/削除、update-xlsx.js: Measurement Reports 追記、add-rca-columns.js: RCA 列の追加)"]
-  tools --> verify["verify/<br>製品スペック自動照合パイプライン (README.md 参照。work/ は git 管理外)"]
-  tools --> discover["discover/work/<br>新製品検出 (カタログ監査) の作業領域 (git 管理外。手順は .claude/skills/discover-products)"]
-  tools --> measurements["measurements/work/<br>測定レポート収集の作業領域 (git 管理外。手順は .claude/skills/collect-measurements)"]
-  root --> tests["tests/<br>node:test ベースのテストスイート"]
-  root --> dist["dist/<br>生成物 (gitignore 対象)"]
-  dist --> distIndex["index.html<br>トップページ (製品選択UI + 検索 + 動的比較ビュー + ブラウズ導線)"]
-  dist --> distAssets["style.css / i18n.js / compare.js<br>共通 CSS・多言語 (lang 駆動)・クライアント比較レンダラー"]
-  dist --> distJson["products.json<br>全製品データ JSON (検索 + 動的比較のデータソース)"]
-  dist --> distSitemap["sitemap.xml<br>(index + 製品 + ハブ) × (en + ja)"]
-  dist --> distRobots["robots.txt / 404.html<br>Sitemap 行のみ / カスタム 404 (自動リダイレクトなし・noindex)"]
-  dist --> distOg["og/<br>og:image 共有カード (site.png, products/, brands/, categories/)"]
-  dist --> distProducts["products/{slug}/<br>個別製品ページ (製品数分)"]
-  dist --> distHubs["brands/{slug}/ , categories/{slug}/<br>ブランド別・カテゴリ別ハブページ"]
-  dist --> distJa["ja/<br>日本語版ミラー (index, products/, brands/, categories/)"]
+  root --> wfBuild[".github/workflows/build-deploy.yml<br>GitHub Actions (builds on push / manual run and deploys to GitHub Pages)"]
+  root --> wfMain[".github/workflows/workflow-checks-main.yml<br>Required check workflow-tests-main on every PR (action pinning check. Uses the default branch's definition via pull_request_target)"]
+  root --> wfTest[".github/workflows/workflow-checks-test.yml<br>Runs the fixture tests of the check's fetch step"]
+  root --> wfCi[".github/workflows/ci.yml<br>npm ci, npm test, npm run build on every PR (no deploy). Required check test on main"]
+  root --> wfAuto[".github/workflows/dependabot-auto-merge.yml<br>Schedules auto-merge on Dependabot PRs whose update is a semver patch. Required check auto-merge on main"]
+  root --> testSh[".github/tests/workflow-checks-test.sh<br>Fixture test itself (bash + yq)"]
+  root --> readme["README.md / README.ja.md<br>Overview of the site, building, tests and data maintenance (English / Japanese)"]
+  root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ tracked, skills/*-workspace/ excluded), tools/{verify,discover,measurements}/work/, product-page-verification-report.md"]
+  root --> pkg["package.json<br>Node >=18, dependencies: exceljs, @napi-rs/canvas (og:image generation)"]
+  root --> xlsx["data/audio_interfaces.xlsx<br>Spec data (the source. Final column = Measurement Reports)"]
+  root --> buildJs["src/build.js<br>Build script (generates JSON, static HTML, compare.js and og images from the xlsx)"]
+  root --> skills[".claude/skills/<br>Operational skills (verify-products: spec verification, discover-products: new product detection, collect-measurements: Measurement Reports collection. *-workspace/ is outside git)"]
+  root --> tools["tools/<br>xlsx migration scripts (apply-product-changes.js: adding/removing rows, update-xlsx.js: appending Measurement Reports, add-rca-columns.js: adding the RCA columns)"]
+  tools --> verify["verify/<br>Automatic product spec verification pipeline (see README.md / README.ja.md. work/ is outside git)"]
+  tools --> discover["discover/work/<br>Work area of new product detection (catalog audit) (outside git. Procedure in .claude/skills/discover-products)"]
+  tools --> measurements["measurements/work/<br>Work area of measurement report collection (outside git. Procedure in .claude/skills/collect-measurements)"]
+  root --> tests["tests/<br>Test suite based on node:test"]
+  root --> dist["dist/<br>Generated output (gitignored)"]
+  dist --> distIndex["index.html<br>Top page (product selection UI + search + dynamic comparison view + browse paths)"]
+  dist --> distAssets["style.css / i18n.js / compare.js<br>Shared CSS, multilingual (lang-driven), client-side comparison renderer"]
+  dist --> distJson["products.json<br>JSON of all product data (data source for search + dynamic comparison)"]
+  dist --> distSitemap["sitemap.xml<br>(index + products + hubs) × (en + ja)"]
+  dist --> distRobots["robots.txt / 404.html<br>Sitemap line only / custom 404 (no automatic redirect, noindex)"]
+  dist --> distOg["og/<br>og:image share cards (site.png, products/, brands/, categories/)"]
+  dist --> distProducts["products/{slug}/<br>Individual product pages (one per product)"]
+  dist --> distHubs["brands/{slug}/ , categories/{slug}/<br>Per-brand and per-category hub pages"]
+  dist --> distJa["ja/<br>Japanese mirror (index, products/, brands/, categories/)"]
 ```
 
-## 主要な設計判断
+## Key design decisions
 
-### 静的サイト生成 + クライアント動的比較
-- `node src/build.js` で xlsx → 全 HTML を一括生成
-- フレームワーク不使用。依存は exceljs + @napi-rs/canvas (og:image のテキスト描画用に許容した唯一の native 依存) のみ。この 2 つはグローバル規約「技術スタック」の外部依存ゼロに対する例外として宣言する。package.json の `overrides.uuid: ^14.0.0` は exceljs の transitive 依存の脆弱性 (GHSA-w5hq-g745-h8pq) 対応
-- **比較ページの静的生成は全廃**。比較は index 上のフラグメント URL `/#a={slug}&b={slug}` で `compare.js` がブラウザ描画する
-  - フラグメントはクローラーに別 URL として扱われず、クロール対象は index + 製品 + ハブに限定される
-  - `compare.js` は build.js のヘルパー (escapeHtml / sanitizeUrl / displayValue / renderMeasurements / parseNumeric / diffClass / fmtPrice / cellFor) を `.toString()` で埋め込んで生成する (単一の真実。build.js が素の ESM で実行されることに依存。'[native code]' 化はビルド時 assert、等価性は vm スモークテストで担保)
-  - products.json を初回比較時に lazy fetch (静的ファイル、バックエンドなし)。URL の slug は map 参照で解決し、未知 slug は not-found 表示 (生 echo しない)
-- HTML minify + 共通 CSS/JS の外部参照化でページあたりのサイズを圧縮
+### Static site generation + client-side dynamic comparison
+- `node src/build.js` generates all HTML from the xlsx in one pass
+- No framework. The only dependencies are exceljs + @napi-rs/canvas (the one native dependency allowed, for drawing text on og:image). These two are declared as an exception to the zero-external-dependencies rule in the global conventions' 「技術スタック」. `overrides.uuid: ^14.0.0` in package.json addresses a vulnerability in a transitive dependency of exceljs (GHSA-w5hq-g745-h8pq)
+- **Static generation of comparison pages is abolished entirely**. Comparisons are rendered in the browser by `compare.js` through the fragment URL `/#a={slug}&b={slug}` on index
+  - Crawlers do not treat fragments as separate URLs, so the crawl targets are limited to index + products + hubs
+  - `compare.js` is generated by embedding build.js's helpers (escapeHtml / sanitizeUrl / displayValue / renderMeasurements / parseNumeric / diffClass / fmtPrice / cellFor) via `.toString()` (a single source of truth. Depends on build.js running as plain ESM. Turning into '[native code]' is asserted at build time, and equivalence is guaranteed by a vm smoke test)
+  - products.json is lazily fetched on the first comparison (a static file, no backend). Slugs in the URL are resolved through a map lookup, and an unknown slug shows not-found (never echoed raw)
+- Page size is reduced by HTML minification + referencing shared CSS/JS externally
 
-### クライアント検索
-- 製品一覧 JSON (検索・選択 UI 用のフィールドのみ。全スペックは products.json) を index.html 内にインライン埋め込み
-- ブラウザ側でトークン分割マッチ (外部ライブラリ不使用)
-- バックエンド/API 呼び出しなし (動的比較の products.json fetch は静的ファイル)
+### Client-side search
+- The product list JSON (only the fields for the search and selection UI. Full specs are in products.json) is embedded inline in index.html
+- Token-split matching in the browser (no external library)
+- No backend/API calls (the products.json fetch for dynamic comparison is a static file)
 
-### BASE_PATH 対応
-- 環境変数 `BASE_PATH` で全リンクのプレフィックスを制御
-- GitHub Pages のサブディレクトリ配信 (`/repo-name/`) とカスタムドメイン (`/`) の両方に対応
-- GitHub Actions の `actions/configure-pages` が `base_path` を自動解決して渡す
-- compare.js は「アセット = ルート (ROOT_BASE)」「ページリンク = 言語別 (location.pathname から /ja/ を検出)」を区別する
+### BASE_PATH support
+- The environment variable `BASE_PATH` controls the prefix of every link
+- Supports both GitHub Pages subdirectory serving (`/repo-name/`) and a custom domain (`/`)
+- `actions/configure-pages` in GitHub Actions resolves `base_path` automatically and passes it
+- compare.js distinguishes "assets = root (ROOT_BASE)" from "page links = per language (detects /ja/ from location.pathname)"
 
-### URL 設計
-- slug 生成: `{brand}-{model}` を lowercase 化、`+` → `-plus` 変換、非英数は `-` に統一
-- 比較 URL: `/#a={slugA}&b={slugB}` (表示順を保持。フラグメントなので正規順ソート不要)
-- ハブ: `/brands/{brand-slug}/`, `/categories/{category-slug}/` (slug は slugify(name, "") で生成)
-- 日本語版: 全ページを `/ja/` 配下にミラー (canonical は各言語版が自己参照、hreflang で相互注釈)
+### URL design
+- Slug generation: lowercase `{brand}-{model}`, convert `+` → `-plus`, unify non-alphanumerics to `-`
+- Comparison URL: `/#a={slugA}&b={slugB}` (keeps the display order. It is a fragment, so no canonical-order sorting is needed)
+- Hubs: `/brands/{brand-slug}/`, `/categories/{category-slug}/` (slugs generated with slugify(name, ""))
+- Japanese version: every page is mirrored under `/ja/` (each language version's canonical points to itself, cross-annotated with hreflang)
 
-### セキュリティ / エスケープ
-- `safeJsonForScript(obj)` — PRODUCTS インライン JSON 用 (`<` / U+2028 / U+2029 をエスケープ)
-- `safeJsonForScriptLD(obj)` — JSON-LD 用 (上記 + `&` → `\u0026`)
-- `sanitizeUrl(s)` — WHATWG URL パーサで http/https のみ通過。外部製品リンクのスキーム検証
-- `escapeHtml` は `htmlHead` 内で 1 回だけ呼ぶ設計で二重エスケープを避けている
-- 副作用防止: `src/build.js` は `import.meta.url === pathToFileURL(process.argv[1]).href` ガードで、import 時にビルドが走らないようにしている
+### Security / escaping
+- `safeJsonForScript(obj)` — for the PRODUCTS inline JSON (escapes `<` / U+2028 / U+2029)
+- `safeJsonForScriptLD(obj)` — for JSON-LD (the above + `&` → `&`)
+- `sanitizeUrl(s)` — passes only http/https via the WHATWG URL parser. Scheme validation for external product links
+- `escapeHtml` is designed to be called only once, inside `htmlHead`, avoiding double escaping
+- Preventing side effects: `src/build.js` uses the guard `import.meta.url === pathToFileURL(process.argv[1]).href` so that importing it does not run the build
 
-### アクセシビリティ (UI)
-- 製品選択 UI は WAI-ARIA 1.2 Combobox (Editable with List Autocomplete) パターン準拠
-  - input が `role="combobox"` + `aria-controls/autocomplete/expanded/activedescendant`
-  - listbox は `tabindex="-1"` (Chromium のスクロールコンテナ暗黙フォーカス抑制)
-  - 各 option は `<button role="option">` + `disabled` 属性のみ (aria-disabled は冗長なので付与しない)
-  - 各アイテムは `.product-item-wrap` でラップし、右端に「Specs ↗」リンクを絶対配置 (`tabindex="-1"`, `stopPropagation` で選択動作と分離)
-  - キーボード: ArrowUp/Down/Home/End/Enter/Escape を input に集約。IME composition 中 (`e.isComposing`) は無視
-  - 検索絞り込み後は slug ベースで active option を復元
-- skip-link、`<main id="main">`、テーブルの `<caption class="sr-only">` + `scope="col"/"row"`、ハイライトセルには ✓ + `<span class="sr-only">Better value</span>`
-- `prefers-reduced-motion` 対応
+### Accessibility (UI)
+- The product selection UI follows the WAI-ARIA 1.2 Combobox (Editable with List Autocomplete) pattern
+  - The input has `role="combobox"` + `aria-controls/autocomplete/expanded/activedescendant`
+  - The listbox has `tabindex="-1"` (suppresses Chromium's implicit focus on scroll containers)
+  - Each option is a `<button role="option">` + only the `disabled` attribute (aria-disabled is redundant, so it is not added)
+  - Each item is wrapped in `.product-item-wrap`, with a "Specs ↗" link absolutely positioned at the right edge (`tabindex="-1"`, separated from the selection action with `stopPropagation`)
+  - Keyboard: ArrowUp/Down/Home/End/Enter/Escape are consolidated on the input. Ignored during IME composition (`e.isComposing`)
+  - After search filtering, the active option is restored by slug
+- skip-link, `<main id="main">`, `<caption class="sr-only">` + `scope="col"/"row"` on tables, ✓ + `<span class="sr-only">Better value</span>` on highlighted cells
+- `prefers-reduced-motion` support
 
-### ビルドの不変条件
-- slug 衝突は build 時に `Error('Slug collision: ...')` で fail fast (製品ページ生成前のガード)
-- `BASE_PATH` は trim + 連続スラッシュ畳み込みで正規化
-- `diffClass` は両辺が数値でない限りハイライトを抑止 (片側欠損での誤優劣表示を防ぐ)。compare.js に埋め込まれクライアント側で実行される
-- 比較ビューのハイライトは「数値が大きい方が優位」な項目 (入出力数、DR 等) のみ。価格は買い手の価値観次第なのでハイライト対象外
-- 数値範囲文字列は両端の平均値で比較。正規形は符号付き `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`)、旧形式 (`"0-65"` / `"-18-65"`) もパーサは互換
-- 製品ページのスペック要約文 (`specSummary`) は xlsx の既存データのみから生成する (推測で埋めない)
-- og 画像はバッチ (8 件) 単位で「全 canvas を描画 → 一括 `encode("png")`」の順序を守り、逐次 await へ書き換えない (@napi-rs/canvas の darwin arm64 の制約。グローバル規約「開発環境」)
+### Build invariants
+- A slug collision fails fast at build time with `Error('Slug collision: ...')` (a guard before generating product pages)
+- `BASE_PATH` is normalized by trimming + collapsing consecutive slashes
+- `diffClass` suppresses highlighting unless both sides are numeric (prevents showing a false winner when one side is missing). It is embedded in compare.js and runs on the client
+- Highlighting in the comparison view applies only to items where "the larger number wins" (I/O counts, DR, etc.). Price depends on the buyer's values, so it is not highlighted
+- Numeric range strings are compared by the average of both ends. The canonical form is the signed `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`); the parser also accepts the old forms (`"0-65"` / `"-18-65"`)
+- The spec summary sentence on product pages (`specSummary`) is generated only from existing xlsx data (never filled in by guessing)
+- og images keep the order "draw every canvas → `encode("png")` all at once" per batch (8 items), and must not be rewritten into sequential awaits (a constraint of @napi-rs/canvas on darwin arm64. The global conventions' 「開発環境」)
 
-### 多言語 (/ja/ + hreflang)
-- 言語は URL で分離: `/` = 英語 (lang="en")、`/ja/` = 日本語 (lang="ja")。本文の翻訳言語は navigator.language ではなく `<html lang>` で決まる (navigator.language は Googlebot に不可視のため)。navigator.language を見るのは下記の初回訪問の言語リダイレクト (en→ja の片方向) だけ
-- i18n.js は `<html lang>` を見て動作し、`window.__i18n.apply(root)` を公開 (compare.js が動的挿入 DOM の翻訳に使用)
-- 日本語版は `localizeToJa()` が英語 HTML を後処理して生成: lang 属性、内部ページリンク (products/brands/categories/ホーム/比較フラグメント) の /ja/ プレフィックス、canonical / og:url の自己参照化、index インライン PAGE_BASE、言語トグル (langToggle() が単一の真実) の差し替え。**必須パターンは mustReplace で件数検証しビルドを fail fast** させる (regex 後処理の脆さ対策)。本文テキストは i18n.js がクライアント翻訳する (lang=ja で常時発火するため Googlebot も日本語を認識)
-- アセット (style.css / i18n.js / compare.js / products.json / og/) は言語間で共有 (ルート配信)。localizeToJa のパターンは distinct なファイル名により誤マッチしない
-- hreflang (en / ja / x-default=en) は htmlHead が静的 HTML に出力。en/ja ペアで同一セット
-- ヘッダー右上に言語トグル (en ページ→「日本語」、ja ページ→「English」)。クリックで選択を localStorage (`aicmp-lang`。github.io はオリジン共有のため名前空間付き) に保存
-- **初回訪問の言語リダイレクト (非対称)**: en ページの head スニペットが「保存済み選択が ja」または「保存済み選択なし + navigator.language=ja」で同一パスの /ja/ へ location.replace (search/hash 保持)。/ja/ 側では発火しない — Googlebot (en ロケール) が /ja/ を描画した際に / へ飛ばすと /ja/ のインデックスが壊れるため。404.html には載せない (soft 404 / ループ回避)。Googlebot は en ページでも条件不成立 (navigator=en) のため両言語のインデックスに影響しない
-- 404.html は英語のみ (GitHub Pages はルート 404.html 固定のため /ja/ 版を配信できない)
+### Multilingual (/ja/ + hreflang)
+- Languages are separated by URL: `/` = English (lang="en"), `/ja/` = Japanese (lang="ja"). The body's translation language is decided by `<html lang>`, not navigator.language (navigator.language is invisible to Googlebot). navigator.language is consulted only by the first-visit language redirect below (one-way, en→ja)
+- i18n.js works from `<html lang>` and exposes `window.__i18n.apply(root)` (compare.js uses it to translate dynamically inserted DOM)
+- The Japanese version is generated by `localizeToJa()` post-processing the English HTML: the lang attribute, the /ja/ prefix on internal page links (products/brands/categories/home/comparison fragment), making canonical / og:url self-referencing, the inline PAGE_BASE of index, and replacing the language toggle (langToggle() is the single source of truth). **Required patterns have their counts verified by mustReplace, failing the build fast** (a countermeasure to the fragility of regex post-processing). Body text is translated on the client by i18n.js (it always fires with lang=ja, so Googlebot also sees Japanese)
+- Assets (style.css / i18n.js / compare.js / products.json / og/) are shared between languages (served from the root). The localizeToJa patterns do not mismatch thanks to the distinct file names
+- hreflang (en / ja / x-default=en) is output into the static HTML by htmlHead. The same set for each en/ja pair
+- A language toggle at the top right of the header (en page → 「日本語」, ja page → "English"). A click saves the choice to localStorage (`aicmp-lang`. Namespaced because github.io shares one origin)
+- **First-visit language redirect (asymmetric)**: a head snippet on en pages does location.replace to the same path under /ja/ (preserving search/hash) when "the saved choice is ja" or "there is no saved choice + navigator.language=ja". It does not fire on the /ja/ side — sending Googlebot (en locale) to / when it renders /ja/ would break the /ja/ index. Not included in 404.html (avoids soft 404s / loops). For Googlebot the condition does not hold on en pages either (navigator=en), so it does not affect the index of either language
+- 404.html is English only (GitHub Pages fixes 404.html at the root, so a /ja/ version cannot be served)
 
-### 製品カタログ / データ更新
-- 収録対象は現行 IF + USB/配信ミキサー + 配信機。**プロ Dante/MADI/AVB/変換器/PCIe クラスは意図的に最小限**に留めている (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, Lynx Aurora マトリクス, Ferrofish, MOTU AVB 等は未収録)
-- 新製品の検出 (未収録機種の発見 → スペック収集 → 行追加 → 照合接続 → 測定レポート収集) はスキル discover-products で運用する (作業領域 tools/discover/work/)
-- 機種の削除 (生産終了) は根拠を確認してから行う (公式ページの 301/404・生産完了表記・公式 discontinued リスト・代理店の価格表/告知のいずれか + 操作者の同意)
-- 未公開の測定値 (DR/THD+N/EIN) は空欄にする (推測で埋めない)
-- プリアンプゲインレンジ列の正規形は符号付き `x to y` (例: `-18 to +70`, `+10 to +65`, `0 to +60`)。レンジ未公表 (ゲイン幅のみ公称) の機種は単一値のまま。ハイフン区切り (`0-65`) は負値と紛らわしいため新規記入に使わない
-- RCA Input / RCA Output 列 (アンバランス RCA 端子、ライン入出力とは分離して計数) は `tools/add-rca-columns.js` で追加した列で、build.js の COLUMNS と xlsx の両方にある
-- `tools/apply-product-changes.js` で行の追加/削除を一括適用 (`REMOVALS` 集合 + 新規行 JSON)。**行クリアは末尾から 1 行ずつ**削除する。exceljs の `spliceRows(2, N)` 一括削除は不発になり行が倍化する不具合があるため使わない
-- `tools/update-xlsx.js` は Measurement Reports 列を冪等・追記式に書き込む (URL が見つかった機種のみ上書き、既存は保持)。既定は dry-run (機種ごとの書き込みプレビュー) で、`--apply` を付けたときだけ xlsx を書き込む (`tools/add-rca-columns.js` / `tools/verify/apply-corrections.js` と同じ同意ゲート)
-- 測定レポート (Measurement Reports 列) の収集は skill collect-measurements で運用する (作業領域 tools/measurements/work/)。独立系の第三者ベンチ (ASR/APx・ProSound RMAA・測定系 YouTube〈Julian Krause 等〉・Sound on Sound bench・小規模ラボ) を優先し、無いときのみメーカー公称にフォールバック。グローバル規約「Claude の振る舞い」の「出典に小売・レビューサイトを使わない」は、この列ではレビューサイト内の測定データ (ASR のレビュースレッドの APx ベンチ・Sound on Sound のレビュー中の bench test 等) に限って上書きする。主観レビュー・購入ガイド・小売ページ・測定を伴わない動画は出典にしない。世代・型番のミスマッチ (旧 Gen・姉妹機の測定の流用) を避ける。JS ゲートで直接読めない動画などを間接採用したときは確度フラグ (`verification: indirect` + 裏取り) を残す
-- `tools/verify/` は全機種のスペックを公式製品ページと自動照合するパイプライン (設計と運用手順は tools/verify/README.md)。結果ファイルをチェックポイントとして tools/verify/work/results/ に保存し、中断後は tools/verify/validate-results.js の nextIds から再開する。照合レポート (リポジトリ直下 product-page-verification-report.md) は git 管理外で、更新のたびに再生成・上書きし (ヘッダーの生成時刻で版を識別、最新版のみが残る)、照合サイクル完了後に削除する。削除予定/削除済みの機種名は tools/verify/work/removals.json の保存名 (brand/model) で照合・表示し、行削除で並びがずれる idx には依存しない
+### Product catalog / data updates
+- What is listed: current IFs + USB/streaming mixers + streaming devices. **Pro Dante/MADI/AVB/converter/PCIe-class gear is deliberately kept to a minimum** (Focusrite Red/RedNet, RME Digiface/M-32/HDSPe, the Lynx Aurora matrix, Ferrofish, MOTU AVB, etc. are not listed)
+- Detecting new products (finding unlisted models → collecting specs → adding rows → connecting to verification → collecting measurement reports) is operated with the discover-products skill (work area tools/discover/work/)
+- Removing a model (discontinued) is done only after confirming the evidence (any of: a 301/404 of the official page, a discontinued notice, the official discontinued list, a distributor's price list/announcement + the operator's consent)
+- Unpublished measurements (DR/THD+N/EIN) are left blank (never filled in by guessing)
+- The canonical form of the preamp gain range column is the signed `x to y` (e.g. `-18 to +70`, `+10 to +65`, `0 to +60`). Models with no published range (only the gain span is stated) keep a single value. Hyphen-separated (`0-65`) is easily confused with negative values, so it is not used for new entries
+- The RCA Input / RCA Output columns (unbalanced RCA jacks, counted separately from line inputs/outputs) were added by `tools/add-rca-columns.js` and exist both in build.js's COLUMNS and in the xlsx
+- `tools/apply-product-changes.js` applies row additions/removals in bulk (the `REMOVALS` set + new-rows JSON). **Rows are cleared one at a time from the end**. exceljs's bulk delete `spliceRows(2, N)` is not used, because of a defect where it misfires and the rows double
+- `tools/update-xlsx.js` writes the Measurement Reports column idempotently and additively (overwrites only models where a URL was found, keeps existing ones). The default is a dry-run (a per-model write preview), and it writes the xlsx only with `--apply` (the same consent gate as `tools/add-rca-columns.js` / `tools/verify/apply-corrections.js`)
+- Collecting measurement reports (the Measurement Reports column) is operated with the skill collect-measurements (work area tools/measurements/work/). Independent third-party benches (ASR/APx, ProSound RMAA, measurement YouTube channels〈Julian Krause, etc.〉, Sound on Sound bench, small labs) take priority, falling back to the manufacturer's published figures only when there are none. For this column, the global conventions' 「Claude の振る舞い」 rule 「出典に小売・レビューサイトを使わない」 (do not use retail or review sites as sources) is overridden only for measurement data within review sites (APx benches in ASR's review threads, bench tests within Sound on Sound reviews, etc.). Subjective reviews, buying guides, retail pages and videos without measurements are not used as sources. Avoid generation/model-number mismatches (reusing measurements of an older Gen or a sibling model). When something that cannot be read directly behind a JS gate, such as a video, is adopted indirectly, leave a confidence flag (`verification: indirect` + corroboration)
+- `tools/verify/` is a pipeline that automatically verifies the specs of every model against the official product pages (design and operating procedure in tools/verify/README.md). Result files are saved as checkpoints in tools/verify/work/results/, and after an interruption it resumes from the nextIds of tools/verify/validate-results.js. The verification report (product-page-verification-report.md at the repository root) is outside git; it is regenerated and overwritten on every update (the version is identified by the generation time in the header, and only the latest remains) and deleted once the verification cycle is complete. Model names of pending/applied removals are matched and displayed by the saved names (brand/model) in tools/verify/work/removals.json, not depending on idx, which shifts when rows are deleted
 
-### ホスティング: GitHub Pages
-- リポジトリ Settings → Pages で Source を「GitHub Actions」に設定するだけで稼働
-- AWS (S3, CloudFront, IAM) 一切不要
-- 制約: サイトサイズ上限 1GB、帯域 100GB/月。比較の動的化によりサイズは製品数に比例する (O(n))
-- 旧比較 URL (/compare/...) は 404 のまま放置が正 (Google 公式ガイダンスと整合)。robots.txt で /compare/ をブロックしない (404 確認を妨げるため)。URL 削除ツールも使わない
+### Hosting: GitHub Pages
+- Runs just by setting Source to "GitHub Actions" in the repository's Settings → Pages
+- No AWS (S3, CloudFront, IAM) needed at all
+- Limits: 1GB site size, 100GB/month bandwidth. With dynamic comparison, size is proportional to the number of products (O(n))
+- Leaving old comparison URLs (/compare/...) as 404 is correct (consistent with Google's official guidance). Do not block /compare/ in robots.txt (it would prevent the 404 from being confirmed). Do not use the URL removal tool either
 
-### ビルドトリガー (GitHub Actions)
-- schedule トリガーは置かない (`tests/workflow-schedule.test.js` が検査)。public リポジトリでは 60 日間コミットが無いと schedule を持つワークフローが丸ごと無効化され、push / 手動でも起動しなくなる。schedule による実行自体は活動に数えられない。データ変更の無いビルドで変わるのはフッターの Last updated の日付だけ
-- 手動 (`workflow_dispatch`)
-- main ブランチへの push (ビルド結果に影響するファイルのみ: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / ワークフロー自身)
-  - `tests/**` や `CLAUDE.md` などビルド結果に影響しないファイルの変更ではトリガーされない
-- ワークフローの `uses:` の固定 (グローバル規約「CI / GitHub Actions / インフラ」) は `tests/workflow-pins.test.js` が検査する。yq で YAML を解析し、`jobs.<id>.uses` / `jobs.<id>.steps[*].uses` と `action.yml` / `action.yaml` の `runs.steps[*].uses` の値と同じ行のコメントが `@<sha> # vX.Y.Z` の形であることを確かめる (yq は環境変数 `YQ` で差し替え可。CI では必須で、ローカルに yq が無いときは yq を使うテストをスキップ)。検査対象のルートは環境変数 `WORKFLOW_ROOT` (未設定ならリポジトリ直下)
-- 全 PR で `.github/workflows/workflow-checks-main.yml` (ジョブ `workflow-tests-main`、main の必須チェック) が `tests/workflow-*.test.js` を実行する。`pull_request_target` で走り、ワークフロー定義・テストとも既定ブランチのものを使う (GitHub は `pull_request_target` の定義を常に既定ブランチから読むため、PR は自分を判定する検査を変えられない)。PR のワークフロー・action ファイルは head コミットから GitHub API (git trees / blobs) で取得して `WORKFLOW_ROOT` に置き、PR のコードは checkout も実行もしない。取得対象に通常ファイル以外 (シンボリックリンク等) があるとき、表記が小文字でない action ファイル名 (`Action.yml` 等。大文字小文字を区別しないファイルシステムでは `action.yml` として開かれる) があるとき、この検査のファイル (`workflow-checks-main.yml` と `tests/workflow-*.test.js`、環境変数 `PROTECTED_PATTERN`) のパス・mode・blob SHA が既定ブランチと一致しないとき、ワークフローのステップと複合 Action のステップに `./` 参照があるとき (runner の作業領域に対して解決されるため。同じリポジトリの Action は `$/` で参照し、ジョブ単位の再利用ワークフローは `./` / `$/` のどちらも呼び出し元と同じコミットから読まれる)、ローカル `./` と `$/` 参照のパスに `A-Z a-z 0-9 . _ -` と `/` 以外の文字、または空・`.`・`..`・末尾が `.` の要素があるとき、参照先までのいずれかの要素が git tree のシンボリックリンク (`120000`) かサブモジュール (`160000`) と一致するとき (ASCII の大文字小文字を区別せず、それらのパスの非 ASCII の要素は任意の要素と一致するものとして照合する) は失敗する。この検査のファイルを変更するときは、main の必須チェックを一時的に外してからマージする (バイパスは設定していない)。必須チェックはベースブランチへの追随を求める設定 (`strict_required_status_checks_policy: true`) で、チェックの合格後に main が進んだ PR は、ブランチを更新 (Update branch) して新しい head でチェックが通るまでマージできない (チェックの再実行だけでは解除されない)。public リポジトリの `pull_request_target` は明示的な許可ポリシーが無いと 2026-11-02 から無効化されるため、このワークフローを対象とした Actions の許可ポリシーを設定している (Settings → Actions → Policies)。Dependabot の github-actions 更新は設定しておらず、版上げは手動で SHA とコメントを差し替える
-- 全 PR で `.github/workflows/ci.yml` (ジョブ `test`、main の必須チェック) が `npm ci` → `npm test` → `npm run build` を実行する。ビルドには `BASE_PATH` などを渡さず、デプロイはしない
-- Dependabot の PR で更新が semver の patch のとき、`.github/workflows/dependabot-auto-merge.yml` (ジョブ `auto-merge`、main の必須チェック) が読んだ head コミットに固定して自動マージ (merge commit) を予約し、それ以外の種別では前の予約を解除する。他の PR ではステップを skip して成功を報告する。自動マージによるマージは `GITHUB_TOKEN` によるもので、main への push は `build-deploy.yml` を起動しない。依存の更新がサイトに出るのは、次にビルド対象のファイルを変える push か手動実行のとき
+### Build triggers (GitHub Actions)
+- No schedule trigger (checked by `tests/workflow-schedule.test.js`). In a public repository, a workflow that has a schedule is disabled entirely when there are no commits for 60 days, and then it does not start on push / manual runs either. Scheduled runs themselves are not counted as activity. The only thing a build without data changes alters is the Last updated date in the footer
+- Manual (`workflow_dispatch`)
+- Push to the main branch (only files that affect the build output: `data/audio_interfaces.xlsx` / `src/**` / `package.json` / `package-lock.json` / the workflow itself)
+  - Changes to files that do not affect the build output, such as `tests/**` or `CLAUDE.md`, do not trigger it
+- Pinning of workflow `uses:` (the global conventions' 「CI / GitHub Actions / インフラ」) is checked by `tests/workflow-pins.test.js`. It parses the YAML with yq and confirms that the values of `jobs.<id>.uses` / `jobs.<id>.steps[*].uses` and of `runs.steps[*].uses` in `action.yml` / `action.yaml`, together with the comment on the same line, have the form `@<sha> # vX.Y.Z` (yq can be swapped via the environment variable `YQ`. Required in CI; when yq is not available locally, the tests that use yq are skipped). The root of what is checked is the environment variable `WORKFLOW_ROOT` (the repository root when unset)
+- On every PR, `.github/workflows/workflow-checks-main.yml` (job `workflow-tests-main`, a required check on main) runs `tests/workflow-*.test.js`. It runs on `pull_request_target` and uses the default branch's version of both the workflow definition and the tests (GitHub always reads the `pull_request_target` definition from the default branch, so a PR cannot change the check that judges it). The PR's workflow and action files are fetched from the head commit via the GitHub API (git trees / blobs) and placed in `WORKFLOW_ROOT`; the PR's code is neither checked out nor executed. It fails when: something other than a regular file (a symbolic link, etc.) is among the fetched files; there is an action file name not written in lowercase (`Action.yml`, etc. A case-insensitive file system opens it as `action.yml`); the path, mode or blob SHA of this check's files (`workflow-checks-main.yml` and `tests/workflow-*.test.js`, the environment variable `PROTECTED_PATTERN`) do not match the default branch; a workflow step or composite Action step has a `./` reference (it resolves against the runner's workspace. Actions in the same repository are referenced with `$/`, and job-level reusable workflows are read from the same commit as the caller with either `./` or `$/`); the path of a local `./` or `$/` reference contains characters other than `A-Z a-z 0-9 . _ -` and `/`, or a component that is empty, `.`, `..` or ends in `.`; any component on the way to the target matches a symbolic link (`120000`) or submodule (`160000`) in the git tree (matched ignoring ASCII case, with non-ASCII components of those paths treated as matching any component). When changing this check's files, temporarily remove main's required check and then merge (no bypass is configured). The required checks are set to require being up to date with the base branch (`strict_required_status_checks_policy: true`), so a PR whose main moved forward after its checks passed cannot be merged until the branch is updated (Update branch) and the checks pass on the new head (re-running the checks alone does not clear it). In public repositories `pull_request_target` is disabled from 2026-11-02 without an explicit allow policy, so an Actions allow policy targeting this workflow is set (Settings → Actions → Policies). Dependabot's github-actions updates are not configured, and version bumps are done by hand by replacing the SHA and the comment
+- On every PR, `.github/workflows/ci.yml` (job `test`, a required check on main) runs `npm ci` → `npm test` → `npm run build`. The build is given no `BASE_PATH` or the like, and nothing is deployed
+- On a Dependabot PR whose update is a semver patch, `.github/workflows/dependabot-auto-merge.yml` (job `auto-merge`, a required check on main) schedules auto-merge (merge commit) pinned to the head commit it read, and for other update types it cancels the earlier schedule. On other PRs it skips the steps and reports success. A merge by auto-merge is done by `GITHUB_TOKEN`, and the push to main does not start `build-deploy.yml`. Dependency updates reach the site on the next push that changes a build-target file or on a manual run
 
-### テスト基盤
-- `node:test` + `node:assert` で `tests/*.test.js` を実行
-- `package.json` の test スクリプトは `--test-concurrency=1` でシリアル実行 (build.js import 時副作用ガード併用)
-- `src/build.js` が末尾で export するのは `_slugify` / `_escapeHtml` / `_diffClass` / `_renderMeasurements` / `COLUMNS` のみ。これらを import するテストは `diffClass.test.js` / `renderMeasurements.test.js` / `compare-js.test.js`
-- `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` は **未 export**。該当テストは build() の副作用を避けるため同一ロジックをテスト側にインライン再現する (各テスト冒頭コメントに参照元の build.js 行番号を明記)
-- 監査由来のテスト多数: a11y 契約、JSON-LD エスケープ、canonical URL 契約、script 読込順序 (PAGE_JA → i18n.js → compare.js)、slug 衝突、sanitize URL probe など
-- `.github/tests/workflow-checks-test.sh` (bash + yq) は `workflow-checks-main.yml` の取得ステップを、偽の `gh` が返すフィクスチャの git tree に対して実行し、通るべき参照 (`$/` の通常の参照・ジョブ単位の `./` / `$/` の再利用ワークフロー・無関係なシンボリックリンクとサブモジュールがある状態) と失敗すべき参照 (ステップの `./`・別リポジトリを checkout した先への `./`・サブモジュール・シンボリックリンク・大文字小文字を変えた参照・`..`・文字種外) の判定と失敗理由を、ワークフローのステップと複合 Action のステップの双方で検査する。`npm test` には含まれず、`.github/workflows/workflow-checks-test.yml` がこれらのファイルを変更する PR と main への push で実行する。固定の検査は `tests/workflow-pins.test.js` 側にあるため、ワークフローが `WORKFLOW_CHECK_STEP=absent` を宣言して未固定参照のケース (ワークフローのステップ・複合 Action のステップ) をスキップする (宣言の無い実行で検査ステップが見つからなければテストは失敗する)
-- 動的比較・ハブ・多言語・og 画像: `compare-js.test.js` (クライアント比較レンダラーの構文・埋め込み・配線)、`hub-pages.test.js` (ハブの内部リンク・ItemList)、`i18n-hreflang.test.js` (/ja/ 生成・hreflang 相互注釈・言語トグル)、`og-images.test.js` (og 画像生成・メタタグ配線)
+### Test infrastructure
+- `tests/*.test.js` run with `node:test` + `node:assert`
+- The test script in `package.json` runs serially with `--test-concurrency=1` (together with the build.js import-time side-effect guard)
+- `src/build.js` exports only `_slugify` / `_escapeHtml` / `_diffClass` / `_renderMeasurements` / `COLUMNS` at its end. The tests that import them are `diffClass.test.js` / `renderMeasurements.test.js` / `compare-js.test.js`
+- `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` are **not exported**. To avoid build()'s side effects, their tests reproduce the same logic inline on the test side (the comment at the top of each test states the build.js line numbers it refers to)
+- Many tests come from audits: the a11y contract, JSON-LD escaping, the canonical URL contract, script load order (PAGE_JA → i18n.js → compare.js), slug collisions, the sanitize URL probe, etc.
+- `.github/tests/workflow-checks-test.sh` (bash + yq) runs the fetch step of `workflow-checks-main.yml` against fixture git trees returned by a fake `gh`, and checks the verdicts and failure reasons for references that should pass (ordinary `$/` references, job-level `./` / `$/` reusable workflows, the state with unrelated symbolic links and submodules present) and references that should fail (a step's `./`, `./` into another repository checked out into the workspace, submodules, symbolic links, case-changed references, `..`, characters outside the allowed set), for both workflow steps and composite Action steps. It is not part of `npm test`; `.github/workflows/workflow-checks-test.yml` runs it on PRs that change these files and on pushes to main. The pinning check lives in `tests/workflow-pins.test.js`, so the workflow declares `WORKFLOW_CHECK_STEP=absent` to skip the unpinned-reference cases (workflow steps, composite Action steps) (in a run without the declaration, the test fails if the check step is not found)
+- Dynamic comparison, hubs, multilingual and og images: `compare-js.test.js` (syntax, embedding and wiring of the client-side comparison renderer), `hub-pages.test.js` (hub internal links, ItemList), `i18n-hreflang.test.js` (/ja/ generation, hreflang cross-annotation, language toggle), `og-images.test.js` (og image generation, meta tag wiring)
 
-## SEO 方針 (2026-07 の比較ページ動的化)
+## SEO policy (making the comparison pages dynamic, 2026-07)
 
-- **比較クエリ (「A vs B」) の SEO は放棄**。全組合せの静的比較ページ (67,340 枚) は「クロール済み - インデックス未登録」2 万件超・登録 41 件という実績から品質評価を毀損しており、全廃した
-- インデックス対象: index + 製品 + ブランドハブ + カテゴリハブ (× en/ja)
-- 実装済み: meta description 全ページ / OGP + og:image (1200×630 共有カード、summary_large_image) / canonical 自己参照 / hreflang (en/ja/x-default) / sitemap.xml (インデックス対象の全 URL) / robots.txt (Sitemap 行のみ) / カスタム 404.html (noindex、静的案内リンクのみ、自動リダイレクト禁止) / JSON-LD (Product + ItemList) / 製品ページのスペック要約文 (機械生成、固有テキスト増)
-- 比較ビューのソーシャル共有カードはサイト共通 og:image (`og/site.png`) になる (ページ単位の per-pair OGP は静的ページ廃止に伴い消滅、方針上許容)
-- GSC の 404 レポートは過去 1 か月の窓で集計される
+- **SEO for comparison queries ("A vs B") is given up**. The static comparison pages for every pair (67,340 pages) were damaging the quality assessment, judging from the record of more than 20,000 "Crawled - currently not indexed" and 41 indexed, so they were abolished entirely
+- Indexed: index + products + brand hubs + category hubs (× en/ja)
+- Implemented: meta description on every page / OGP + og:image (1200×630 share cards, summary_large_image) / self-referencing canonical / hreflang (en/ja/x-default) / sitemap.xml (every indexed URL) / robots.txt (Sitemap line only) / custom 404.html (noindex, static guidance links only, automatic redirects forbidden) / JSON-LD (Product + ItemList) / spec summary sentences on product pages (machine-generated, more unique text)
+- The social share card of the comparison view is the site-wide og:image (`og/site.png`) (per-pair OGP disappeared with the static pages, which the policy accepts)
+- GSC's 404 report is aggregated over a window of the past month
 
-## ビルドコマンド
+## Build commands
 
 ```bash
-# 通常ビルド (dist/ に出力)
+# Normal build (output to dist/)
 npm run build
 
-# BASE_PATH 指定ビルド (GitHub Pages サブディレクトリ用)
+# Build with BASE_PATH (for a GitHub Pages subdirectory)
 BASE_PATH=/repo-name/ npm run build
 
-# 出力先変更ビルド
+# Build to a different output directory
 DIST_DIR=/tmp/build-output npm run build
 
-# サイト絶対 URL 指定 (OGP / canonical / sitemap のベース。未指定時は semnil.github.io/... がデフォルト)
+# Absolute site URL (base for OGP / canonical / sitemap. Defaults to semnil.github.io/... when unset)
 SITE_URL=https://example.com npm run build
 
-# カスタムドメイン配信 (dist/CNAME を生成)
+# Custom domain serving (generates dist/CNAME)
 CUSTOM_DOMAIN=example.com BASE_PATH=/ npm run build
 
-# ローカルプレビュー
+# Local preview
 npm run build && npm run preview
 ```
 
-## データソース
+## Data source
 
-`data/audio_interfaces.xlsx` — 「Audio Interfaces」シート、1行目ヘッダー、2行目以降データ。
-ヘッダーは英語名で、`build.js` の `COLUMNS[].label` と一致させて列を特定する (日本語名ではない)。
-`COLUMNS[].label` と完全一致しないヘッダーの列は読み飛ばされ、エラーにならずにその列が全製品で空になる (Brand / Model の列なら全行が読み飛ばされる)。
-主な列: ブランド, モデル名, カテゴリ, 参考価格 (USD), マイクプリアンプ数, Combo入力,
-ライン入力, RCA入力, Hi-Z入力, ADAT入力, 光ポート/S/PDIF(同軸・光)/AES入力, アナログメイン出力, アナログライン出力,
-RCA出力, ヘッドフォン出力, ADAT出力, 光ポート/S/PDIF(同軸・光)/AES出力, ファンタム電源, 最大サンプリングレート,
-最大ビット深度, 接続規格, MIDI I/O, ループバック, DSPエフェクト, ダイレクトモニタリング,
-プリアンプゲインレンジ, DR入力, DR出力, DR(条件不明), THD+Nマイク入力, THD+N出力,
-THD+N(条件不明), EIN(A-weighted), EIN(条件不明), 対応OS, バンドルソフト, 特記事項, 製品ページURL,
-Measurement Reports (測定レポート、最終列)。
+`data/audio_interfaces.xlsx` — the "Audio Interfaces" sheet, header in row 1, data from row 2.
+The headers are English names, and columns are identified by matching `COLUMNS[].label` in `build.js` (not the Japanese names).
+A column whose header does not exactly match a `COLUMNS[].label` is skipped, and without an error that column becomes empty for every product (for the Brand / Model columns, every row is skipped).
+Main columns: Brand, Model, Category, Reference Price (USD), Mic Preamps, Combo Inputs,
+Line Inputs, RCA Input, Hi-Z Inputs, ADAT Input, Optical Ports/S/PDIF (Coax / Optical)/AES Input, Analog Main Output, Analog Line Output,
+RCA Output, Headphone Output, ADAT Output, Optical Ports/S/PDIF (Coax / Optical)/AES Output, Phantom Power, Max Sample Rate,
+Max Bit Depth, Connection, MIDI I/O, Loopback, DSP Effects, Direct Monitoring,
+Preamp Gain Range, DR Input, DR Output, DR (Unknown Conditions), THD+N Mic Input, THD+N Output,
+THD+N (Unknown), EIN (A-weighted), EIN (Unknown), Supported OS, Bundled Software, Notes, Product Page URL,
+Measurement Reports (the final column).
 
-`Measurement Reports` 列は、各製品の客観測定 (RMAA / ASR の APx ベンチ / メーカー公称 / Sound on Sound 等) を
-公開するページへの markdown リンク (`[ラベル](url) / ...`) を格納する。`build.js` の `renderMeasurements()` が
-`sanitizeUrl` で http(s) のみ許可し、ラベル・URL とも escapeHtml した上で外部リンク (`target="_blank" rel="noopener noreferrer"`)
-に変換する。オーディオ性能グループの最終行として個別製品ページ (ビルド時) と動的比較ビュー (compare.js に埋め込まれた同一関数) に描画。データ未収集の製品は `—`。
+The `Measurement Reports` column holds markdown links (`[label](url) / ...`) to pages publishing each product's objective
+measurements (RMAA / ASR's APx bench / manufacturer's published figures / Sound on Sound, etc.). `renderMeasurements()` in `build.js`
+allows only http(s) via `sanitizeUrl`, escapeHtml's both the label and the URL, and converts them into external links (`target="_blank" rel="noopener noreferrer"`).
+It is rendered as the final row of the audio performance group on individual product pages (at build time) and in the dynamic comparison view (the same function embedded in compare.js). Products with no data collected show `—`.
