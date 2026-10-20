@@ -1,201 +1,204 @@
-# tools/verify — 製品スペック自動照合パイプライン
+# tools/verify — automatic product spec verification pipeline
 
-`data/audio_interfaces.xlsx` の各機種 (Measurement Reports 列を除く全列) を Product Page URL の公式ページと照合し、相違をレポートする。2026-07 の初回実施で得た教訓 (途中中断・一時ファイル消失によるデータ汚染・ボット保護による未照合) を反映した再設計版。
+> 日本語版は [README.ja.md](README.ja.md) を参照してください.
 
-## 全体フロー
+Verifies each model in `data/audio_interfaces.xlsx` (every column except Measurement Reports) against the official page at its Product Page URL, and reports the discrepancies. A redesign reflecting the lessons from the first run in 2026-07 (interruptions midway, data contamination caused by lost temporary files, and models left unverified by bot protection).
 
-3 段構成: 第 1 段 = 全項目スキャン (安価なモデルで広く)、第 2 段 = 相違のみ精査 (別モデル + マニュアル原文必須で偽陽性を排除)、第 3 段 = 自動仕分けと操作者への質問解決。
+## Overall flow
+
+Three stages: stage 1 = a scan of every item (broadly, with an inexpensive model), stage 2 = examination of discrepancies only (a different model + the manual's original text required, to eliminate false positives), stage 3 = automatic sorting and resolving questions with the operator.
 
 ```mermaid
 flowchart TD
-    A[export-products.js\nxlsx → work/products/*.json] --> B[第 1 段: Workflow で workflow.js\nargs: workDir + ids\n任意: concurrency/model/effort]
-    B --> C[エージェント: 1 製品 = 1 体\n公式ページ取得 → 照合\n結果を work/results/product-NNN.json に書込]
-    C --> D[validate-results.js\n結果ファイルを xlsx 実値と突合]
-    D -->|invalid は results-invalid/ へ退避| D
-    D --> E{missingIds が空?}
-    E -->|いいえ: 未完了あり| B
-    E -->|はい: failed の残存は許容| F[export-contested.js\nmismatch を work/contested/ に抽出\n既知 hold/単位差は除外、価格は隔離]
-    F --> G[第 2 段: Workflow で recheck-workflow.js\n別モデル + マニュアル/PDF 原文必須\nverdict を work/rechecks/ に書込]
-    G --> H[partition-rechecks.js\nxlsx_correct → 自動 hold\npage_correct/要判断 → 質問候補]
-    H --> I[第 3 段: AskUserQuestion で操作者に確認\n原文引用 + 修正候補を提示]
-    I --> J[決定を corrections-gen.py の\n新ラウンドに記録 → 生成]
-    J --> K[apply-corrections.js dry-run → 同意 → --apply\nxlsx へ反映 → export で変更行のみ再照合]
+    A[export-products.js\nxlsx → work/products/*.json] --> B[Stage 1: workflow.js via Workflow\nargs: workDir + ids\noptional: concurrency/model/effort]
+    B --> C[Agent: 1 product = 1 agent\nfetch official page → verify\nwrite result to work/results/product-NNN.json]
+    C --> D[validate-results.js\ncheck result files against actual xlsx values]
+    D -->|invalid moved to results-invalid/| D
+    D --> E{missingIds empty?}
+    E -->|No: incomplete items remain| B
+    E -->|Yes: remaining failed is acceptable| F[export-contested.js\nextract mismatches to work/contested/\nknown holds/unit differences excluded, prices isolated]
+    F --> G[Stage 2: recheck-workflow.js via Workflow\ndifferent model + manual/PDF original text required\nwrite verdicts to work/rechecks/]
+    G --> H[partition-rechecks.js\nxlsx_correct → automatic hold\npage_correct/judgement needed → question candidates]
+    H --> I[Stage 3: confirm with the operator via AskUserQuestion\npresent original-text quotes + proposed corrections]
+    I --> J[record decisions in a new round of\ncorrections-gen.py → generate]
+    J --> K[apply-corrections.js dry-run → consent → --apply\napply to xlsx → export, re-verify changed rows only]
     K --> A
 ```
 
-初回のような大規模サイクル (相違が数百件) では、第 2 段の代わりに `propose-corrections.js` + `build-report.js` の一括レビュー (相違表 = 機種/列/修正候補/変更理由/変更前、進捗は work/review-state.json) も使える。どちらの経路でも、確定した判断は corrections-gen.py に記録し apply-corrections.js で反映する点は同じ。
+For a large cycle like the first one (hundreds of discrepancies), the bulk review with `propose-corrections.js` + `build-report.js` (discrepancy table = model/column/proposed correction/reason for change/value before, progress in work/review-state.json) can be used instead of stage 2. On either path, settled decisions are recorded in corrections-gen.py and applied with apply-corrections.js.
 
-## 中断耐性の設計 (リソース不足・利用制限対策)
+## Design for resilience to interruption (against resource shortages and usage limits)
 
-- **チェックポイント = 結果ファイル**: 各エージェントが照合完了時に `work/results/product-NNN.json` を自分で書き込む。ワークフロー本体やセッションが死んでも完了分はファイルとして残る。ワークフローの戻り値は進捗の要約のみで、データの正本はファイル側。
-- **消えない作業領域**: `work/` はリポジトリ内 (git 管理外)。/tmp のセッション別 scratchpad はセッション再起動で消えるため使わない (初回実施で 273 ファイル消失 → エージェントが勝手に xlsx から行を再構成 → 1 行ズレの汚染が発生した)。
-- **復旧はキャッシュ非依存**: 再開時は `validate-results.js` が結果ファイルの有無と健全性から `nextIds` を算出し、その ids だけを `workflow.js` に渡して再実行する。Workflow ツールの `resumeFromRunId` キャッシュが使えない状況 (別セッション・スクリプト変更後) でも復旧できる。
-- **既定は直列実行**: 中断しても失うのは実行中の 1 件のみ。`args.concurrency` で並列化できる (ワーカープール方式。中断で失うのは実行中の最大 concurrency 件で、いずれも validate → nextIds で復旧する)。同時実行の上限は Workflow 実行環境の枠 = min(16, CPU コア − 2)。
-- **サーキットブレーカー**: エージェントが完了順で連続 `maxConsecFail` 回 (既定 5) 失敗したら未着手分を打ち切る。利用制限中に残り全件を無駄に失敗させない。制限解除後に validate → 再実行で続きから進む。
-- **モデル/エフォート指定**: `args.model` / `args.effort` でエージェント単位のモデル・エフォートを指定できる (省略時はセッション継承)。照合は機械的タスクのため下位モデルでもよい。汚染は validate が検出するが、相違の見落とし (false negative) は検出できない点に留意。
+- **Checkpoint = result file**: each agent writes `work/results/product-NNN.json` itself when it finishes verifying. Even if the workflow itself or the session dies, completed items remain as files. The workflow's return value is only a progress summary; the files are the authoritative data.
+- **A work area that does not disappear**: `work/` is inside the repository (outside git). The per-session scratchpad under /tmp disappears when the session restarts, so it is not used (in the first run, 273 files were lost → agents rebuilt rows from the xlsx on their own → contamination shifted by one row occurred).
+- **Recovery does not depend on caches**: on resuming, `validate-results.js` computes `nextIds` from the presence and soundness of the result files, and only those ids are passed to `workflow.js` for a re-run. It can recover even when the Workflow tool's `resumeFromRunId` cache cannot be used (another session, after a script change).
+- **Serial execution by default**: an interruption loses only the 1 item in progress. It can be parallelized with `args.concurrency` (a worker-pool scheme. An interruption loses at most concurrency items in progress, all recovered via validate → nextIds). The upper limit on concurrent runs is the Workflow runtime's allowance = min(16, CPU cores − 2).
+- **Circuit breaker**: if agents fail `maxConsecFail` times in a row in completion order (default 5), the items not yet started are cut off. This avoids pointlessly failing all remaining items while a usage limit is in effect. After the limit lifts, validate → re-run continues from where it stopped.
+- **Model/effort selection**: `args.model` / `args.effort` set the model and effort per agent (inherited from the session when omitted). Verification is a mechanical task, so a lower model is acceptable. Note that validate detects contamination but cannot detect missed discrepancies (false negatives).
 
-## 未照合 (failed) を減らす取得ラダー
+## Fetch ladder for reducing unverified (failed) items
 
-エージェントは次の順で取得を試み、試行ログを結果の `attempts` に残す:
+Agents try fetching in the following order and leave a log of the attempts in the result's `attempts`:
 
 1. WebFetch
-2. `curl -sL --compressed` + ブラウザ User-Agent
-3. headless Chrome (`--headless=new --dump-dom --virtual-time-budget=15000` + UA 指定) — Cloudflare 等の JS チャレンジ対策
-4. 3 まで 403 / チャレンジで失敗したら r.jina.ai リーダープロキシ (`https://r.jina.ai/<記載 URL>` を curl で取得し、`x-no-cache: true` と `x-with-shadow-dom: true` を付ける) — 返るのは公式ページを変換した本文で、iframe の中身は含まれない (`x-with-iframe` は API キーが必要で、キー無しでは 401)。出力にある記載値は照合に使えるが、出力に見当たらないことを「記載なし」「新製品なし」「掲載終了」の根拠にしない。欠けた部分は 5 (スクリーンショット)・同一公式サイトの別表示・個別の製品ページで補完し、補完できなければ未確認として記録する (小売・レビューサイトは引き続き禁止)
-5. 次のどちらかのときは headless Chrome のスクリーンショット取得 (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + UA 指定): `--dump-dom` も 403 になり 4 でも本文が取れない / 取得できた本文 (4 のプロキシ出力を含む) に照合対象の項目が欠け、7 の PDF や同一公式サイトの別ページでも確認できない — レンダリング結果は画像でしか得られないため、Read ツールで画像を視認して製品名・価格・購入ボタン・記載値等を読み取る。テキストとしては抽出できないが、読み取れた値は照合に使い、読めない項目は未確認 (照合では not_stated) として記録する。ページの実在確認・現行性判定にも有効 (実績: fender.com は curl/WebFetch/`--dump-dom` 全て 403 だが `--screenshot` は製品ページを描画した。2026-07-18)
-6. 404/転送時は同一公式ドメインの sitemap.xml・404 ページ内リンクから正ページを探索 (`wrong_page` として正 URL を記録)
-7. 同一公式サイトの Specifications ページ・データシート/マニュアル PDF (`pdftotext -layout` で解析)
-8. 記載 URL のドメイン廃止時に限り、同一ブランド所有の公式ドメイン (例: focusritepro.com → focusrite.com)。小売・レビューサイトは禁止
+2. `curl -sL --compressed` + a browser User-Agent
+3. headless Chrome (`--headless=new --dump-dom --virtual-time-budget=15000` + UA) — a countermeasure to JS challenges such as Cloudflare
+4. If everything up to 3 fails with 403 / a challenge, the r.jina.ai reader proxy (fetch `https://r.jina.ai/<listed URL>` with curl, adding `x-no-cache: true` and `x-with-shadow-dom: true`) — what comes back is a body converted from the official page, without iframe contents (`x-with-iframe` requires an API key, and gives 401 without one). Values stated in the output may be used for verification, but something missing from the output is not grounds for "記載なし" (not stated), "新製品なし" (no new products) or "掲載終了" (no longer listed). Missing parts are filled from 5 (screenshot), another presentation on the same official site or the individual product page, and recorded as unconfirmed if they cannot be filled (retail and review sites remain forbidden)
+5. A headless Chrome screenshot (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + UA) when either of the following holds: `--dump-dom` also gets 403 and the body cannot be obtained with 4 either / the body obtained (including 4's proxy output) lacks items to verify, and they cannot be confirmed in 7's PDF or another page of the same official site either — the rendering result is available only as an image, so read the product name, price, buy button, stated values, etc. by viewing the image with the Read tool. It cannot be extracted as text, but values that could be read are used for verification, and items that cannot be read are recorded as unconfirmed (not_stated in verification). Also useful for confirming that a page exists and is current (track record: fender.com gave 403 to curl/WebFetch/`--dump-dom` alike, but `--screenshot` rendered the product page. 2026-07-18)
+6. On 404/redirect, search for the correct page from sitemap.xml on the same official domain and links on the 404 page (record the correct URL as `wrong_page`)
+7. The Specifications page on the same official site, datasheet/manual PDFs (parsed with `pdftotext -layout`)
+8. Only when the domain of the listed URL has been retired, an official domain owned by the same brand (e.g. focusritepro.com → focusrite.com). Retail and review sites are forbidden
 
-Cloudflare Turnstile 等で全手段が失敗するサイトは `failed` として残し、レポートで「未照合 (データ誤りではない)」と明示する。
+Sites where every method fails, such as with Cloudflare Turnstile, are left as `failed`, and the report states them as "未照合 (データ誤りではない)" (unverified, not a data error).
 
-## 汚染防止と健全性検証
+## Contamination prevention and soundness validation
 
-- エージェント規則: **入力ファイルが読めない場合は照合せず `failed` で終了** (xlsx や他ソースからの行の再構成を禁止)。`brand` / `model` に入力ファイルの値を写す (由来の証明)。
-- `validate-results.js` が全結果ファイルを xlsx 実値と突合:
-  - brand/model の写しが該当行と一致するか (別行照合＝汚染の検出)
-  - mismatch の `xlsx_value` 引用が該当行の実値と矛盾しないか
-  - 入力欠損・再構成をうかがわせる文言 (警告)
-- 不正ファイルは `work/results-invalid/` へ退避され自動的に未完了扱いとなり、次回実行で再照合される。
+- Agent rule: **if the input file cannot be read, do not verify and finish with `failed`** (rebuilding rows from the xlsx or other sources is forbidden). Copy the input file's values into `brand` / `model` (proof of origin).
+- `validate-results.js` checks every result file against the actual xlsx values:
+  - whether the copied brand/model match the corresponding row (detects verifying a different row = contamination)
+  - whether the `xlsx_value` quoted in a mismatch is consistent with the corresponding row's actual value
+  - wording that suggests missing input or rebuilding (warning)
+- Invalid files are moved to `work/results-invalid/`, automatically treated as incomplete, and re-verified on the next run.
 
-## 運用手順
+## Operating procedure
 
 ```bash
-# 1. xlsx から入力を生成 (再実行しても安全。xlsx 更新時は必ず再実行。
-#    前回 export から内容が変わった行の旧結果は自動で results-retired/ へ退避され再照合対象になる)
+# 1. Generate the input from the xlsx (safe to re-run. Always re-run when the xlsx is updated.
+#    Old results of rows whose content changed since the previous export are automatically moved to results-retired/ and become re-verification targets)
 node tools/verify/export-products.js
 
-# 2. Claude Code で Workflow を起動 (ids は初回は全件、再開時は state.json の nextIds)
+# 2. Start the Workflow in Claude Code (ids: everything the first time, state.json's nextIds when resuming)
 #    Workflow({ scriptPath: "<repo>/tools/verify/workflow.js",
 #               args: { workDir: "<repo>/tools/verify/work", ids: [...],
 #                       concurrency: 8, model: "sonnet", effort: "high" } })
-#    concurrency / model / effort は任意 (省略時: 直列 / セッション継承 / セッション継承)
+#    concurrency / model / effort are optional (when omitted: serial / inherited from the session / inherited from the session)
 
-# 3. 健全性検証と未完了 ids の算出
+# 3. Soundness validation and computing the incomplete ids
 node tools/verify/validate-results.js
 
-# 4. nextIds (= missingIds) が空になるまで 2-3 を繰り返す。
-#    failed (ボット保護等) は残ってよい: nextIds には入らず、レポートに「未照合」と明示される。
-#    failed / partial に再挑戦したいときだけ --retry-failed / --include-partial を付ける
-#    (対象の旧結果は results-retired/ へ退避され nextIds に載る)
+# 4. Repeat 2-3 until nextIds (= missingIds) is empty.
+#    failed (bot protection, etc.) may remain: they are not in nextIds, and the report states them as 「未照合」 (unverified).
+#    Add --retry-failed / --include-partial only when you want to retry failed / partial
+#    (the old results of those targets are moved to results-retired/ and put into nextIds)
 
-# 5. 第 2 段: 相違のみ精査して偽陽性を排除する (標準経路)
-node tools/verify/export-contested.js             # mismatch を work/contested/ に抽出。
-#    既知 hold (work/known-holds.json) と単位差のみの相違は自動除外、
-#    Reference Price の相違は work/price-diffs.json に隔離 (レポートの一括判断セクションへ)
+# 5. Stage 2: examine only the discrepancies to eliminate false positives (the standard path)
+node tools/verify/export-contested.js             # extract mismatches to work/contested/.
+#    Discrepancies that are known holds (work/known-holds.json) or only unit differences are excluded automatically,
+#    and Reference Price discrepancies are isolated in work/price-diffs.json (to the report's bulk-decision section)
 #    → Workflow({ scriptPath: "<repo>/tools/verify/recheck-workflow.js",
 #                 args: { workDir: "<repo>/tools/verify/work",
-#                         ids: <work/contested-index.json の配列>,
-#                         concurrency: 2, model: "<第 1 段と別モデル>", effort: "high" } })
-#    第 2 段の並列度は 2 が上限 (スクリプト側で固定)。マニュアル PDF 解析 + headless Chrome の
-#    メモリ負荷が高く、並列 8 で Claude Code プロセスごと落ち、並列 4 でも高負荷だった (2026-07-12)
-#    エージェントはマニュアル/データシート PDF の参照が必須で、争点列ごとに
-#    verdict (xlsx_correct / page_correct / judgement_required) + 原文引用 + 修正候補を返す
+#                         ids: <the array in work/contested-index.json>,
+#                         concurrency: 2, model: "<a model different from stage 1>", effort: "high" } })
+#    The parallelism of stage 2 is capped at 2 (fixed in the script). Parsing manual PDFs + headless Chrome
+#    is memory-heavy: at parallelism 8 the whole Claude Code process crashed, and even 4 was a heavy load (2026-07-12)
+#    Agents must consult the manual/datasheet PDF, and for each contested column return
+#    a verdict (xlsx_correct / page_correct / judgement_required) + an original-text quote + a proposed correction
 
-# 6. 第 3 段: 仕分けと質問解決
-node tools/verify/partition-rechecks.js           # → work/corrections-recheck.json + 質問下書き
-#    xlsx_correct は自動 hold (質問不要)。page_correct / judgement_required だけを
-#    機種単位で AskUserQuestion (原文引用 + 修正候補 + 修正適用/変更なし) にかけ、
-#    操作者決定を work/corrections-gen.py の新ラウンドに記録して corrections-round*.json を生成する。
-#    恒久的な「変更不要」は gen の KNOWN_HOLDS にも追加する (次サイクルから自動除外される)
+# 6. Stage 3: sorting and resolving questions
+node tools/verify/partition-rechecks.js           # → work/corrections-recheck.json + draft questions
+#    xlsx_correct becomes an automatic hold (no question needed). Only page_correct / judgement_required
+#    go to AskUserQuestion per model (original-text quote + proposed correction + apply correction/no change),
+#    the operator's decisions are recorded in a new round of work/corrections-gen.py, and corrections-round*.json is generated.
+#    A permanent "no change needed" is also added to the gen's KNOWN_HOLDS (excluded automatically from the next cycle on)
 
-# 7. xlsx への反映 (要・操作者の同意) と整合確認
+# 7. Applying to the xlsx (requires the operator's consent) and confirming consistency
 node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json          # dry-run
-node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json --apply  # 同意後
-node tools/verify/export-products.js              # 変更行の旧照合結果が自動退避 → 該当行だけ再照合して整合を確認
+node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json --apply  # after consent
+node tools/verify/export-products.js              # old verification results of changed rows are moved aside automatically → re-verify only those rows to confirm consistency
 ```
 
-事前 lint (任意): `node tools/verify/lint-columns.js` で xlsx 列間の矛盾 (S/PDIF 光 > 光ポート数、ADAT ch が 8 の倍数でない等) をエージェントなしで検出できる。
+Pre-lint (optional): `node tools/verify/lint-columns.js` detects contradictions between xlsx columns (S/PDIF optical > number of optical ports, ADAT ch not a multiple of 8, etc.) without agents.
 
-### 大規模サイクル向けの一括レビュー経路 (初回など相違が数百件のとき)
+### Bulk-review path for large cycles (when there are hundreds of discrepancies, such as the first run)
 
 ```bash
-# 5'. 修正候補の作成 (高確度の相違がある場合はレポート生成より先に行う)
-node tools/verify/propose-corrections.js          # --all で low も含める
-#    → work/corrections-proposal.json の proposed (ページ記載の生テキスト) を xlsx セル書式の
-#      「修正後セル値」に編集し、work/corrections-edited.json として保存する:
+# 5'. Creating proposed corrections (when there are high-confidence discrepancies, do this before generating the report)
+node tools/verify/propose-corrections.js          # --all also includes low
+#    → edit proposed (the raw text stated on the page) in work/corrections-proposal.json into the
+#      "corrected cell value" in the xlsx cell format, and save it as work/corrections-edited.json:
 #      [{ idx, brand, model, column, confidence?, current, proposed, note?, hold?, unreviewed?, missing? }]
-#      - proposed: 修正後セル値。"" は空欄化 (非搭載・該当なし・未公表は 0 や No ではなく空欄の慣行)
-#      - note: レポート表示用の補足 / hold: 反映を保留する理由 (apply でスキップされる)
-#      - unreviewed: 操作者の確認待ち (apply でスキップ。review-state の境界更新で外れる)
-#      - missing: 空欄追記由来の印 (レポートの「空欄追記の候補」セクションに描画される)
-#      - 相違由来でない一括修正 (書式統一・行統合の反映・空欄追記など) も同スキーマで追加できる
-#        (confidence キーが一致しないためレポートの相違表には出ず、apply にのみ効く)
-#    操作者レビューの進捗は work/review-state.json
-#    ({ highReviewedUntilIdx, lowReviewedUntilIdx, missingReviewedUntilIdx })。
-#    build-report.js は到達済み範囲の相違行を非表示にし、未確認分だけを表示する。
-#    missing_in_xlsx (空欄追記) のうち機械変換できない項目は work/missing-pending.json に保留として
-#    出力し、build-report.js は保留分のみを「空欄」セクションに描画する
+#      - proposed: the corrected cell value. "" blanks the cell (the convention for not equipped / not applicable / unpublished is blank, not 0 or No)
+#      - note: a supplement shown in the report / hold: the reason to hold off applying (skipped by apply)
+#      - unreviewed: awaiting the operator's confirmation (skipped by apply. Removed by the boundary update of review-state)
+#      - missing: a mark for entries from filling blanks (rendered in the report's 「空欄追記の候補」 (candidates for filling blanks) section)
+#      - Bulk corrections not derived from discrepancies (unifying formats, applying row merges, filling blanks, etc.) can also be added with the same schema
+#        (their confidence keys do not match, so they do not appear in the report's discrepancy tables and only take effect in apply)
+#    The progress of the operator's review is in work/review-state.json
+#    ({ highReviewedUntilIdx, lowReviewedUntilIdx, missingReviewedUntilIdx }).
+#    build-report.js hides discrepancy rows in the range already reached and shows only those not yet confirmed.
+#    Of missing_in_xlsx (filling blanks), items that cannot be converted mechanically are output as pending to
+#    work/missing-pending.json, and build-report.js renders only the pending ones in the 「空欄」 (blank) section
 
-# 6'. レポート生成 (リポジトリ直下 product-page-verification-report.md。git 管理外で、
-#    更新のたびに再生成・上書きし、照合サイクル完了後に削除する)
-#    相違表の列構成 (変更後の値を左に置く) と表示規則は build-report.js の生成に従う
-#    (運用の詳細は .claude/skills/verify-products/SKILL.md の「レポート」節)。
-#    既知 hold (known-holds.json) 一致分は自動で除外され、価格の相違は独立セクションに分離される
+# 6'. Generating the report (product-page-verification-report.md at the repository root. Outside git,
+#    regenerated and overwritten on every update, and deleted once the verification cycle is complete)
+#    The column layout of the discrepancy tables (the value after the change goes on the left) and the display rules follow what build-report.js generates
+#    (operational details in the 「レポート」 (report) section of .claude/skills/verify-products/SKILL.md).
+#    Matches with known holds (known-holds.json) are excluded automatically, and price discrepancies are split into a separate section
 node tools/verify/build-report.js
 
-# 7'. xlsx への反映は標準経路の手順 7 と同じ (corrections-edited.json を渡す)
+# 7'. Applying to the xlsx is the same as step 7 of the standard path (pass corrections-edited.json)
 ```
 
-利用制限で打ち切られた場合も手順は同じ: 制限解除後に validate → nextIds で再起動するだけでよい。
+When a run is cut off by a usage limit, the procedure is the same: after the limit lifts, just restart via validate → nextIds.
 
-0 から (結果なしの状態から) 完全実行する場合は、既存の `work/results/` を `work/results-archive-<日付>/` に退避してから手順 1 に入る (validate が全件を missingIds として算出する)。
+To run completely from 0 (from a state with no results), move the existing `work/results/` to `work/results-archive-<date>/` before entering step 1 (validate computes every item as missingIds).
 
-## 結果ファイルのスキーマ (work/results/product-NNN.json)
+## Schema of the result files (work/results/product-NNN.json)
 
-| キー | 内容 |
+| Key | Content |
 |---|---|
-| brand / model | 入力ファイルの Brand / Model の写し (由来検証用) |
+| brand / model | Copy of Brand / Model from the input file (for origin validation) |
 | fetch_status | ok / partial / wrong_page / failed |
-| attempts | 取得試行ログ ("方法: URL → 結果" の配列) |
-| sources | 実際に照合へ使ったページ URL |
+| attempts | Fetch attempt log (an array of "method: URL → result") |
+| sources | URLs of the pages actually used for verification |
 | mismatches | { column, xlsx_value, page_value, confidence: high/low, evidence } |
-| not_stated | ページから確認できなかった列名 |
-| missing_in_xlsx | ページに公称値があるが xlsx が空欄の項目 (最大 6 件) |
-| notes | 照合ソースと留意点 (3 文以内) |
+| not_stated | Names of columns that could not be confirmed from the page |
+| missing_in_xlsx | Items with a published value on the page where the xlsx is blank (up to 6) |
+| notes | Verification sources and caveats (3 sentences or fewer) |
 
-## 精査結果のスキーマ (work/rechecks/product-NNN.json)
+## Schema of the examination results (work/rechecks/product-NNN.json)
 
-| キー | 内容 |
+| Key | Content |
 |---|---|
-| brand / model | contested 入力の写し (由来検証用) |
+| brand / model | Copy of the contested input (for origin validation) |
 | fetch_status | ok / partial / failed |
-| attempts / sources / notes | 結果ファイルと同じ |
-| verdicts | { column, verdict: xlsx_correct/page_correct/judgement_required, reason: page_omission/marketing_simplification/unit_difference/counting_convention/page_error/xlsx_error/ambiguous, quote (原文引用 + URL), proposed?, note? } |
+| attempts / sources / notes | Same as the result files |
+| verdicts | { column, verdict: xlsx_correct/page_correct/judgement_required, reason: page_omission/marketing_simplification/unit_difference/counting_convention/page_error/xlsx_error/ambiguous, quote (original-text quote + URL), proposed?, note? } |
 
-## ディレクトリ構成
+## Directory structure
 
 ```
 tools/verify/
-├── README.md              ← 本書
-├── lib.js                 ← node スクリプト共通ヘルパー (STATUSES/plain/readHeaders/scanResults 等。Workflow スクリプト 2 本は import 不可のため対象外)
+├── README.md              ← this document
+├── README.ja.md           ← Japanese version of this document
+├── lib.js                 ← shared helpers for node scripts (STATUSES/plain/readHeaders/scanResults, etc. The 2 Workflow scripts cannot import it, so they are out of scope)
 ├── export-products.js     ← xlsx → work/products/*.json
-├── workflow.js            ← 第 1 段: 全項目スキャン (Workflow ツール用。node では実行しない)
-├── validate-results.js    ← 健全性検証・nextIds 算出 (work/state.json)
-├── export-contested.js    ← 第 2 段入力: mismatch を work/contested/ に抽出 (既知 hold/単位差除外、価格隔離)
-├── recheck-workflow.js    ← 第 2 段: 争点の精査 (Workflow ツール用。node では実行しない)
-├── partition-rechecks.js  ← 第 3 段入力: verdict 仕分け → work/corrections-recheck.json + 質問下書き
-├── lint-columns.js        ← 列間整合の事前 lint (エージェント不要)
-├── build-report.js        ← レポート生成 (既知 hold を自動除外、価格は独立セクション、削除予定/削除済みは removals.json の保存名で照合し idx ずれの影響を受けない)
-├── propose-corrections.js ← mismatch から xlsx 修正案を生成 (大規模サイクルの一括レビュー用)
-├── apply-corrections.js   ← 同意済み修正リストを xlsx へ反映 (既定 dry-run)
-└── work/                  ← git 管理外の作業領域
-    ├── products/          ← 照合入力 (製品別 JSON)
-    ├── results/           ← 照合結果 (チェックポイント正本)
-    ├── results-invalid/   ← 検証で弾かれた結果の退避先
-    ├── results-retired/   ← 再試行・xlsx 更新で置き換え対象になった旧結果の退避先
-    ├── contested/         ← 第 2 段入力 (争点のある機種のみ。export-contested が毎回作り直す)
-    ├── rechecks/          ← 第 2 段結果 (チェックポイント)
-    ├── contested-index.json      ← 第 2 段の対象 ids
-    ├── price-diffs.json          ← 隔離された参考価格の相違 (レポートの一括判断セクション)
-    ├── known-holds.json          ← 既知 hold の恒久 suppression (正本は corrections-gen.py の KNOWN_HOLDS)
-    ├── corrections-recheck.json  ← 第 3 段の仕分け結果 (自動 hold + unreviewed 修正候補。中間生成物)
-    ├── rows-full.json     ← xlsx 全行 (idx 0 = シート 2 行目)
-    ├── state.json         ← validate の集計・nextIds
-    ├── corrections-proposal.json ← propose-corrections.js の修正案 (ページ記載の生テキスト)
-    ├── corrections-gen.py        ← 修正候補と操作者判断 (FIX/HOLD/KNOWN_HOLDS/ラウンド等) の蓄積スクリプト (正本)
-    ├── corrections-edited.json   ← corrections-gen.py の生成物 (レポート差込 + apply 入力。直接編集しない)
-    ├── corrections-round*.json   ← 各ラウンドの操作者決定 (gen の生成物。apply 入力)
-    ├── review-state.json         ← 操作者レビューの到達 idx (到達済み範囲はレポートから省く)
-    └── missing-pending.json      ← 空欄追記のうち機械変換できず操作者判断待ちの項目
+├── workflow.js            ← stage 1: scan of every item (for the Workflow tool. Not run with node)
+├── validate-results.js    ← soundness validation, computing nextIds (work/state.json)
+├── export-contested.js    ← stage 2 input: extracts mismatches to work/contested/ (known holds/unit differences excluded, prices isolated)
+├── recheck-workflow.js    ← stage 2: examination of contested items (for the Workflow tool. Not run with node)
+├── partition-rechecks.js  ← stage 3 input: sorting verdicts → work/corrections-recheck.json + draft questions
+├── lint-columns.js        ← pre-lint of consistency between columns (no agents needed)
+├── build-report.js        ← report generation (known holds excluded automatically, prices in a separate section, pending/applied removals matched by the saved names in removals.json, unaffected by idx shifts)
+├── propose-corrections.js ← generates xlsx correction proposals from mismatches (for the bulk review of large cycles)
+├── apply-corrections.js   ← applies an agreed correction list to the xlsx (dry-run by default)
+└── work/                  ← work area outside git
+    ├── products/          ← verification input (JSON per product)
+    ├── results/           ← verification results (the authoritative checkpoints)
+    ├── results-invalid/   ← where results rejected by validation are moved
+    ├── results-retired/   ← where old results replaced by a retry or an xlsx update are moved
+    ├── contested/         ← stage 2 input (only models with contested items. export-contested recreates it every time)
+    ├── rechecks/          ← stage 2 results (checkpoints)
+    ├── contested-index.json      ← target ids of stage 2
+    ├── price-diffs.json          ← isolated reference-price discrepancies (the report's bulk-decision section)
+    ├── known-holds.json          ← permanent suppression of known holds (the authoritative copy is KNOWN_HOLDS in corrections-gen.py)
+    ├── corrections-recheck.json  ← stage 3 sorting result (automatic holds + unreviewed proposed corrections. Intermediate output)
+    ├── rows-full.json     ← every xlsx row (idx 0 = sheet row 2)
+    ├── state.json         ← validate's tallies, nextIds
+    ├── corrections-proposal.json ← correction proposals from propose-corrections.js (raw text stated on the page)
+    ├── corrections-gen.py        ← script accumulating proposed corrections and the operator's decisions (FIX/HOLD/KNOWN_HOLDS/rounds, etc.) (the authoritative copy)
+    ├── corrections-edited.json   ← output of corrections-gen.py (inserted into the report + apply input. Do not edit directly)
+    ├── corrections-round*.json   ← the operator's decisions for each round (output of gen. Apply input)
+    ├── review-state.json         ← the idx the operator's review has reached (the range already reached is omitted from the report)
+    └── missing-pending.json      ← items of filling blanks that cannot be converted mechanically and await the operator's decision
 ```

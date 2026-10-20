@@ -32,7 +32,7 @@ Workflow({
 
 - ids はワークフローのキャッシュに頼らず常に validate の nextIds から渡す。これが唯一の復旧手段であり、別セッション・スクリプト変更後でも成立する
 - 結果の正本は `work/results/product-NNN.json` (エージェントが書き込むチェックポイント)。ワークフローの戻り値は進捗の要約にすぎない
-- `concurrency` (既定 1 = 直列) / `model` / `effort` (既定セッション継承) は任意。並列時の中断・上限・下位モデルのリスク特性は README「中断耐性の設計」が正本
+- `concurrency` (既定 1 = 直列) / `model` / `effort` (既定セッション継承) は任意。並列時の中断・上限・下位モデルのリスク特性は tools/verify/README.ja.md「中断耐性の設計」が正本
 - モデル選択の実績: 2026-07 の再照合 (反映値の最終確認) は sonnet + effort high + 並列 8 で実施。初回照合をどのモデルで行うかは操作者判断
 
 ## 相違の精査と質問解決 (第 2 段・第 3 段 — 標準経路)
@@ -75,7 +75,7 @@ node tools/verify/partition-rechecks.js  # verdict 仕分け + 質問下書き�
 
 ## 0 からの完全実行
 
-手順は README 末尾の記載どおり (`work/results/` を `work/results-archive-<日付>/` へ退避してから export に入る)。旧結果の削除はしない (退避のみ)。
+手順は tools/verify/README.ja.md「運用手順」節の末尾の記載どおり (`work/results/` を `work/results-archive-<日付>/` へ退避してから export に入る)。旧結果の削除はしない (退避のみ)。
 
 ## レポート
 

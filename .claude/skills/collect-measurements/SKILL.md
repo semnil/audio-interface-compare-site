@@ -58,7 +58,7 @@ Agent ツール (general-purpose, model: sonnet) を数機種/バッチで分割
 - `source` はホスト名から `labelFor` が自動ラベル化するので厳密でなくてよい。ただし**公式メーカー測定は `source:"Manufacturer"`** (ホストが公式ドメインでもラベルを固定するため)
 - 見つからない機種は捏造せず `urls: []`。**推測 URL 禁止** (照合と同じく捏造防止が最優先)
 - **確度フラグ (`verification`)**: 測定データを**自分で直接読めたら `direct`** (ページ/PDF を開いて数値・グラフを確認)。**直接読めず間接的に採用したら `indirect` + 裏取り根拠**を必ず残す。特に**測定系 YouTube は JS ゲートで本文の測定表を取得できないことが多い**ため、oEmbed/noembed で著者 (Julian Krause 等) を確認 + 対象機種名の一致 + フォーラム/`yt-dlp` 説明文で測定の存在を裏取り、という形になりがち。この場合 `indirect` とし、根拠を `verification` と `notes.md` の両方に書いて操作者がレビュー時に確度を判断できるようにする (採用は妨げないが、無検証の丸呑みと区別する)。読めるテキスト測定ソース (ASR/ProSound 等) が併存するならそれも併記して確度を補う
-- 取得ラダー (bot 保護対策) の正本は tools/verify/README.md「未照合を減らす取得ラダー」
+- 取得ラダー (bot 保護対策) の正本は tools/verify/README.ja.md「未照合 (failed) を減らす取得ラダー」
 
 ## 反映 (要・操作者の同意)
 
