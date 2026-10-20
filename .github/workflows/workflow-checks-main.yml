@@ -1,9 +1,9 @@
 name: Workflow checks (default branch)
 
-# 全 PR で .github/workflows/ と action.yml / action.yaml の契約テスト (tests/workflow-*.test.js) を実行する。
-# pull_request_target で走り、ワークフロー定義・テストとも既定ブランチのものを使う (PR は自分を判定する検査を変えられない)。
-# PR のワークフロー・action ファイルは head コミットから GitHub API でデータとして取得して WORKFLOW_ROOT に置き、
-# PR のコードは checkout も実行もしない。この検査のファイル (PROTECTED_PATTERN) が既定ブランチと一致しなければ失敗する
+# Runs the contract tests for .github/workflows/ and action.yml / action.yaml (tests/workflow-*.test.js) on every PR.
+# Runs on pull_request_target and uses the default branch's version of both the workflow definition and the tests (a PR cannot change the check that judges it).
+# The PR's workflow and action files are fetched as data from the head commit through the GitHub API and placed in WORKFLOW_ROOT;
+# the PR's code is neither checked out nor executed. Fails when this check's files (PROTECTED_PATTERN) do not match the default branch
 on:
   pull_request_target:
 
