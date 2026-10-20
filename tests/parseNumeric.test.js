@@ -1,12 +1,12 @@
 // tests/parseNumeric.test.js
-// build.js の parseNumeric / diffClass の範囲文字列解析の境界値検証
-// src/build.js を import すると build() が走ってしまうため、
-// 本ファイルでは parseNumeric / diffClass のロジックをインライン再定義する
-// (diffClass.test.js は import 方式だが、本ファイルは境界値網羅に特化し副作用を避ける)
+// Boundary tests for range-string parsing in build.js parseNumeric / diffClass
+// Importing src/build.js would run build(), so
+// this file redefines the parseNumeric / diffClass logic inline
+// (diffClass.test.js uses import, but this file focuses on boundary coverage and avoids side effects)
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// build.js の parseNumeric と同一ロジック (範囲文字列は両端の平均を返す)
+// Same logic as build.js parseNumeric (a range string returns the mean of both ends)
 function parseNumeric(val) {
   const s = String(val).trim();
   const rangeMatch = s.match(/^([+-]?\d+(?:\.\d+)?)\s*(?:[-\u2013]|to\s)\s*([+-]?\d+(?:\.\d+)?)$/i);
@@ -14,7 +14,7 @@ function parseNumeric(val) {
   return parseFloat(s);
 }
 
-// build.js の diffClass と同一ロジック (片側でも NaN なら比較しない)
+// Same logic as build.js diffClass (no comparison if either side is NaN)
 function diffClass(key, valA, valB) {
   const higherBetter = ["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
     "mainOut", "lineOut", "rcaOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
@@ -26,107 +26,107 @@ function diffClass(key, valA, valB) {
   return nA > nB ? [" highlight", ""] : ["", " highlight"];
 }
 
-describe("parseNumeric: 範囲文字列の境界値 (via diffClass:gainRange)", () => {
-  test("範囲文字列 '0-65' は平均 32.5 として扱われる", () => {
-    // 'A=0-65' (平均 32.5) vs 'B=50' → 50 > 32.5 で B ハイライト
+describe("parseNumeric: range string boundaries (via diffClass:gainRange)", () => {
+  test("range string '0-65' is treated as its mean 32.5", () => {
+    // 'A=0-65' (mean 32.5) vs 'B=50' -> 50 > 32.5, so B is highlighted
     assert.deepEqual(diffClass("gainRange", "0-65", 50), ["", " highlight"]);
   });
 
-  test("範囲文字列 '0-75' は平均 37.5 として扱われる", () => {
+  test("range string '0-75' is treated as its mean 37.5", () => {
     assert.deepEqual(diffClass("gainRange", "0-75", 80), ["", " highlight"]);
   });
 
-  test("半角ハイフン '-' で範囲認識される (U+002D)", () => {
-    // '60-65' (平均 62.5) vs 30 → A ハイライト
+  test("ASCII hyphen '-' is recognized as a range (U+002D)", () => {
+    // '60-65' (mean 62.5) vs 30 -> A highlighted
     assert.deepEqual(diffClass("gainRange", "60-65", 30), [" highlight", ""]);
   });
 
-  test("en-dash U+2013 で範囲認識される", () => {
-    // '0\u201365' (平均 32.5) vs 50 → B ハイライト
+  test("en-dash U+2013 is recognized as a range", () => {
+    // '0\u201365' (mean 32.5) vs 50 -> B highlighted
     assert.deepEqual(diffClass("gainRange", "0\u201365", 50), ["", " highlight"]);
   });
 
-  test("範囲文字列 + 空白混在でも認識される ('0 - 65')", () => {
-    // '0 - 65' (平均 32.5) vs 50 → B ハイライト
+  test("range string with surrounding spaces is recognized ('0 - 65')", () => {
+    // '0 - 65' (mean 32.5) vs 50 -> B highlighted
     assert.deepEqual(diffClass("gainRange", "0 - 65", 50), ["", " highlight"]);
   });
 
-  test("小数範囲 '0-66.5' は平均 33.25 として扱われる", () => {
-    // '0-66.5' (平均 33.25) vs 66 → B ハイライト
+  test("decimal range '0-66.5' is treated as its mean 33.25", () => {
+    // '0-66.5' (mean 33.25) vs 66 -> B highlighted
     assert.deepEqual(diffClass("gainRange", "0-66.5", 66), ["", " highlight"]);
   });
 
-  test("非ゼロ下限範囲 '10-65' は平均 37.5 として扱われる", () => {
-    // '10-65' (平均 37.5) vs 30 → A ハイライト
+  test("range with non-zero lower bound '10-65' is treated as its mean 37.5", () => {
+    // '10-65' (mean 37.5) vs 30 -> A highlighted
     assert.deepEqual(diffClass("gainRange", "10-65", 30), [" highlight", ""]);
   });
 
-  test("単独負値 '-18' は数値 -18 として扱われる", () => {
+  test("standalone negative value '-18' is treated as the number -18", () => {
     assert.deepEqual(diffClass("gainRange", "-18", 0), ["", " highlight"]);
   });
 
-  test("負値範囲 '-18-65' は平均 23.5 として扱われる", () => {
-    // 'A=-18-65' (平均 23.5) vs 'B=50' → B ハイライト
+  test("negative range '-18-65' is treated as its mean 23.5", () => {
+    // 'A=-18-65' (mean 23.5) vs 'B=50' -> B highlighted
     assert.deepEqual(diffClass("gainRange", "-18-65", 50), ["", " highlight"]);
   });
 
-  test("正規形 '-18 to +70' は平均 26 として扱われる", () => {
-    // 'A=-18 to +70' (平均 26) vs 'B=50' → B ハイライト
+  test("canonical form '-18 to +70' is treated as its mean 26", () => {
+    // 'A=-18 to +70' (mean 26) vs 'B=50' -> B highlighted
     assert.deepEqual(diffClass("gainRange", "-18 to +70", 50), ["", " highlight"]);
   });
 
-  test("正規形 '+10 to +65' は平均 37.5 として扱われる", () => {
-    // '+10 to +65' (平均 37.5) vs 30 → A ハイライト
+  test("canonical form '+10 to +65' is treated as its mean 37.5", () => {
+    // '+10 to +65' (mean 37.5) vs 30 -> A highlighted
     assert.deepEqual(diffClass("gainRange", "+10 to +65", 30), [" highlight", ""]);
   });
 
-  test("正規形 '0 to +60' は平均 30 として扱われる", () => {
-    // '0 to +60' (平均 30) vs 50 → B ハイライト
+  test("canonical form '0 to +60' is treated as its mean 30", () => {
+    // '0 to +60' (mean 30) vs 50 -> B highlighted
     assert.deepEqual(diffClass("gainRange", "0 to +60", 50), ["", " highlight"]);
   });
 
-  test("'to' の大文字混在 '0 To +60' も認識される", () => {
+  test("mixed-case 'to' in '0 To +60' is also recognized", () => {
     assert.deepEqual(diffClass("gainRange", "0 To +60", 50), ["", " highlight"]);
   });
 
-  test("空白のみ文字列は両側 NaN → 空配列", () => {
+  test("whitespace-only strings are NaN on both sides -> empty array", () => {
     assert.deepEqual(diffClass("gainRange", "   ", "   "), ["", ""]);
   });
 
-  test("非数値文字列 'N/A' vs 数値 → 片側 NaN なので比較しない", () => {
+  test("non-numeric string 'N/A' vs number -> one side is NaN, so no comparison", () => {
     assert.deepEqual(diffClass("gainRange", "N/A", 65), ["", ""]);
   });
 });
 
-describe("diffClass: sampleRate/bitDepth 境界値", () => {
-  test("sampleRate 44.1 vs 48 → 高い方 (B) がハイライト", () => {
+describe("diffClass: sampleRate/bitDepth boundaries", () => {
+  test("sampleRate 44.1 vs 48 -> the higher one (B) is highlighted", () => {
     assert.deepEqual(diffClass("sampleRate", 44.1, 48), ["", " highlight"]);
   });
 
-  test("sampleRate 192 vs 384 → 高い方 (B) がハイライト", () => {
+  test("sampleRate 192 vs 384 -> the higher one (B) is highlighted", () => {
     assert.deepEqual(diffClass("sampleRate", 192, 384), ["", " highlight"]);
   });
 
-  test("bitDepth 16 vs 24 → B ハイライト", () => {
+  test("bitDepth 16 vs 24 -> B highlighted", () => {
     assert.deepEqual(diffClass("bitDepth", 16, 24), ["", " highlight"]);
   });
 
-  test("bitDepth 24 vs 32 → B ハイライト", () => {
+  test("bitDepth 24 vs 32 -> B highlighted", () => {
     assert.deepEqual(diffClass("bitDepth", 24, 32), ["", " highlight"]);
   });
 });
 
-describe("diffClass: ゼロ値の扱い (isNaN vs falsy)", () => {
-  test("micPre 0 vs 2 → B ハイライト", () => {
+describe("diffClass: handling of zero values (isNaN vs falsy)", () => {
+  test("micPre 0 vs 2 -> B highlighted", () => {
     assert.deepEqual(diffClass("micPre", 0, 2), ["", " highlight"]);
   });
 
-  test("micPre 0 vs 0 → 両方ゼロで引き分け", () => {
+  test("micPre 0 vs 0 -> both zero, a tie", () => {
     assert.deepEqual(diffClass("micPre", 0, 0), ["", ""]);
   });
 
-  test("micPre 0 vs null → 片側 NaN なので比較しない", () => {
-    // 欠損 (null) を「劣位」と誤認しないよう片側 NaN はハイライト抑止
+  test("micPre 0 vs null -> one side is NaN, so no comparison", () => {
+    // Suppress highlighting when one side is NaN so a missing value (null) is not mistaken for the inferior one
     assert.deepEqual(diffClass("micPre", 0, null), ["", ""]);
   });
 });

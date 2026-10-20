@@ -1,6 +1,6 @@
 // tests/product-pages.test.js
-// ビルド済み dist/products/{slug}/index.html の品質・a11y・SEO 検証
-// dist/ が未生成の場合はスキップ
+// Checks quality, a11y, and SEO of the built dist/products/{slug}/index.html
+// Skipped when dist/ has not been built
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -24,69 +24,69 @@ function sampleDirs(allDirs, count) {
   return allDirs.filter((_, i) => i % step === 0).slice(0, count);
 }
 
-describe("product-pages: ファイル存在確認", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("全製品分の index.html が生成されていること", () => {
+describe("product-pages: file existence", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("an index.html is generated for every product", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const missing = products.filter(p => !existsSync(join(PRODUCTS_DIR, p.slug, "index.html")));
     assert.equal(missing.length, 0,
-      `ファイル欠落: ${missing.slice(0, 5).map(p => p.slug).join(", ")}`);
+      `missing files: ${missing.slice(0, 5).map(p => p.slug).join(", ")}`);
   });
 
-  test("生成済み製品ページ数が products.json の件数と一致すること", () => {
+  test("the number of generated product pages matches the products.json count", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const dirs = readdirSync(PRODUCTS_DIR).filter(d =>
       existsSync(join(PRODUCTS_DIR, d, "index.html"))
     );
     assert.equal(dirs.length, products.length,
-      `ページ数 ${dirs.length} ≠ products.json 件数 ${products.length}`);
+      `page count ${dirs.length} != products.json count ${products.length}`);
   });
 });
 
-describe("product-pages: SEO 契約", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("<title> に製品名と 'Specs' が含まれること", () => {
+describe("product-pages: SEO contract", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("<title> contains the product name and 'Specs'", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 20);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       const m = html.match(/<title>([^<]+)<\/title>/);
-      if (!m) { violations.push(`${p.slug}: title タグなし`); continue; }
-      if (!m[1].includes("Specs")) violations.push(`${p.slug}: 'Specs' が title にない (${m[1]})`);
-      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: ブランド名が title にない`);
+      if (!m) { violations.push(`${p.slug}: no title tag`); continue; }
+      if (!m[1].includes("Specs")) violations.push(`${p.slug}: 'Specs' not in title (${m[1]})`);
+      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: brand name not in title`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("<h1> に製品名と 'Specs' が含まれること", () => {
+  test("<h1> contains the product name and 'Specs'", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 20);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       const m = html.match(/<h1>([^<]+)<\/h1>/);
-      if (!m) { violations.push(`${p.slug}: h1 タグなし`); continue; }
-      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: ブランド名が h1 にない`);
-      if (!m[1].includes("Specs")) violations.push(`${p.slug}: 'Specs' が h1 にない`);
+      if (!m) { violations.push(`${p.slug}: no h1 tag`); continue; }
+      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: brand name not in h1`);
+      if (!m[1].includes("Specs")) violations.push(`${p.slug}: 'Specs' not in h1`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("canonical URL が /products/{slug}/ 形式であること", () => {
+  test("canonical URL has the /products/{slug}/ form", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 20);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       const m = html.match(/rel="canonical"\s+href="([^"]+)"/);
-      if (!m) { violations.push(`${p.slug}: canonical 欠落`); continue; }
+      if (!m) { violations.push(`${p.slug}: canonical missing`); continue; }
       if (!m[1].includes(`/products/${p.slug}/`)) {
-        violations.push(`${p.slug}: canonical パス不正 (${m[1]})`);
+        violations.push(`${p.slug}: invalid canonical path (${m[1]})`);
       }
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("meta description が存在すること", () => {
+  test("meta description exists", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 20);
     const missing = sample.filter(p => {
@@ -94,26 +94,26 @@ describe("product-pages: SEO 契約", { skip: !distExists ? "dist/ が未生成"
       return !/<meta\s+name="description"\s+content="[^"]{10,}"/.test(html);
     });
     assert.equal(missing.length, 0,
-      `meta description 欠落または短すぎる: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
+      `meta description missing or too short: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
   });
 
-  test("JSON-LD が @type:Product を含むこと", () => {
+  test("JSON-LD contains @type:Product", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 20);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       const m = html.match(/<script type="application\/ld\+json">([^<]+)<\/script>/);
-      if (!m) { violations.push(`${p.slug}: JSON-LD なし`); continue; }
+      if (!m) { violations.push(`${p.slug}: no JSON-LD`); continue; }
       let ld;
-      try { ld = JSON.parse(m[1]); } catch { violations.push(`${p.slug}: JSON-LD パース失敗`); continue; }
-      if (ld["@type"] !== "Product") violations.push(`${p.slug}: @type が Product でない (${ld["@type"]})`);
-      if (!ld.name || !ld.name.includes(p.brand)) violations.push(`${p.slug}: JSON-LD name にブランドなし`);
+      try { ld = JSON.parse(m[1]); } catch { violations.push(`${p.slug}: JSON-LD parse failed`); continue; }
+      if (ld["@type"] !== "Product") violations.push(`${p.slug}: @type is not Product (${ld["@type"]})`);
+      if (!ld.name || !ld.name.includes(p.brand)) violations.push(`${p.slug}: no brand in JSON-LD name`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("OGP タグが揃っていること (og:type, og:title, og:description, og:url)", () => {
+  test("all OGP tags are present (og:type, og:title, og:description, og:url)", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const required = [
@@ -124,48 +124,48 @@ describe("product-pages: SEO 契約", { skip: !distExists ? "dist/ が未生成"
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       for (const tag of required) {
-        if (!html.includes(tag)) violations.push(`${p.slug}: ${tag} 欠落`);
+        if (!html.includes(tag)) violations.push(`${p.slug}: ${tag} missing`);
       }
     }
     assert.equal(violations.length, 0, violations.slice(0, 5).join(" / "));
   });
 
-  test("比較リンク (.compare-links) が存在し、フラグメント URL (#a=..&b=..) を含むこと", () => {
+  test("comparison links (.compare-links) exist and contain fragment URLs (#a=..&b=..)", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       if (!html.includes('class="compare-links"')) {
-        violations.push(`${p.slug}: compare-links 欠落`);
+        violations.push(`${p.slug}: compare-links missing`);
         continue;
       }
-      // フラグメント URL に移行。静的 /compare/ URL は張らない (クロール爆発防止)
-      // HTML 属性内では & が &amp; にエスケープされる
+      // Moved to fragment URLs. Static /compare/ URLs are not linked (prevents a crawl explosion)
+      // Inside HTML attributes, & is escaped to &amp;
       const fragCount = (html.match(/href="[^"]*#a=[^"]*(?:&amp;|&)b=[^"]*"/g) || []).length;
-      if (fragCount === 0) violations.push(`${p.slug}: フラグメント比較リンクが 0 件`);
-      if (html.includes("/compare/")) violations.push(`${p.slug}: 静的 /compare/ URL が残存`);
+      if (fragCount === 0) violations.push(`${p.slug}: 0 fragment comparison links`);
+      if (html.includes("/compare/")) violations.push(`${p.slug}: static /compare/ URL remains`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("スペック要約文 (.product-summary) が存在し、製品名を含むこと", () => {
+  test("spec summary sentence (.product-summary) exists and contains the product name", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       const m = html.match(/<p class="product-summary"[^>]*>([^<]+)<\/p>/);
-      if (!m) { violations.push(`${p.slug}: product-summary 欠落`); continue; }
-      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: 要約にブランド名なし`);
-      if (m[1].length < 30) violations.push(`${p.slug}: 要約が短すぎる (${m[1].length})`);
+      if (!m) { violations.push(`${p.slug}: product-summary missing`); continue; }
+      if (!m[1].includes(escapeHtml(p.brand))) violations.push(`${p.slug}: no brand name in summary`);
+      if (m[1].length < 30) violations.push(`${p.slug}: summary too short (${m[1].length})`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 });
 
-describe("product-pages: a11y 契約", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("skip-link が存在すること", () => {
+describe("product-pages: a11y contract", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("skip-link exists", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const missing = sample.filter(p => {
@@ -173,10 +173,10 @@ describe("product-pages: a11y 契約", { skip: !distExists ? "dist/ が未生成
       return !/class="skip-link"[^>]*>Skip to main content</.test(html);
     });
     assert.equal(missing.length, 0,
-      `skip-link 欠落: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
+      `skip-link missing: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
   });
 
-  test("<main id=\"main\"> が存在すること", () => {
+  test("<main id=\"main\"> exists", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const missing = sample.filter(p => {
@@ -184,10 +184,10 @@ describe("product-pages: a11y 契約", { skip: !distExists ? "dist/ が未生成
       return !/<main id="main">/.test(html);
     });
     assert.equal(missing.length, 0,
-      `<main id="main"> 欠落: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
+      `<main id="main"> missing: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
   });
 
-  test("スペック表に <caption class=\"sr-only\"> があること", () => {
+  test("spec table has <caption class=\"sr-only\">", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const missing = sample.filter(p => {
@@ -195,22 +195,22 @@ describe("product-pages: a11y 契約", { skip: !distExists ? "dist/ が未生成
       return !/<caption class="sr-only">/.test(html);
     });
     assert.equal(missing.length, 0,
-      `caption sr-only 欠落: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
+      `caption sr-only missing: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
   });
 
-  test("spec 表の各行に <th scope=\"row\"> が使われていること", () => {
+  test("each spec table row uses <th scope=\"row\">", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const violations = [];
     for (const p of sample) {
       const html = readFileSync(join(PRODUCTS_DIR, p.slug, "index.html"), "utf8");
       const count = (html.match(/<th scope="row"/g) || []).length;
-      if (count < 20) violations.push(`${p.slug}: th[scope=row] が ${count} 件のみ`);
+      if (count < 20) violations.push(`${p.slug}: only ${count} th[scope=row]`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("外部リンクに rel=\"noopener noreferrer\" が付与されていること", () => {
+  test("external links have rel=\"noopener noreferrer\"", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const sample = sampleDirs(products, 15);
     const violations = [];
@@ -224,6 +224,6 @@ describe("product-pages: a11y 契約", { skip: !distExists ? "dist/ が未生成
       }
     }
     assert.equal(violations.length, 0,
-      `noopener noreferrer 欠落: ${violations.slice(0, 3).join(" / ")}`);
+      `noopener noreferrer missing: ${violations.slice(0, 3).join(" / ")}`);
   });
 });

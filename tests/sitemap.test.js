@@ -1,6 +1,6 @@
 // tests/sitemap.test.js
-// ビルド済み dist/sitemap.xml の品質検証テスト
-// dist/ が存在しない場合はスキップ
+// Quality tests for the built dist/sitemap.xml
+// Skipped when dist/ does not exist
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -12,7 +12,7 @@ const ROOT = join(__dirname, "..");
 const SITEMAP_PATH = join(ROOT, "dist", "sitemap.xml");
 const PRODUCTS_PATH = join(ROOT, "dist", "products.json");
 
-// dist/ が未生成の場合はテスト全体をスキップ
+// Skip all tests when dist/ has not been built
 const distExists = existsSync(SITEMAP_PATH) && existsSync(PRODUCTS_PATH);
 
 function extractUrls(sitemapContent) {
@@ -20,65 +20,65 @@ function extractUrls(sitemapContent) {
   return locMatches.map(m => m.replace(/<\/?loc>/g, ""));
 }
 
-describe("sitemap.xml の品質検証", { skip: !distExists ? "dist/ が未生成。npm run build を実行してください" : false }, () => {
-  test("sitemap.xml と products.json が読み込めること", () => {
+describe("sitemap.xml quality", { skip: !distExists ? "dist/ not built. Run npm run build" : false }, () => {
+  test("sitemap.xml and products.json can be read", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const urls = extractUrls(sitemapContent);
-    assert.ok(urls.length > 0, "URL が 1 件も抽出できなかった");
+    assert.ok(urls.length > 0, "not a single URL could be extracted");
   });
 
-  test("URL 数が (index + 全製品ページ + ハブ) × (en + ja) と一致すること", () => {
+  test("URL count equals (index + all product pages + hubs) x (en + ja)", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const brands = new Set(products.map(p => p.brand).filter(Boolean));
     const categories = new Set(products.map(p => p.category).filter(Boolean));
-    // en (ルート) と ja (/ja/) の 2 言語分
+    // Two languages: en (root) and ja (/ja/)
     const perLang = 1 + products.length + brands.size + categories.size;
     const expected = perLang * 2;
     const urls = extractUrls(sitemapContent);
     assert.equal(urls.length, expected,
-      `URL 数が期待値と異なる: expected=${expected} (${perLang} paths × en/ja), actual=${urls.length}`);
+      `URL count differs from the expected value: expected=${expected} (${perLang} paths x en/ja), actual=${urls.length}`);
   });
 
-  test("日本語版 (/ja/) の URL が含まれること", () => {
+  test("URLs of the Japanese version (/ja/) are included", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const urls = extractUrls(sitemapContent);
-    assert.ok(urls.some(u => /\/ja\/$/.test(u)), "ja トップページ URL が無い");
-    assert.ok(urls.some(u => u.includes("/ja/products/")), "ja 製品ページ URL が無い");
+    assert.ok(urls.some(u => /\/ja\/$/.test(u)), "no ja top page URL");
+    assert.ok(urls.some(u => u.includes("/ja/products/")), "no ja product page URL");
   });
 
-  test("比較 URL (/compare/) が含まれないこと (フラグメント化でクロール対象外)", () => {
+  test("comparison URLs (/compare/) are not included (not crawl targets since moving to fragments)", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const urls = extractUrls(sitemapContent);
     const compareUrls = urls.filter(u => u.includes("/compare/"));
     assert.equal(compareUrls.length, 0,
-      `sitemap に比較 URL が残存: ${compareUrls.slice(0, 3).join(" / ")}`);
+      `comparison URLs remain in the sitemap: ${compareUrls.slice(0, 3).join(" / ")}`);
   });
 
-  test("製品ページ・ハブページの URL が含まれること", () => {
+  test("product page and hub page URLs are included", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const urls = extractUrls(sitemapContent);
-    assert.ok(urls.some(u => u.includes("/products/")), "製品ページ URL が無い");
-    assert.ok(urls.some(u => u.includes("/brands/")), "ブランドハブ URL が無い");
-    assert.ok(urls.some(u => u.includes("/categories/")), "カテゴリハブ URL が無い");
+    assert.ok(urls.some(u => u.includes("/products/")), "no product page URL");
+    assert.ok(urls.some(u => u.includes("/brands/")), "no brand hub URL");
+    assert.ok(urls.some(u => u.includes("/categories/")), "no category hub URL");
   });
 
-  test("index URL (トップページ) が en / ja の 2 件含まれること", () => {
+  test("the index URL (top page) is included twice, for en / ja", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const urls = extractUrls(sitemapContent);
     const indexUrls = urls.filter(u =>
       !u.includes("/compare/") && !u.includes("/products/") &&
       !u.includes("/brands/") && !u.includes("/categories/"));
-    // en ルート (.../) と ja (.../ja/) の 2 件
+    // Two: the en root (.../) and ja (.../ja/)
     assert.equal(indexUrls.length, 2,
-      `index URL の件数が期待値と異なる: ${JSON.stringify(indexUrls)}`);
+      `index URL count differs from the expected value: ${JSON.stringify(indexUrls)}`);
   });
 
-  test("重複 URL が存在しないこと", () => {
+  test("there are no duplicate URLs", () => {
     const sitemapContent = readFileSync(SITEMAP_PATH, "utf8");
     const urls = extractUrls(sitemapContent);
     const unique = new Set(urls);
     assert.equal(unique.size, urls.length,
-      `重複 URL が ${urls.length - unique.size} 件存在する`);
+      `${urls.length - unique.size} duplicate URLs exist`);
   });
 });

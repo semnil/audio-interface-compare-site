@@ -1,6 +1,6 @@
 // tests/hub-pages.test.js
-// ブランド別 / カテゴリ別ハブページ (dist/brands, dist/categories) の検証
-// dist/ が未生成の場合はスキップ
+// Checks for the per-brand / per-category hub pages (dist/brands, dist/categories)
+// Skipped when dist/ is not built
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -15,79 +15,79 @@ const INDEX_PATH = join(ROOT, "dist", "index.html");
 const PRODUCTS_PATH = join(ROOT, "dist", "products.json");
 const distExists = existsSync(BRANDS_DIR) && existsSync(CATEGORIES_DIR) && existsSync(PRODUCTS_PATH);
 
-describe("hub-pages: ブランド / カテゴリ数の一致", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("ブランドハブ数が products.json の一意ブランド数と一致すること", () => {
+describe("hub-pages: brand / category counts match", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("the number of brand hubs matches the number of unique brands in products.json", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const brands = new Set(products.map(p => p.brand).filter(Boolean));
     const dirs = readdirSync(BRANDS_DIR).filter(d => existsSync(join(BRANDS_DIR, d, "index.html")));
-    assert.equal(dirs.length, brands.size, `ブランドハブ ${dirs.length} ≠ 一意ブランド ${brands.size}`);
+    assert.equal(dirs.length, brands.size, `brand hubs ${dirs.length} != unique brands ${brands.size}`);
   });
 
-  test("カテゴリハブ数が products.json の一意カテゴリ数と一致すること", () => {
+  test("the number of category hubs matches the number of unique categories in products.json", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const cats = new Set(products.map(p => p.category).filter(Boolean));
     const dirs = readdirSync(CATEGORIES_DIR).filter(d => existsSync(join(CATEGORIES_DIR, d, "index.html")));
-    assert.equal(dirs.length, cats.size, `カテゴリハブ ${dirs.length} ≠ 一意カテゴリ ${cats.size}`);
+    assert.equal(dirs.length, cats.size, `category hubs ${dirs.length} != unique categories ${cats.size}`);
   });
 });
 
-describe("hub-pages: SEO / 内部リンク契約", { skip: !distExists ? "dist/ が未生成" : false }, () => {
+describe("hub-pages: SEO / internal link contract", { skip: !distExists ? "dist/ not built" : false }, () => {
   const sampleBrands = () => readdirSync(BRANDS_DIR).slice(0, 8);
 
-  test("各ハブが製品ページへの静的 <a href> を含むこと (レンダリング非依存のクロール経路)", () => {
+  test("each hub contains static <a href> links to product pages (a crawl path that does not depend on rendering)", () => {
     const violations = [];
     for (const d of sampleBrands()) {
       const html = readFileSync(join(BRANDS_DIR, d, "index.html"), "utf8");
       const links = (html.match(/href="[^"]*products\/[^"]+\/"/g) || []).length;
-      if (links === 0) violations.push(`${d}: 製品リンク 0 件`);
+      if (links === 0) violations.push(`${d}: 0 product links`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("canonical URL が /brands/{slug}/ 形式であること", () => {
+  test("the canonical URL has the form /brands/{slug}/", () => {
     const violations = [];
     for (const d of sampleBrands()) {
       const html = readFileSync(join(BRANDS_DIR, d, "index.html"), "utf8");
       const m = html.match(/rel="canonical" href="([^"]+)"/);
-      if (!m) { violations.push(`${d}: canonical 欠落`); continue; }
-      if (!m[1].includes(`/brands/${d}/`)) violations.push(`${d}: canonical パス不正 (${m[1]})`);
+      if (!m) { violations.push(`${d}: canonical is missing`); continue; }
+      if (!m[1].includes(`/brands/${d}/`)) violations.push(`${d}: invalid canonical path (${m[1]})`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("JSON-LD が @type:ItemList を含み、itemListElement が製品数と一致すること", () => {
+  test("the JSON-LD contains @type:ItemList, and itemListElement matches the number of products", () => {
     const violations = [];
     for (const d of sampleBrands()) {
       const html = readFileSync(join(BRANDS_DIR, d, "index.html"), "utf8");
       const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-      if (!m) { violations.push(`${d}: JSON-LD なし`); continue; }
+      if (!m) { violations.push(`${d}: no JSON-LD`); continue; }
       let ld;
-      try { ld = JSON.parse(m[1]); } catch { violations.push(`${d}: JSON-LD parse 失敗`); continue; }
-      if (ld["@type"] !== "ItemList") violations.push(`${d}: @type が ItemList でない`);
+      try { ld = JSON.parse(m[1]); } catch { violations.push(`${d}: JSON-LD parse failed`); continue; }
+      if (ld["@type"] !== "ItemList") violations.push(`${d}: @type is not ItemList`);
       const linkCount = (html.match(/href="[^"]*products\/[^"]+\/"/g) || []).length;
       if (!Array.isArray(ld.itemListElement) || ld.itemListElement.length !== linkCount) {
-        violations.push(`${d}: itemListElement ${ld.itemListElement?.length} ≠ リンク数 ${linkCount}`);
+        violations.push(`${d}: itemListElement ${ld.itemListElement?.length} != link count ${linkCount}`);
       }
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("meta description が存在すること", () => {
+  test("a meta description exists", () => {
     const violations = [];
     for (const d of sampleBrands()) {
       const html = readFileSync(join(BRANDS_DIR, d, "index.html"), "utf8");
       if (!/<meta\s+name="description"\s+content="[^"]{10,}"/.test(html)) violations.push(d);
     }
-    assert.equal(violations.length, 0, `meta description 欠落: ${violations.slice(0, 3).join(", ")}`);
+    assert.equal(violations.length, 0, `meta description is missing: ${violations.slice(0, 3).join(", ")}`);
   });
 });
 
-describe("hub-pages: index からの静的ブラウズ導線", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("index にブランドハブ / カテゴリハブへの静的リンクが存在すること", () => {
+describe("hub-pages: static browse paths from the index", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("the index has static links to the brand hubs / category hubs", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
     const brandLinks = (html.match(/href="[^"]*brands\/[^"]+\/"/g) || []).length;
     const catLinks = (html.match(/href="[^"]*categories\/[^"]+\/"/g) || []).length;
-    assert.ok(brandLinks > 0, "index にブランドハブへのリンクがない");
-    assert.ok(catLinks > 0, "index にカテゴリハブへのリンクがない");
+    assert.ok(brandLinks > 0, "no links to brand hubs in index");
+    assert.ok(catLinks > 0, "no links to category hubs in index");
   });
 });

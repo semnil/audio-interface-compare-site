@@ -1,11 +1,11 @@
 // tests/safeJsonForScriptLD.test.js
-// build.js の safeJsonForScriptLD (src/build.js:157-159) の契約検証
-// 通常の safeJsonForScript に加え、& → \u0026 エスケープも行う
-// JSON-LD (application/ld+json) 内では HTML 解析の都合で & も素で出ると <script> 脱出の補助になる
+// Contract tests for build.js safeJsonForScriptLD (src/build.js:157-159)
+// In addition to the ordinary safeJsonForScript, it also escapes & -> \u0026
+// Inside JSON-LD (application/ld+json), a raw & also helps a <script> escape because of how HTML is parsed
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// src/build.js と同一ロジックを再現 (import 副作用を避けるためインライン再定義)
+// Reproduces the same logic as src/build.js (redefined inline to avoid import side effects)
 function safeJsonForScript(obj) {
   return JSON.stringify(obj)
     .replace(/</g, "\\u003c")
@@ -16,41 +16,41 @@ function safeJsonForScriptLD(obj) {
   return safeJsonForScript(obj).replace(/&/g, "\\u0026");
 }
 
-describe("safeJsonForScriptLD: & を \\u0026 にエスケープする (safeJsonForScript との差分)", () => {
-  test("brand 名 'Allen & Heath' は \\u0026 を含む文字列に変換される", () => {
+describe("safeJsonForScriptLD: escapes & to \\u0026 (difference from safeJsonForScript)", () => {
+  test("brand name 'Allen & Heath' is converted to a string containing \\u0026", () => {
     const input = { name: "Allen & Heath" };
     const out = safeJsonForScriptLD(input);
     assert.ok(out.includes("Allen \\u0026 Heath"),
-      `Allen \\u0026 Heath を含まない: ${out}`);
-    // 生の & は出現しない
-    assert.equal(/&/.test(out), false, `生の & が残っている: ${out}`);
+      `does not contain Allen \\u0026 Heath: ${out}`);
+    // No raw & appears
+    assert.equal(/&/.test(out), false, `a raw & remains: ${out}`);
   });
 
-  test("JSON.parse 後のオブジェクトは元の & を復元する (往復性)", () => {
+  test("the object after JSON.parse restores the original & (round trip)", () => {
     const input = { name: "A & B", url: "https://a.com?x=1&y=2" };
     const encoded = safeJsonForScriptLD(input);
     const decoded = JSON.parse(encoded);
     assert.deepEqual(decoded, input);
   });
 
-  test("< / U+2028 / U+2029 / & すべてが同時にエスケープされる", () => {
+  test("< / U+2028 / U+2029 / & are all escaped at the same time", () => {
     const input = { x: "</script>", y: "a\u2028b", z: "c\u2029d", amp: "A & B" };
     const out = safeJsonForScriptLD(input);
-    assert.equal(/</.test(out), false, "< が残っている");
-    assert.equal(/[\u2028\u2029]/.test(out), false, "U+2028/U+2029 が残っている");
-    assert.equal(/&/.test(out), false, "& が残っている");
-    // 往復性確認
+    assert.equal(/</.test(out), false, "< remains");
+    assert.equal(/[\u2028\u2029]/.test(out), false, "U+2028/U+2029 remains");
+    assert.equal(/&/.test(out), false, "& remains");
+    // Round trip check
     assert.deepEqual(JSON.parse(out), input);
   });
 
-  test("& を含まない入力では safeJsonForScript と同一出力", () => {
+  test("for input without &, the output is identical to safeJsonForScript", () => {
     const input = { name: "Focusrite Scarlett" };
     assert.equal(safeJsonForScriptLD(input), safeJsonForScript(input));
   });
 });
 
-describe("safeJsonForScriptLD: JSON-LD として <script type=\"application/ld+json\"> に埋め込んだときの整合性", () => {
-  test("brand に & を含む値があっても <script> タグ脱出が起きない", () => {
+describe("safeJsonForScriptLD: consistency when embedded as JSON-LD in <script type=\"application/ld+json\">", () => {
+  test("no <script> tag escape occurs even when brand has a value containing &", () => {
     const obj = {
       "@context": "https://schema.org",
       "@type": "WebPage",
@@ -62,21 +62,21 @@ describe("safeJsonForScriptLD: JSON-LD として <script type=\"application/ld+j
     };
     const ld = safeJsonForScriptLD(obj);
     const embedded = `<script type="application/ld+json">${ld}</script>`;
-    // <script> タグペアは 1 組のみ
+    // Only one <script> tag pair
     const opens = (embedded.match(/<script/gi) || []).length;
     const closes = (embedded.match(/<\/script/gi) || []).length;
-    assert.equal(opens, 1, `<script> open タグが ${opens}`);
-    assert.equal(closes, 1, `</script> close タグが ${closes}`);
-    // body 内部 (type 属性を除いた実 JSON) を抽出してパース
+    assert.equal(opens, 1, `<script> open tags: ${opens}`);
+    assert.equal(closes, 1, `</script> close tags: ${closes}`);
+    // Extract and parse the body (the actual JSON, excluding the type attribute)
     const body = embedded.match(/<script[^>]+>([\s\S]*?)<\/script>/)[1];
     assert.deepEqual(JSON.parse(body), obj);
   });
 
-  test("name に '</script>' 混入 + & 混入のコンビネーション: 両方エスケープで脱出防御", () => {
+  test("combination of '</script>' and & in name: escaping both defends against the escape", () => {
     const obj = { name: "Evil & </script><script>alert(1)</script>" };
     const ld = safeJsonForScriptLD(obj);
-    assert.equal(/<\/script/i.test(ld), false, `</script が残存: ${ld}`);
-    assert.equal(/&/.test(ld), false, `& が残存: ${ld}`);
+    assert.equal(/<\/script/i.test(ld), false, `</script remains: ${ld}`);
+    assert.equal(/&/.test(ld), false, `& remains: ${ld}`);
     const embedded = `<script type="application/ld+json">${ld}</script>`;
     const opens = (embedded.match(/<script/gi) || []).length;
     const closes = (embedded.match(/<\/script/gi) || []).length;
@@ -85,23 +85,23 @@ describe("safeJsonForScriptLD: JSON-LD として <script type=\"application/ld+j
   });
 });
 
-describe("safeJsonForScriptLD vs safeJsonForScript: 設計上の分離契約", () => {
-  // PRODUCTS インラインは通常の <script> なので & のエスケープ不要 (JSON.parse で & は問題なし)
-  // JSON-LD は application/ld+json だが依然 <script> タグ内で、
-  //   HTML パーサが <script> 内を CDATA 扱いするため本来は & もそのままで OK。
-  //   ただし一部パーサ実装や minifier で誤動作するリスクを避けるため、
-  //   深層防御として JSON-LD の & のみ \u0026 に変換している。
-  test("PRODUCTS インラインは & を保持する (safeJsonForScript 側)", () => {
+describe("safeJsonForScriptLD vs safeJsonForScript: separation contract by design", () => {
+  // The PRODUCTS inline is an ordinary <script>, so & needs no escaping (& is fine for JSON.parse)
+  // JSON-LD is application/ld+json but still inside a <script> tag;
+  //   the HTML parser treats <script> content as CDATA, so a raw & is fine in principle.
+  //   However, to avoid the risk of misbehavior in some parser implementations or minifiers,
+  //   only the & in JSON-LD is converted to \u0026 as defense in depth.
+  test("the PRODUCTS inline keeps & (safeJsonForScript side)", () => {
     const input = { brand: "Allen & Heath" };
     const out = safeJsonForScript(input);
-    assert.ok(out.includes("&"), "PRODUCTS 側では & を残す設計");
+    assert.ok(out.includes("&"), "by design the PRODUCTS side keeps &");
     assert.equal(out.includes("\\u0026"), false);
   });
 
-  test("JSON-LD は & を \\u0026 化する (safeJsonForScriptLD 側)", () => {
+  test("JSON-LD turns & into \\u0026 (safeJsonForScriptLD side)", () => {
     const input = { brand: "Allen & Heath" };
     const out = safeJsonForScriptLD(input);
-    assert.equal(out.includes("&"), false, "JSON-LD 側では & を残さない設計");
+    assert.equal(out.includes("&"), false, "by design the JSON-LD side does not keep &");
     assert.ok(out.includes("\\u0026"));
   });
 });

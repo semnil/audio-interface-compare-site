@@ -1,10 +1,10 @@
 // tests/sanitizeUrl-probe.test.js
-// Round 3 の M-new-1 修正 (sanitizeUrl の new URL() ベース化) の追加境界値検証
-// WHATWG URL パーサが受理する 'グレーゾーン' な入力への挙動を固定する
+// Additional boundary tests for the Round 3 M-new-1 fix (sanitizeUrl rebuilt on new URL())
+// Pins the behavior for 'gray zone' inputs that the WHATWG URL parser accepts
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// src/build.js と同一ロジック
+// Same logic as src/build.js
 function sanitizeUrl(u) {
   if (u == null) return "";
   const s = String(u).trim();
@@ -27,86 +27,86 @@ function escapeHtml(str) {
     .replace(/"/g, "&quot;");
 }
 
-describe("sanitizeUrl: WHATWG URL パーサ特有の挙動 (受理される奇妙な入力)", () => {
-  test("'https:' スキームのみはパース失敗で空文字", () => {
+describe("sanitizeUrl: behavior specific to the WHATWG URL parser (odd inputs that are accepted)", () => {
+  test("the 'https:' scheme alone fails to parse -> empty string", () => {
     assert.equal(sanitizeUrl("https:"), "");
   });
 
-  test("'https://' (ホストなし) はパース失敗で空文字", () => {
+  test("'https://' (no host) fails to parse -> empty string", () => {
     assert.equal(sanitizeUrl("https://"), "");
   });
 
-  test("'https:example.com' (スラッシュなし) は受理されて https://example.com/ になる", () => {
-    // WHATWG URL は 'https:example.com' を 'https://example.com/' と解釈する
-    // これは仕様準拠だが、意図しない動作に見える可能性あり。深層防御の escapeHtml で問題なし
+  test("'https:example.com' (no slashes) is accepted and becomes https://example.com/", () => {
+    // WHATWG URL interprets 'https:example.com' as 'https://example.com/'
+    // This follows the spec but may look unintended. The defense-in-depth escapeHtml makes it harmless
     assert.equal(sanitizeUrl("https:example.com"), "https://example.com/");
   });
 
-  test("内部空白を含む URL ('https://a.com  evil.com') はパース失敗で空文字", () => {
-    // tab / newline 等の制御文字は WHATWG URL が自動除去するが、スペースは除去されずに失敗
+  test("a URL with inner whitespace ('https://a.com  evil.com') fails to parse -> empty string", () => {
+    // WHATWG URL strips control characters such as tab / newline, but spaces are not stripped and parsing fails
     assert.equal(sanitizeUrl("https://   evil.com"), "");
   });
 
-  test("NULL バイトを含む URL はパース失敗で空文字", () => {
+  test("a URL containing a NULL byte fails to parse -> empty string", () => {
     assert.equal(sanitizeUrl("https://a.com\u0000embed"), "");
   });
 
-  test("プロトコル相対 URL '//evil.com' はパース失敗で空文字", () => {
-    // new URL() は base なしではプロトコル相対を受理しない
+  test("protocol-relative URL '//evil.com' fails to parse -> empty string", () => {
+    // new URL() without a base does not accept protocol-relative URLs
     assert.equal(sanitizeUrl("//evil.com"), "");
   });
 
-  test("'https:\\\\\\\\evil.com\\\\' (バックスラッシュ混在) は 'https://evil.com/' に正規化される", () => {
-    // WHATWG URL はバックスラッシュをスラッシュに正規化する (仕様準拠)
+  test("'https:\\\\\\\\evil.com\\\\' (mixed backslashes) is normalized to 'https://evil.com/'", () => {
+    // WHATWG URL normalizes backslashes to slashes (per the spec)
     assert.equal(sanitizeUrl("https:\\\\evil.com\\"), "https://evil.com/");
   });
 
-  test("IPv6 リテラル 'https://[::1]/' は http(s) スキームとして受理される", () => {
+  test("IPv6 literal 'https://[::1]/' is accepted as an http(s) scheme", () => {
     assert.equal(sanitizeUrl("https://[::1]/"), "https://[::1]/");
   });
 
-  test("認証情報付き 'https://user:pass@evil.com' は受理される (仕様上正しい URL)", () => {
-    // これは意図せず認証情報が埋め込まれる SEO 上の問題はあるが、http(s) スキームなので通す
-    // 実データでは入らない想定
+  test("'https://user:pass@evil.com' with credentials is accepted (a valid URL per the spec)", () => {
+    // This has the SEO problem of credentials being embedded unintentionally, but it is an http(s) scheme so it passes
+    // Real data is assumed not to contain this
     const out = sanitizeUrl("https://user:pass@evil.com");
-    assert.ok(out.startsWith("https://"), `https スキームでない: ${out}`);
+    assert.ok(out.startsWith("https://"), `not an https scheme: ${out}`);
   });
 
-  test("'https:' 直後に改行 + 属性脱出試行は WHATWG URL が改行を除去して処理", () => {
-    // WHATWG URL は \r\n\t を自動除去するため、結果的に 'https://a.comonclick=alert/' になる
+  test("a newline + attribute escape attempt right after 'https:' is handled by WHATWG URL stripping the newline", () => {
+    // WHATWG URL strips \r\n\t automatically, so the result becomes 'https://a.comonclick=alert/'
     const out = sanitizeUrl("https://a.com\nonclick=alert");
-    // 結果に改行は残らない
-    assert.equal(/[\r\n]/.test(out), false, `改行が残っている: ${JSON.stringify(out)}`);
-    // http(s) スキームであることのみ保証
+    // No newline remains in the result
+    assert.equal(/[\r\n]/.test(out), false, `a newline remains: ${JSON.stringify(out)}`);
+    // Only guarantees that it is an http(s) scheme
     assert.ok(/^https?:\/\//.test(out));
   });
 });
 
-describe("sanitizeUrl + escapeHtml: 属性脱出の最終防御 (深層防御)", () => {
-  test("ダブルクォート混入 URL は URL パーサに受理される場合、escapeHtml で &quot; 化", () => {
-    // URL: https://a.com"onclick="alert(1) をパースすると、ホスト内の " が残る実装がある
+describe("sanitizeUrl + escapeHtml: last line of defense against attribute escape (defense in depth)", () => {
+  test("a URL with a double quote, if accepted by the URL parser, is turned into &quot; by escapeHtml", () => {
+    // Parsing the URL https://a.com"onclick="alert(1) leaves the " in the host in some implementations
     const raw = sanitizeUrl('https://a.com"onclick="alert(1)');
     if (raw) {
-      // 生の " が残っている場合でも、最終的に escapeHtml を通すと &quot; 化される
+      // Even if a raw " remains, passing it through escapeHtml at the end turns it into &quot;
       const safe = escapeHtml(raw);
       assert.equal(safe.includes('"'), false,
-        `escapeHtml 後も素の \" が残存: ${safe}`);
+        `a raw \" remains after escapeHtml: ${safe}`);
     }
   });
 
-  test("JavaScript: スキームは sanitizeUrl で空文字 → escapeHtml で '' のまま", () => {
+  test("the JavaScript: scheme becomes an empty string in sanitizeUrl -> stays '' after escapeHtml", () => {
     assert.equal(escapeHtml(sanitizeUrl("javascript:alert(1)")), "");
   });
 
-  test("data:text/html スキームは sanitizeUrl で空文字", () => {
+  test("the data:text/html scheme becomes an empty string in sanitizeUrl", () => {
     assert.equal(escapeHtml(sanitizeUrl("data:text/html,<script>alert(1)</script>")), "");
   });
 
-  test("'>'' 攻撃パターン ('https://a.com><script>') は new URL() でパース失敗 → 空文字", () => {
+  test("the '>'' attack pattern ('https://a.com><script>') fails to parse in new URL() -> empty string", () => {
     assert.equal(escapeHtml(sanitizeUrl("https://a.com><script>alert(1)</script>")), "");
   });
 
-  test("href 属性に埋め込める URL は常に http(s):// で始まる (または空文字)", () => {
+  test("a URL that can be embedded in an href attribute always starts with http(s):// (or is an empty string)", () => {
     const probes = [
       "https://a.com",
       "HTTPS://A.COM/PATH",
@@ -123,13 +123,13 @@ describe("sanitizeUrl + escapeHtml: 属性脱出の最終防御 (深層防御)",
     for (const p of probes) {
       const out = sanitizeUrl(p);
       assert.ok(out === "" || /^https?:\/\//.test(out),
-        `${JSON.stringify(p)} → ${JSON.stringify(out)} が http(s):// で始まらない`);
+        `${JSON.stringify(p)} -> ${JSON.stringify(out)} does not start with http(s)://`);
     }
   });
 });
 
-describe("sanitizeUrl: 正規化の副作用 (冪等性)", () => {
-  test("sanitizeUrl は冪等である (一度通した結果をもう一度通しても変わらない)", () => {
+describe("sanitizeUrl: side effects of normalization (idempotence)", () => {
+  test("sanitizeUrl is idempotent (passing its result through again does not change it)", () => {
     const cases = [
       "https://example.com",
       "https://a.com/path?q=1",
@@ -139,16 +139,16 @@ describe("sanitizeUrl: 正規化の副作用 (冪等性)", () => {
     for (const c of cases) {
       const once = sanitizeUrl(c);
       const twice = sanitizeUrl(once);
-      assert.equal(once, twice, `冪等性違反: ${c} → ${once} → ${twice}`);
+      assert.equal(once, twice, `idempotence violated: ${c} -> ${once} -> ${twice}`);
     }
   });
 
-  test("末尾スラッシュ付与: 'https://example.com' は 'https://example.com/' に正規化", () => {
-    // new URL(...).href はホスト末尾に / を付与する
+  test("trailing slash added: 'https://example.com' is normalized to 'https://example.com/'", () => {
+    // new URL(...).href adds / after the host
     assert.equal(sanitizeUrl("https://example.com"), "https://example.com/");
   });
 
-  test("クエリ / フラグメントはそのまま保持", () => {
+  test("query / fragment are kept as is", () => {
     assert.equal(
       sanitizeUrl("https://example.com/x?q=1#section"),
       "https://example.com/x?q=1#section"

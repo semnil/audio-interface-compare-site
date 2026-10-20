@@ -1,6 +1,6 @@
 // tests/og-images.test.js
-// og:image (SNS 共有カード) の生成とメタタグ配線の検証
-// dist/ が未生成の場合はスキップ
+// Checks og:image (social share card) generation and meta tag wiring
+// Skipped when dist/ has not been built
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -16,47 +16,47 @@ const distExists = existsSync(OG_DIR) && existsSync(PRODUCTS_PATH);
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 
-describe("og-images: ファイル生成", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("サイト共通 + 全製品 + 全ハブの og 画像が存在すること", () => {
+describe("og-images: file generation", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("og images exist for the site, every product, and every hub", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
-    assert.ok(existsSync(join(OG_DIR, "site.png")), "og/site.png が無い");
+    assert.ok(existsSync(join(OG_DIR, "site.png")), "og/site.png is missing");
     const missing = products.filter(p => !existsSync(join(OG_DIR, "products", `${p.slug}.png`)));
-    assert.equal(missing.length, 0, `製品 og 画像欠落: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
+    assert.equal(missing.length, 0, `missing product og images: ${missing.slice(0, 3).map(p => p.slug).join(", ")}`);
     const brands = new Set(products.map(p => p.brand).filter(Boolean));
     const brandPngs = readdirSync(join(OG_DIR, "brands")).filter(f => f.endsWith(".png"));
-    assert.equal(brandPngs.length, brands.size, `ブランド og 画像 ${brandPngs.length} ≠ ${brands.size}`);
+    assert.equal(brandPngs.length, brands.size, `brand og images ${brandPngs.length} != ${brands.size}`);
   });
 
-  test("og 画像が有効な PNG であること (マジックバイト検査)", () => {
+  test("og images are valid PNGs (magic byte check)", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     for (const p of products.slice(0, 5)) {
       const buf = readFileSync(join(OG_DIR, "products", `${p.slug}.png`));
-      assert.ok(buf.subarray(0, 4).equals(PNG_MAGIC), `${p.slug}: PNG マジックバイト不一致`);
-      assert.ok(buf.length > 1000, `${p.slug}: PNG が小さすぎる (${buf.length} bytes)`);
+      assert.ok(buf.subarray(0, 4).equals(PNG_MAGIC), `${p.slug}: PNG magic bytes do not match`);
+      assert.ok(buf.length > 1000, `${p.slug}: PNG is too small (${buf.length} bytes)`);
     }
   });
 });
 
-describe("og-images: メタタグ配線", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("製品ページの og:image が自身の og 画像 URL を指し、twitter:card が summary_large_image であること", () => {
+describe("og-images: meta tag wiring", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("product page og:image points to its own og image URL and twitter:card is summary_large_image", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const violations = [];
     for (const p of products.slice(0, 10)) {
       const html = readFileSync(join(DIST, "products", p.slug, "index.html"), "utf8");
       const img = html.match(/property="og:image" content="([^"]+)"/)?.[1];
       if (!img || !img.includes(`/og/products/${p.slug}.png`)) violations.push(`${p.slug}: og:image=${img}`);
-      if (!html.includes('name="twitter:card" content="summary_large_image"')) violations.push(`${p.slug}: twitter:card 不正`);
-      if (!html.includes('property="og:image:width"')) violations.push(`${p.slug}: og:image:width 欠落`);
+      if (!html.includes('name="twitter:card" content="summary_large_image"')) violations.push(`${p.slug}: twitter:card is invalid`);
+      if (!html.includes('property="og:image:width"')) violations.push(`${p.slug}: og:image:width is missing`);
     }
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("ja ページの og:image はルートの共有画像を指すこと (/ja/ プレフィックスされない)", () => {
+  test("ja page og:image points to the shared root image (not prefixed with /ja/)", () => {
     const products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     for (const p of products.slice(0, 5)) {
       const html = readFileSync(join(DIST, "ja", "products", p.slug, "index.html"), "utf8");
       const img = html.match(/property="og:image" content="([^"]+)"/)?.[1];
-      assert.ok(img && !img.includes("/ja/og/"), `${p.slug}: ja ページの og:image が /ja/ 配下: ${img}`);
+      assert.ok(img && !img.includes("/ja/og/"), `${p.slug}: ja page og:image is under /ja/: ${img}`);
     }
   });
 });

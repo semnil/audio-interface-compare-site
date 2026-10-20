@@ -1,6 +1,6 @@
 // tests/index-html.test.js
-// ビルド済み dist/index.html の品質・安全性検査
-// dist/ が未生成の場合はスキップ
+// Quality and safety checks for the built dist/index.html
+// Skipped when dist/ is not built
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -13,17 +13,17 @@ const INDEX_PATH = join(ROOT, "dist", "index.html");
 const PRODUCTS_PATH = join(ROOT, "dist", "products.json");
 const distExists = existsSync(INDEX_PATH) && existsSync(PRODUCTS_PATH);
 
-describe("index.html の品質検査", { skip: !distExists ? "dist/ が未生成。npm run build を実行してください" : false }, () => {
+describe("index.html quality checks", { skip: !distExists ? "dist/ not built. Run npm run build" : false }, () => {
   let html;
   let products;
 
-  test("index.html / products.json が読み込めること", () => {
+  test("index.html / products.json can be read", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
-    assert.ok(html.length > 1000, "index.html が空に近い");
+    assert.ok(html.length > 1000, "index.html is nearly empty");
   });
 
-  test("OGP タグが揃っていること (og:type, og:title, og:description, og:url, og:site_name)", () => {
+  test("all OGP tags are present (og:type, og:title, og:description, og:url, og:site_name)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const required = [
       'property="og:type"',
@@ -33,41 +33,41 @@ describe("index.html の品質検査", { skip: !distExists ? "dist/ が未生成
       'property="og:site_name"',
     ];
     const missing = required.filter(tag => !html.includes(tag));
-    assert.equal(missing.length, 0, `OGP 欠落: ${missing.join(", ")}`);
+    assert.equal(missing.length, 0, `missing OGP: ${missing.join(", ")}`);
   });
 
-  test("Twitter Card タグが存在すること", () => {
+  test("Twitter Card tags exist", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(html.includes('name="twitter:card"'), "twitter:card 欠落");
-    assert.ok(html.includes('name="twitter:title"'), "twitter:title 欠落");
+    assert.ok(html.includes('name="twitter:card"'), "twitter:card is missing");
+    assert.ok(html.includes('name="twitter:title"'), "twitter:title is missing");
   });
 
-  test("viewport meta が存在すること (モバイル対応)", () => {
+  test("the viewport meta exists (mobile support)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/<meta\s+name="viewport"/i.test(html), "viewport meta 欠落");
+    assert.ok(/<meta\s+name="viewport"/i.test(html), "viewport meta is missing");
   });
 
-  test("favicon link が 2 種類 (SVG/ICO) 存在すること", () => {
+  test("favicon links of 2 kinds (SVG/ICO) exist", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/rel="icon"[^>]*favicon\.svg/i.test(html), "favicon.svg link 欠落");
-    assert.ok(/rel="icon"[^>]*favicon\.ico/i.test(html), "favicon.ico link 欠落");
+    assert.ok(/rel="icon"[^>]*favicon\.svg/i.test(html), "favicon.svg link is missing");
+    assert.ok(/rel="icon"[^>]*favicon\.ico/i.test(html), "favicon.ico link is missing");
   });
 
-  test("インライン PRODUCTS JSON が埋め込まれており、件数が products.json と一致すること", () => {
+  test("the inline PRODUCTS JSON is embedded and its count matches products.json", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const m = html.match(/const PRODUCTS = (\[.*?\]);\s*const isJa/s);
-    assert.ok(m, "PRODUCTS 埋め込みが見つからない");
+    assert.ok(m, "PRODUCTS embedding not found");
     const inline = JSON.parse(m[1]);
     assert.equal(inline.length, products.length,
-      `インライン PRODUCTS 件数 ${inline.length} ≠ products.json 件数 ${products.length}`);
+      `inline PRODUCTS count ${inline.length} != products.json count ${products.length}`);
   });
 
-  test("インライン PRODUCTS JSON に公開に不必要な大量フィールドが含まれないこと (サイズ制御)", () => {
+  test("the inline PRODUCTS JSON does not contain a large number of fields not needed for publishing (size control)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const m = html.match(/const PRODUCTS = (\[.*?\]);\s*const isJa/s);
     const inline = JSON.parse(m[1]);
-    // 検索・表示に必要なフィールドのみ: slug, brand, model, displayName, category, price
+    // Only the fields needed for search and display: slug, brand, model, displayName, category, price
     const expectedKeys = new Set(["slug", "brand", "model", "displayName", "category", "price"]);
     const extra = new Set();
     for (const p of inline) {
@@ -76,148 +76,148 @@ describe("index.html の品質検査", { skip: !distExists ? "dist/ が未生成
       }
     }
     assert.equal(extra.size, 0,
-      `index.html の PRODUCTS に不要フィールドが混入: ${[...extra].join(", ")}`);
+      `unneeded fields mixed into PRODUCTS of index.html: ${[...extra].join(", ")}`);
   });
 
-  test("<script> タグ内の PRODUCTS JSON に </script> 文字列が含まれないこと (脱出脆弱性防御)", () => {
+  test("the PRODUCTS JSON inside the <script> tag does not contain the string </script> (defense against script breakout)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const m = html.match(/const PRODUCTS = (\[.*?\]);\s*const isJa/s);
-    assert.ok(m, "PRODUCTS 埋め込みが見つからない");
+    assert.ok(m, "PRODUCTS embedding not found");
     const jsonLiteral = m[1];
     assert.equal(jsonLiteral.toLowerCase().includes("</script"), false,
-      "PRODUCTS 配列内に </script> 文字列が含まれている (スクリプト脱出 XSS のリスク)");
+      "the PRODUCTS array contains the string </script> (risk of script breakout XSS)");
   });
 
-  test("インライン JSON に U+2028/U+2029 が含まれないこと (JSON-in-script 安全性)", () => {
+  test("the inline JSON does not contain U+2028/U+2029 (JSON-in-script safety)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const m = html.match(/const PRODUCTS = (\[.*?\]);\s*const isJa/s);
     const jsonLiteral = m[1];
     assert.equal(/[\u2028\u2029]/.test(jsonLiteral), false,
-      "PRODUCTS 配列に U+2028/U+2029 が含まれている (JS パーサ破壊のリスク)");
+      "the PRODUCTS array contains U+2028/U+2029 (risk of breaking the JS parser)");
   });
 
-  test("ai-disclaimer が存在すること (免責事項)", () => {
+  test("ai-disclaimer exists (disclaimer)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/class="ai-disclaimer"/.test(html), "ai-disclaimer クラス欠落");
+    assert.ok(/class="ai-disclaimer"/.test(html), "ai-disclaimer class is missing");
   });
 
-  test("製品数表示 (subtitle) が products.json と一致すること", () => {
+  test("the product count display (subtitle) matches products.json", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     products = JSON.parse(readFileSync(PRODUCTS_PATH, "utf8"));
     const m = html.match(/<div class="subtitle"[^>]*>(\d+)/);
-    assert.ok(m, "subtitle 内の製品数が抽出できない");
+    assert.ok(m, "cannot extract the product count in subtitle");
     assert.equal(Number(m[1]), products.length,
-      `UI 表示 ${m[1]} と products.json ${products.length} が不一致`);
+      `UI display ${m[1]} and products.json ${products.length} do not match`);
   });
 
-  test("footer の build date が YYYY-MM-DD 形式であること", () => {
+  test("the build date in the footer is in YYYY-MM-DD format", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/Last updated: \d{4}-\d{2}-\d{2}/.test(html),
-      "build date が YYYY-MM-DD 形式でフッターに含まれていない");
+      "the footer does not contain the build date in YYYY-MM-DD format");
   });
 
-  test("report issue リンクが GitHub Issues を指すこと", () => {
+  test("the report issue link points to GitHub Issues", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/https:\/\/github\.com\/semnil\/audio-interface-compare-site\/issues/.test(html),
-      "report issue の GitHub リンク欠落");
+      "the GitHub link for report issue is missing");
   });
 
-  test("search-input に autocomplete=\"off\" が設定されていること", () => {
+  test("search-input has autocomplete=\"off\" set", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // 検索は都度走るので autocomplete は不要
+    // Search runs on every input, so autocomplete is unnecessary
     const inputs = html.match(/<input[^>]*class="search-input"[^>]*>/g) || [];
-    assert.ok(inputs.length >= 2, `search-input が 2 個以上: actual=${inputs.length}`);
+    assert.ok(inputs.length >= 2, `expected 2 or more search-inputs: actual=${inputs.length}`);
     const missing = inputs.filter(i => !/autocomplete="off"/.test(i));
-    assert.equal(missing.length, 0, `autocomplete 属性欠落: ${missing.length} 件`);
+    assert.equal(missing.length, 0, `autocomplete attribute is missing: ${missing.length} items`);
   });
 
-  test("i18n.js スクリプトタグが存在すること", () => {
+  test("the i18n.js script tag exists", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/src="[^"]*i18n\.js"/.test(html), "i18n.js スクリプトタグ欠落");
+    assert.ok(/src="[^"]*i18n\.js"/.test(html), "i18n.js script tag is missing");
   });
 
-  test("PAGE_JA オブジェクトに subtitle / productA / productB / searchPlaceholder / compareBtn / footer の翻訳が含まれること", () => {
+  test("the PAGE_JA object contains the translations of subtitle / productA / productB / searchPlaceholder / compareBtn / footer", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const m = html.match(/var PAGE_JA=(\{[^}]+\})/);
-    assert.ok(m, "PAGE_JA オブジェクトが見つからない");
-    // safeJsonForScript による JSON 直列化 (キーはダブルクォート付き)
+    assert.ok(m, "PAGE_JA object not found");
+    // JSON serialization by safeJsonForScript (keys are double-quoted)
     const parsed = JSON.parse(m[1].replace(/\\u003c/g, "<"));
     const required = ["subtitle", "productA", "productB", "searchPlaceholder", "compareBtn", "footer"];
     const missing = required.filter(k => !parsed[k]);
-    assert.equal(missing.length, 0, `PAGE_JA 翻訳キー欠落: ${missing.join(", ")}`);
+    assert.equal(missing.length, 0, `missing PAGE_JA translation keys: ${missing.join(", ")}`);
   });
 });
 
-describe("index.html のアクセシビリティ検査", { skip: !distExists ? "dist/ が未生成" : false }, () => {
+describe("index.html accessibility checks", { skip: !distExists ? "dist/ not built" : false }, () => {
   let html;
 
-  test("label 要素に for 属性で input を結線していること", () => {
+  test("label elements are wired to the inputs with the for attribute", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/<label\s+for="search-a"/.test(html), "search-a に紐づく label が存在しない");
-    assert.ok(/<label\s+for="search-b"/.test(html), "search-b に紐づく label が存在しない");
+    assert.ok(/<label\s+for="search-a"/.test(html), "no label tied to search-a");
+    assert.ok(/<label\s+for="search-b"/.test(html), "no label tied to search-b");
   });
 
-  test("product-list が role=\"listbox\" を持つこと", () => {
+  test("product-list has role=\"listbox\"", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/<div\s+class="product-list"\s+id="list-a"\s+role="listbox"/.test(html),
-      "list-a の role=listbox 欠落");
+      "role=listbox of list-a is missing");
     assert.ok(/<div\s+class="product-list"\s+id="list-b"\s+role="listbox"/.test(html),
-      "list-b の role=listbox 欠落");
+      "role=listbox of list-b is missing");
   });
 
-  test("インラインスクリプトで product-item が <button type=\"button\" role=\"option\"> として描画されること", () => {
+  test("the inline script renders product-item as <button type=\"button\" role=\"option\">", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // renderList 内の innerHTML テンプレート文字列を確認
+    // Checks the innerHTML template string inside renderList
     assert.ok(/<button type="button" role="option" class="product-item/.test(html),
-      "product-item が button + role=option として生成されていない");
+      "product-item is not generated as button + role=option");
   });
 
-  test("skip-link (Skip to main content) が存在すること", () => {
+  test("the skip-link (Skip to main content) exists", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/class="skip-link"[^>]*>Skip to main content</.test(html),
-      "skip-link が存在しない");
+      "skip-link does not exist");
   });
 
-  test("<main id=\"main\"> が存在すること", () => {
+  test("<main id=\"main\"> exists", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/<main\s+id="main">/.test(html), "main 要素に id=main が無い");
+    assert.ok(/<main\s+id="main">/.test(html), "the main element has no id=main");
   });
 
-  test("canonical link が存在すること", () => {
+  test("the canonical link exists", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/<link\s+rel="canonical"/.test(html), "canonical link 欠落");
+    assert.ok(/<link\s+rel="canonical"/.test(html), "canonical link is missing");
   });
 
-  test("aria-live 領域が存在すること (選択状態アナウンス)", () => {
+  test("an aria-live region exists (selection state announcements)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/aria-live="polite"[^>]*id="selection-status"/.test(html),
-      "aria-live 領域が存在しない");
+      "aria-live region does not exist");
   });
 
-  test("noscript 警告が存在すること", () => {
+  test("a noscript warning exists", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/<noscript>/.test(html), "noscript タグが存在しない");
+    assert.ok(/<noscript>/.test(html), "noscript tag does not exist");
   });
 
-  test("Specs リンク (.specs-link) が product-item-wrap 内に存在すること", () => {
+  test("the Specs link (.specs-link) exists inside product-item-wrap", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    assert.ok(/class="product-item-wrap"/.test(html), "product-item-wrap クラス欠落");
-    assert.ok(/class="specs-link"/.test(html), "specs-link クラス欠落");
+    assert.ok(/class="product-item-wrap"/.test(html), "product-item-wrap class is missing");
+    assert.ok(/class="specs-link"/.test(html), "specs-link class is missing");
   });
 
-  test("Specs リンクの href が PAGE_BASE + 'products/' + slug 形式で生成されること (JSコード確認)", () => {
-    // specs-link は renderList 内で JS が動的生成するため静的 HTML には href 値が展開されない。
-    // JSコード内に specsHref の生成パターンが存在することを確認する。
-    // PAGE_BASE は言語別のページリンク基底 (ja ページでは localizeToJa が /ja/ に書き換える)
+  test("the href of the Specs link is generated in the form PAGE_BASE + 'products/' + slug (JS code check)", () => {
+    // specs-link is generated dynamically by JS inside renderList, so the href value is not expanded in the static HTML.
+    // Checks that the specsHref generation pattern exists in the JS code.
+    // PAGE_BASE is the per-language page link base (on ja pages localizeToJa rewrites it to /ja/)
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/var specsHref = PAGE_BASE \+ 'products\/' \+ p\.slug \+ '\/'/.test(html),
-      "specsHref の URL 生成コードが index.html に含まれていない");
+      "the specsHref URL generation code is not in index.html");
   });
 
-  test("Specs リンクに tabindex=\"-1\" が設定されること (JSコード確認)", () => {
-    // specs-link は JS で動的生成されるため、tabindex=\"-1\" の文字列がコード内にあることを確認する。
+  test("tabindex=\"-1\" is set on the Specs link (JS code check)", () => {
+    // specs-link is generated dynamically by JS, so this checks that the string tabindex=\"-1\" is in the code.
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(/tabindex="-1"[^>]*specs-link|specs-link[^>]*tabindex="-1"/.test(html),
-      "specs-link の tabindex=-1 指定がコード内に存在しない");
+      "the tabindex=-1 setting of specs-link does not exist in the code");
   });
 });
