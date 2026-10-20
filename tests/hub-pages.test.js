@@ -55,7 +55,7 @@ describe("hub-pages: SEO / internal link contract", { skip: !distExists ? "dist/
     assert.equal(violations.length, 0, violations.slice(0, 3).join(" / "));
   });
 
-  test("the JSON-LD contains @type:ItemList, and itemListElement matches the number of products", () => {
+  test("the JSON-LD contains @type:ItemList, and itemListElement matches the number of product links on the page", () => {
     const violations = [];
     for (const d of sampleBrands()) {
       const html = readFileSync(join(BRANDS_DIR, d, "index.html"), "utf8");

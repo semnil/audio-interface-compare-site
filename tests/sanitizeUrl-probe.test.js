@@ -38,11 +38,11 @@ describe("sanitizeUrl: behavior specific to the WHATWG URL parser (odd inputs th
 
   test("'https:example.com' (no slashes) is accepted and becomes https://example.com/", () => {
     // WHATWG URL interprets 'https:example.com' as 'https://example.com/'
-    // This follows the spec but may look unintended. The defense-in-depth escapeHtml makes it harmless
+    // This follows the spec but may look unintended. The defense-in-depth escapeHtml makes it harmless (suite "sanitizeUrl + escapeHtml: last line of defense against attribute escape" below)
     assert.equal(sanitizeUrl("https:example.com"), "https://example.com/");
   });
 
-  test("a URL with inner whitespace ('https://a.com  evil.com') fails to parse -> empty string", () => {
+  test("a URL with inner whitespace ('https://   evil.com') fails to parse -> empty string", () => {
     // WHATWG URL strips control characters such as tab / newline, but spaces are not stripped and parsing fails
     assert.equal(sanitizeUrl("https://   evil.com"), "");
   });

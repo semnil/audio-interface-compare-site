@@ -9,7 +9,7 @@ describe("diffClass: higherBetter keys", () => {
     assert.deepEqual(diffClass("micPre", 4, 2), [" highlight", ""]);
   });
 
-  test("in a numeric comparison the smaller one is highlighted (sampleRate)", () => {
+  test("in a numeric comparison the larger one is highlighted (sampleRate)", () => {
     assert.deepEqual(diffClass("sampleRate", 48, 192), ["", " highlight"]);
   });
 

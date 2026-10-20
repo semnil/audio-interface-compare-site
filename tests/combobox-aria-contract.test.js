@@ -115,7 +115,7 @@ describe("WAI-ARIA combobox contract of index.html (Rounds 4-6 regression)", { s
 
   test("Escape runs preventDefault + clearActive + clearing value (if value != '') + renderList + announceResultCount (Round 5)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // Rough order check that the Escape block contains the following
+    // Rough check that the Escape block contains each of the following
     const escBlock = html.match(/case 'Escape':[\s\S]*?break;/);
     assert.ok(escBlock, "Escape case not found");
     const body = escBlock[0];

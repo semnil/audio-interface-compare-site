@@ -55,7 +55,7 @@ describe("slugify: preserving Japanese (hiragana and kanji)", () => {
     assert.ok(r.includes("漢字"), `kanji was removed: ${r}`);
   });
 
-  test("katakana is removed (U+30A0-U+30FF is outside the regex range)", () => {
+  test("katakana stays in the slug as is (U+30A0-U+30FF is within the regex range)", () => {
     // regex: [a-z0-9\u3040-\u9fff]+ - is katakana (U+30A0+) included?
     // In fact U+30A0-U+30FF is within the \u3040-\u9fff range
     const r = slugify("brand", "カタカナ");
