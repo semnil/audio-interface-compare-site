@@ -1,9 +1,9 @@
 /**
- * lib.js — tools/verify の node スクリプト共通ヘルパー
+ * lib.js — shared helpers for the node scripts in tools/verify
  *
- * export-products / validate-results / build-report / propose-corrections / apply-corrections から
- * import する。workflow.js は Workflow ツールのサンドボックスで実行され import できないため対象外
- * (ステータス語彙を変える場合は workflow.js の SCHEMA enum も手動で同期すること)。
+ * Imported by export-products / validate-results / build-report / propose-corrections / apply-corrections.
+ * workflow.js runs in the Workflow tool's sandbox and cannot import it, so it is out of scope
+ * (when changing the status vocabulary, also sync the SCHEMA enum in workflow.js by hand).
  */
 import { readFileSync, readdirSync, renameSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -18,14 +18,14 @@ export const STATUSES = new Set(["ok", "partial", "failed", "wrong_page"]);
 export const pad = (i) => String(i).padStart(3, "0");
 export const resultFile = (idx) => join(WORK_DIR, "results", `product-${pad(idx)}.json`);
 
-// 結果ファイルをタイムスタンプ付きで results-retired/ へ退避する (削除はしない)
+// Moves a result file to results-retired/ with a timestamp (never deletes it)
 export function retireResult(idx) {
   renameSync(resultFile(idx), join(WORK_DIR, "results-retired", `product-${pad(idx)}.json.${Date.now()}`));
 }
 
-// exceljs セル値の平文化。header に url を含む列は hyperlink を優先する。
-// export-products (rows-full.json 生成) と apply-corrections (current 照合) が同じ実装を
-// 使うことが「export で読んだ値と apply で読んだ値は一致する」という突合の前提になっている
+// Turns an exceljs cell value into plain text. Columns whose header contains url prefer the hyperlink.
+// export-products (generating rows-full.json) and apply-corrections (checking current) using the same implementation
+// is the premise of the check that "the value read by export equals the value read by apply"
 export function plain(v, header = "") {
   if (v === null || v === undefined) return "";
   if (typeof v === "object") {
@@ -39,7 +39,7 @@ export function plain(v, header = "") {
   return String(v).trim();
 }
 
-// ヘッダー行 (1 行目) の読み取り: byCol[列番号] = ヘッダー名, byName[ヘッダー名] = 列番号
+// Reads the header row (row 1): byCol[column number] = header name, byName[header name] = column number
 export function readHeaders(ws) {
   const byCol = [];
   const byName = {};
@@ -53,8 +53,8 @@ export function readHeaders(ws) {
   return { byCol, byName };
 }
 
-// work/results/ の走査。[{ idx, file, r, error }] を idx 順で返す (parse 失敗は r=null + error)。
-// 妥当性判定 (退避する/skip する/黙認する) は呼び出し側のポリシーに委ねる
+// Scans work/results/. Returns [{ idx, file, r, error }] in idx order (a parse failure gives r=null + error).
+// The validity decision (move aside / skip / tolerate) is left to the caller's policy
 export function scanResults() {
   const out = [];
   for (const f of readdirSync(join(WORK_DIR, "results"))) {

@@ -1,9 +1,9 @@
 /**
- * build-report.js — 照合結果ファイルから最終レポートを生成する
+ * build-report.js — generates the final report from the verification result files
  *
- * usage: node tools/verify/build-report.js [出力パス]
- * 入力: work/results/product-NNN.json (validate-results.js で検証済みであること)
- * 出力: 既定はリポジトリ直下 product-page-verification-report.md
+ * usage: node tools/verify/build-report.js [output path]
+ * Input: work/results/product-NNN.json (must have been validated by validate-results.js)
+ * Output: product-page-verification-report.md at the repository root by default
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -26,41 +26,41 @@ const name = (i) => `${rows[i].Brand} ${rows[i].Model}`;
 const url = (i) => rows[i]["Product Page URL"] ?? "";
 const esc = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
 
-// 修正候補 (work/corrections-edited.json): propose-corrections.js の出力を xlsx セル書式に編集したもの。
-// 無ければ全行「—」でレポートは生成できる
+// Proposed corrections (work/corrections-edited.json): the output of propose-corrections.js edited into the xlsx cell format.
+// Without it, the report can still be generated with "—" on every row
 const editedAll = readJson("corrections-edited.json", null);
-if (!editedAll) console.error("corrections-edited.json なし: 修正候補列は「—」で出力");
-// 同一機種・同一列に high/low 両方の相違がありうるため confidence もキーに含める。
-// 相違由来でないエントリ (URL 更新・書式統一・空欄追記等) は confidence を持たず "high" キーになる規約
-// (wrong_page の対応済み判定はこの規約に依存する — URL 更新エントリに confidence を書かないこと)
+if (!editedAll) console.error("no corrections-edited.json: the proposed-correction column is output as \"—\"");
+// The same model and column can have both high and low discrepancies, so confidence is part of the key too.
+// By convention, entries not derived from a discrepancy (URL updates, format unification, filling blanks, etc.) have no confidence and get the "high" key
+// (the handled check for wrong_page depends on this convention — do not write confidence on URL update entries)
 const corrections = new Map((editedAll ?? []).map((c) => [`${c.idx}\t${c.column}\t${c.confidence ?? "high"}`, c]));
 const correction = (idx, column, confidence) => corrections.get(`${idx}\t${column}\t${confidence}`);
-// 相違表の「修正候補 (変更後の値)」と「変更理由」を返す。承認のしやすさ優先で変更後を左に置く
+// Returns the discrepancy table's "proposed correction (value after the change)" and "reason for change". The value after the change goes on the left, for easy approval
 function candidateCells(idx, column, confidence, pageValue) {
   const c = correction(idx, column, confidence);
   const reason = (extra) => [esc(pageValue), extra].filter(Boolean).join(" ※");
   if (!c) return ["—", reason()];
-  if (c.hold) return ["(変更なし)", `保留: ${esc(c.hold)}`];
-  const v = c.proposed === "" ? "(空欄)" : esc(c.proposed);
+  if (c.hold) return ["(no change)", `Held: ${esc(c.hold)}`];
+  const v = c.proposed === "" ? "(blank)" : esc(c.proposed);
   return [v, reason(c.note ? esc(c.note) : "")];
 }
 
-// 操作者レビューの到達点 (work/review-state.json)。到達済み範囲の行は確認済みとして表から省く
-// (無ければ全件表示)
+// How far the operator's review has reached (work/review-state.json). Rows in the range already reached are omitted from the tables as confirmed
+// (shows everything when the file is missing)
 const reviewState = readJson("review-state.json", {});
 const hiRev = reviewState.highReviewedUntilIdx ?? -1;
 const loRev = reviewState.lowReviewedUntilIdx ?? -1;
 
-// 「公式ページに記載があり xlsx が空欄」のうち機械変換できず操作者判断待ちのもの
-// (corrections-edited.json への追記反映後に gen が出力する。無ければ全件を表示)
+// Items of "stated on the official page but blank in the xlsx" that cannot be converted mechanically and await the operator's decision
+// (the gen outputs this after the additions are applied to corrections-edited.json. Shows everything when the file is missing)
 const missingPending = readJson("missing-pending.json", null);
 
-// 削除予定の行 (work/removals.json)。各表から除外し、専用セクションに理由付きで列挙する。
-// 保存時の idx は行の削除・追加で並びがずれるため、表示にも除外にも使わず brand/model 名で現行行と照合する。
-// 現行 xlsx に名前が無いエントリは適用済み (削除済み) として分離表示する
+// Rows pending removal (work/removals.json). Excluded from every table and listed with reasons in a dedicated section.
+// The idx saved at the time shifts when rows are deleted or added, so it is used for neither display nor exclusion; entries are matched with the current rows by brand/model name.
+// Entries whose names are not in the current xlsx are shown separately as applied (removed)
 const removals = readJson("removals.json", []);
 for (const r of removals) {
-  if (!r.brand || !r.model) throw new Error(`removals.json: brand/model の無いエントリ (idx: ${r.idx}) — 名前照合に必須`);
+  if (!r.brand || !r.model) throw new Error(`removals.json: entry without brand/model (idx: ${r.idx}) — required for matching by name`);
 }
 const rowIdxByName = new Map(rows.map((row, i) => [`${row.Brand} ${row.Model}`, i]));
 const removalName = (r) => `${r.brand} ${r.model}`;
@@ -70,15 +70,15 @@ const removedIdx = new Set(pendingRemovals.map((r) => rowIdxByName.get(removalNa
 
 const results = new Map();
 for (const { idx, file, r } of scanResults()) {
-  // 不正ファイルは validate-results.js が退避する。ここでは黙って飛ばさず知らせる
+  // validate-results.js moves invalid files aside. Here they are reported instead of being skipped silently
   if (!r || typeof r !== "object" || Array.isArray(r) || idx >= rows.length || !STATUSES.has(r.fetch_status)) {
-    console.error(`skip invalid: ${file} (先に validate-results.js を実行すること)`);
+    console.error(`skip invalid: ${file} (run validate-results.js first)`);
     continue;
   }
   results.set(idx, r);
 }
 
-// 既知 hold (確認済みの恒久相違、正本は corrections-gen.py の KNOWN_HOLDS) は表から自動除外する
+// Known holds (confirmed permanent discrepancies; the authoritative copy is KNOWN_HOLDS in corrections-gen.py) are excluded from the tables automatically
 const knownHolds = readJson("known-holds.json", []);
 const knownHoldSet = new Set(knownHolds.map((h) => `${h.brand}\t${h.model}\t${h.column}`));
 
@@ -102,58 +102,58 @@ for (const i of idxs) {
 }
 
 const md = [];
-md.push(`# 製品ページ照合レポート — data/audio_interfaces.xlsx 全 ${rows.length} 機種`);
+md.push(`# Product page verification report — data/audio_interfaces.xlsx, all ${rows.length} models`);
 md.push("");
-md.push(`生成: ${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC — 実行のたびに全体を上書きする (このファイルが常に最新版)`);
+md.push(`Generated: ${new Date().toISOString().replace("T", " ").slice(0, 16)} UTC — every run overwrites the whole file (this file is always the latest version)`);
 md.push("");
-md.push(`照合済み ${idxs.length} / ${rows.length} 機種。各機種 1 エージェントが Product Page URL (＋同一公式ドメインのスペックページ・データシート PDF) を取得し、Measurement Reports を除く全列を照合した結果。`);
+md.push(`${idxs.length} / ${rows.length} models verified. The result of one agent per model fetching the Product Page URL (+ spec pages and datasheet PDFs on the same official domain) and verifying every column except Measurement Reports.`);
 md.push("");
-md.push("## 取得ステータス");
+md.push("## Fetch status");
 md.push("");
-md.push("| ステータス | 件数 | 意味 |");
+md.push("| Status | Count | Meaning |");
 md.push("|---|---:|---|");
-md.push(`| ok | ${byStatus.ok || 0} | ページを取得し主要スペックを確認 |`);
-md.push(`| partial | ${byStatus.partial || 0} | 取得できたがスペック記載が乏しく一部のみ確認 |`);
-md.push(`| wrong_page | ${byStatus.wrong_page || 0} | 記載 URL が 404・別製品・カテゴリトップへ転送 (代替公式ページで照合) |`);
-md.push(`| failed | ${byStatus.failed || 0} | ボット保護等でページ取得不能・未照合 |`);
+md.push(`| ok | ${byStatus.ok || 0} | Page fetched and the main specs confirmed |`);
+md.push(`| partial | ${byStatus.partial || 0} | Fetched, but the page states few specs, so only some were confirmed |`);
+md.push(`| wrong_page | ${byStatus.wrong_page || 0} | The listed URL is 404, another product, or redirects to a category top (verified against an alternative official page) |`);
+md.push(`| failed | ${byStatus.failed || 0} | The page could not be fetched because of bot protection or similar; unverified |`);
 md.push("");
-md.push(`相違ゼロ (ok かつ mismatch なし): **${cleanCount}** / 相違検出: **${mismatchCount}** 機種`);
-if (knownCount) md.push(`既知 hold (確認済みの恒久相違、work/known-holds.json) に一致した ${knownCount} 件は各表から除外済み。`);
+md.push(`No discrepancies (ok and no mismatch): **${cleanCount}** / discrepancies found: **${mismatchCount}** models`);
+if (knownCount) md.push(`${knownCount} items matching known holds (confirmed permanent discrepancies, work/known-holds.json) are excluded from every table.`);
 md.push("");
-md.push("確度の定義: **high** = ページが明確に異なる値を記載。**low** = 測定条件の差・価格変動・計数規約 (コンボ端子の数え方等) に依存し断定不可。表記ゆれ・単位差・世代注記は一致扱いで除外済み。");
+md.push("Confidence: **high** = the page clearly states a different value. **low** = depends on differences in measurement conditions, price changes or counting conventions (how combo jacks are counted, etc.) and cannot be asserted. Notation variants, unit differences and generation notes are treated as matches and excluded.");
 md.push("");
 
 if (pendingRemovals.length) {
-  md.push(`## 削除予定 (${pendingRemovals.length} 機種)`);
+  md.push(`## Pending removal (${pendingRemovals.length} models)`);
   md.push("");
-  md.push("操作者決定済み。corrections の --apply 後に tools/apply-product-changes.js で行を削除する (先に削除すると idx がずれる)。以下の機種は各表から除外している。");
+  md.push("Decided by the operator. Delete the rows with tools/apply-product-changes.js after corrections --apply (deleting first shifts idx). The models below are excluded from every table.");
   md.push("");
-  md.push("| 機種 | 理由 |");
+  md.push("| Model | Reason |");
   md.push("|---|---|");
   for (const r of pendingRemovals) md.push(`| ${esc(removalName(r))} | ${esc(r.reason)} |`);
   md.push("");
 }
 if (appliedRemovals.length) {
-  md.push(`## 削除済み (${appliedRemovals.length} 機種 — 適用済み)`);
+  md.push(`## Removed (${appliedRemovals.length} models — applied)`);
   md.push("");
-  md.push("work/removals.json の記録のうち現行 xlsx に該当行が無いもの。機種名・理由は削除決定時の記録値をそのまま表示している。");
+  md.push("Entries in work/removals.json with no matching row in the current xlsx. The model names and reasons are shown as recorded when the removal was decided.");
   md.push("");
-  md.push("| 機種 | 理由 |");
+  md.push("| Model | Reason |");
   md.push("|---|---|");
   for (const r of appliedRemovals) md.push(`| ${esc(removalName(r))} | ${esc(r.reason)} |`);
   md.push("");
 }
 
-// 相違表 (high/low 共通): 未確認分のみ表示する
+// Discrepancy tables (shared by high/low): only unconfirmed items are shown
 function pushMismatchSection(title, list, revUntil, confidence, descLines) {
   const pending = list.filter((m) => m.idx > revUntil && !removedIdx.has(m.idx));
-  md.push(`## ${title} (全 ${list.length} 件、未確認 ${pending.length} 件)`);
+  md.push(`## ${title} (${list.length} in total, ${pending.length} unconfirmed)`);
   md.push("");
-  md.push(`確認済み ${list.length - pending.length} 件は非表示 (確定した修正候補は work/corrections-edited.json に反映済み)。`);
+  md.push(`${list.length - pending.length} confirmed items are hidden (settled proposed corrections are in work/corrections-edited.json).`);
   for (const l of descLines) md.push(l);
   md.push("");
   if (pending.length) {
-    md.push("| 機種 | 列 | 修正候補 | 変更理由 (公式ページ記載) | 変更前 (xlsx) |");
+    md.push("| Model | Column | Proposed correction | Reason for change (stated on the official page) | Before (xlsx) |");
     md.push("|---|---|---|---|---|");
     for (const m of pending) {
       const [cand, reason] = candidateCells(m.idx, m.column, confidence, m.page_value);
@@ -163,21 +163,21 @@ function pushMismatchSection(title, list, revUntil, confidence, descLines) {
   }
 }
 
-pushMismatchSection("高確度の相違", high, hiRev, "high", [
-  "承認しやすさのため変更後の値 (修正候補) を左、変更理由、変更前 (xlsx) の順。修正候補は既存セル書式に合わせた値で、「(空欄)」はセルを空にする (xlsx の慣行: 非搭載・該当なし・未公表は 0 や No ではなく空欄)。「—」は候補未作成。",
+pushMismatchSection("High-confidence discrepancies", high, hiRev, "high", [
+  "For easy approval: the value after the change (proposed correction) on the left, then the reason for change, then the value before (xlsx). Proposed corrections match the existing cell format; \"(blank)\" empties the cell (the xlsx convention: not equipped / not applicable / unpublished is blank, not 0 or No). \"—\" means no proposal has been made.",
 ]);
-pushMismatchSection("低確度の相違", low, loRev, "low", [
-  "未確認分にも公式ページの値から修正候補を埋めてある (unreviewed として apply 対象外。操作者の確認で確定する)。「保留:」は候補を確定できず判断待ちのもの。",
+pushMismatchSection("Low-confidence discrepancies", low, loRev, "low", [
+  "Unconfirmed items also have proposed corrections filled in from the official page's values (excluded from apply as unreviewed; settled by the operator's confirmation). \"Held:\" marks proposals that could not be settled and await a decision.",
 ]);
 
-// 参考価格は買い手判断の参考値のため相違表から分離し、一括判断できる形で列挙する
+// The reference price is a reference value for the buyer's judgement, so it is split from the discrepancy tables and listed in a form that allows a bulk decision
 const pricePending = priceDiffs.filter((m) => !removedIdx.has(m.idx));
 if (pricePending.length) {
-  md.push(`## 参考価格の相違 (${pricePending.length} 件 — 一括判断用)`);
+  md.push(`## Reference-price discrepancies (${pricePending.length} — for a bulk decision)`);
   md.push("");
-  md.push("公式ページの価格が xlsx と ±20% 超で異なるもの。改定に追随するか参考価格のまま維持するかを一括で判断する。");
+  md.push("Prices on the official page that differ from the xlsx by more than ±20%. Decide in bulk whether to follow the revision or keep the reference price.");
   md.push("");
-  md.push("| 機種 | xlsx | ページ |");
+  md.push("| Model | xlsx | Page |");
   md.push("|---|---|---|");
   for (const m of pricePending) md.push(`| ${esc(name(m.idx))} | ${esc(m.xlsx_value)} | ${esc(m.page_value)} |`);
   md.push("");
@@ -185,12 +185,12 @@ if (pricePending.length) {
 
 const wrongWithC = wrong.map((i) => ({ i, c: correction(i, "Product Page URL", "high") }));
 const wrongPending = wrongWithC.filter(({ i, c }) => !c?.proposed && !removedIdx.has(i));
-md.push(`## URL 切れ・転送 (wrong_page, 全 ${wrong.length} 機種、未対応 ${wrongPending.length} 機種)`);
+md.push(`## Broken or redirected URLs (wrong_page, ${wrong.length} models in total, ${wrongPending.length} not handled)`);
 md.push("");
-md.push(`${wrong.length - wrongPending.length} 機種は照合時に特定した現行公式ページへの URL 更新を corrections に反映済みのため非表示。以下は現行の個別製品ページが存在せず書き換えられないもの。`);
+md.push(`${wrong.length - wrongPending.length} models are hidden because the URL updates to the current official pages identified during verification are in corrections. The ones below have no current individual product page and cannot be rewritten.`);
 md.push("");
 if (wrongPending.length) {
-  md.push("| 機種 | 記載 URL | 状況 |");
+  md.push("| Model | Listed URL | Status |");
   md.push("|---|---|---|");
   for (const { i, c } of wrongPending) {
     md.push(`| ${esc(name(i))} | ${esc(url(i))} | ${esc(c?.hold ?? results.get(i).notes).slice(0, 200)} |`);
@@ -199,51 +199,51 @@ if (wrongPending.length) {
 }
 
 const failedPending = failed.filter((i) => !removedIdx.has(i));
-md.push(`## 取得不能・未照合 (failed, ${failedPending.length} 機種)`);
+md.push(`## Could not be fetched / unverified (failed, ${failedPending.length} models)`);
 md.push("");
-md.push("ボット保護 (Cloudflare 等) によりページを取得できず照合できなかった機種。データの誤りを意味しない。");
+md.push("Models whose pages could not be fetched and verified because of bot protection (Cloudflare, etc.). This does not mean the data is wrong.");
 md.push("");
 if (failedPending.length) {
-  md.push("| 機種 | 記載 URL |");
+  md.push("| Model | Listed URL |");
   md.push("|---|---|");
   for (const i of failedPending) md.push(`| ${esc(name(i))} | ${esc(url(i))} |`);
   md.push("");
 }
 
-// 空欄追記の手動確定分のうち操作者確認待ちのもの (corrections-edited.json の missing + unreviewed)
+// Blank fills settled by hand that await the operator's confirmation (missing + unreviewed in corrections-edited.json)
 const missingUnreviewed = (editedAll ?? []).filter((e) => e.missing && e.unreviewed && !removedIdx.has(e.idx));
 if (missingUnreviewed.length) {
-  md.push(`## 空欄追記の候補 — 未確認 (${missingUnreviewed.length} 件)`);
+  md.push(`## Candidates for filling blanks — unconfirmed (${missingUnreviewed.length})`);
   md.push("");
-  md.push("空欄保留分を操作者決定の規則 (測定値は代表値、計数はジャック数、RCA は新列、列がない仕様値は Notes 追記) で確定した候補。操作者の確認までは apply 対象外。");
+  md.push("Candidates for the held blanks, settled by the operator-decided rules (representative value for measurements, jack count for counts, the new columns for RCA, Notes for spec values without a column). Excluded from apply until the operator confirms.");
   md.push("");
-  md.push("| 機種 | 列 | 追記候補 | 変更理由 |");
+  md.push("| Model | Column | Candidate value | Reason for change |");
   md.push("|---|---|---|---|");
   for (const e of missingUnreviewed) md.push(`| ${esc(name(e.idx))} | ${esc(e.column)} | ${esc(e.proposed)} | ${esc(e.note ?? "")} |`);
   md.push("");
 }
 
 if (missingPending) {
-  md.push(`## 公式ページに記載があり xlsx が空欄 — 保留分 (全 ${missRows.length} 件、保留 ${missingPending.length} 件)`);
+  md.push(`## Stated on the official page but blank in the xlsx — held (${missRows.length} in total, ${missingPending.length} held)`);
   md.push("");
-  md.push("機械変換できた追記分は work/corrections-edited.json に反映済みのため非表示。以下は複数値・条件不明・テキスト編集要のため操作者判断待ちの項目 (列名はエージェント表記のまま)。");
+  md.push("Additions that could be converted mechanically are in work/corrections-edited.json and hidden. The items below await the operator's decision because they have multiple values, unknown conditions or need text editing (column names as the agent wrote them).");
   md.push("");
-  md.push("| 機種 | 列 | 公式ページ記載 | 保留理由 |");
+  md.push("| Model | Column | Stated on the official page | Reason held |");
   md.push("|---|---|---|---|");
   for (const m of missingPending.filter((x) => !removedIdx.has(x.idx))) md.push(`| ${esc(name(m.idx))} | ${esc(m.column)} | ${esc(m.page_value).slice(0, 160)} | ${esc(m.reason)} |`);
   md.push("");
 } else {
-  md.push(`## 公式ページに記載があり xlsx が空欄 (${missRows.length} 件)`);
+  md.push(`## Stated on the official page but blank in the xlsx (${missRows.length})`);
   md.push("");
-  md.push("エージェントが「ページに公称値があるのに xlsx 未記入」と判定した項目。列名はエージェント表記のまま。");
+  md.push("Items the agents judged as \"the page has a published value but the xlsx is blank\". Column names as the agent wrote them.");
   md.push("");
-  md.push("| 機種 | 列 | 公式ページ記載 |");
+  md.push("| Model | Column | Stated on the official page |");
   md.push("|---|---|---|");
   for (const m of missRows) md.push(`| ${esc(name(m.idx))} | ${esc(m.column)} | ${esc(m.page_value).slice(0, 160)} |`);
   md.push("");
 }
 
-md.push("## 機種別ノート (相違検出分)");
+md.push("## Notes per model (models with discrepancies)");
 md.push("");
 for (const i of idxs) {
   const r = results.get(i);

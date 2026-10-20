@@ -1,15 +1,15 @@
 /**
- * export-contested.js — 照合結果の mismatch を精査 (第 2 段) の入力に変換する
+ * export-contested.js — converts mismatches in the verification results into the input of the examination (stage 2)
  *
  * usage: node tools/verify/export-contested.js
  *
- * work/results/ の mismatch を機種単位で work/contested/product-NNN.json に抽出する。
- * エージェント不要の事前仕分けで精査対象を減らす:
- *  - 既知 hold (work/known-holds.json、正本は corrections-gen.py の KNOWN_HOLDS):
- *    (Brand, Model, 列) が一致する相違は確認済みとして除外
- *  - 単位差: 測定値列 (DR/THD+N/EIN) で先頭の数値表記が一致する相違は単位/表記差として除外
- *  - 参考価格: Reference Price (USD) の相違は work/price-diffs.json へ隔離 (レポートで一括判断)
- * 残った争点のみを recheck-workflow.js (第 2 段) にかける。
+ * Extracts the mismatches in work/results/ per model into work/contested/product-NNN.json.
+ * Pre-sorting without agents reduces what is examined:
+ *  - known holds (work/known-holds.json; the authoritative copy is KNOWN_HOLDS in corrections-gen.py):
+ *    discrepancies whose (Brand, Model, column) match are excluded as already confirmed
+ *  - unit differences: discrepancies in the measurement columns (DR/THD+N/EIN) whose leading number matches are excluded as unit/notation differences
+ *  - reference prices: Reference Price (USD) discrepancies are isolated in work/price-diffs.json (decided in bulk in the report)
+ * Only the remaining contested items go to recheck-workflow.js (stage 2).
  */
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -36,7 +36,7 @@ const contestedIds = [];
 
 for (const { idx, file, r } of scanResults()) {
   if (!r || idx >= rows.length || !STATUSES.has(r.fetch_status)) {
-    console.error(`skip invalid: ${file} (先に validate-results.js を実行すること)`);
+    console.error(`skip invalid: ${file} (run validate-results.js first)`);
     continue;
   }
   const row = rows[idx];
@@ -66,6 +66,6 @@ for (const { idx, file, r } of scanResults()) {
 
 writeFileSync(join(WORK_DIR, "price-diffs.json"), JSON.stringify(priceDiffs, null, 1));
 writeFileSync(join(WORK_DIR, "contested-index.json"), JSON.stringify(contestedIds));
-console.log(`contested: ${contestedIds.length} 機種 -> ${OUT}`);
-console.log(`事前仕分け: 既知 hold 除外 ${nHold} 件 / 単位差除外 ${nUnit} 件 / 価格隔離 ${priceDiffs.length} 件 (work/price-diffs.json)`);
-console.log(`次: Workflow で recheck-workflow.js を起動 (ids は work/contested-index.json の ${contestedIds.length} 件)`);
+console.log(`contested: ${contestedIds.length} models -> ${OUT}`);
+console.log(`Pre-sorting: ${nHold} excluded as known holds / ${nUnit} excluded as unit differences / ${priceDiffs.length} prices isolated (work/price-diffs.json)`);
+console.log(`Next: start recheck-workflow.js with Workflow (ids are the ${contestedIds.length} in work/contested-index.json)`);

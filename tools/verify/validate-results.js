@@ -1,20 +1,20 @@
 /**
- * validate-results.js — 照合結果ファイルの健全性検証と未完了 ids の算出
+ * validate-results.js — soundness validation of the verification result files and computing incomplete ids
  *
  * usage: node tools/verify/validate-results.js [--retry-failed] [--include-partial]
- *   --retry-failed    fetch_status=failed の結果を再試行対象に加える (旧結果は results-retired/ へ退避)
- *   --include-partial fetch_status=partial も再試行対象に加える (同上)
+ *   --retry-failed    adds results with fetch_status=failed to the retry targets (old results are moved to results-retired/)
+ *   --include-partial also adds fetch_status=partial to the retry targets (same as above)
  *
- * 各 work/results/product-NNN.json を xlsx 実データ (rows-full.json) と突き合わせて検証する:
- *  - brand / model の写しが該当行と一致するか (別行を照合した汚染の検出)
- *  - mismatch の xlsx_value 引用が該当行の実値と矛盾しないか
- *  - 入力ファイル欠損のまま書かれた結果 (notes="input file missing") の検出
- *  - 入力欠損・再構成をうかがわせる文言の有無 (警告)
- * 不正ファイルは work/results-invalid/ へ退避し、未完了扱いにする。
+ * Validates each work/results/product-NNN.json against the actual xlsx data (rows-full.json):
+ *  - whether the copied brand / model match the corresponding row (detects contamination from verifying a different row)
+ *  - whether the xlsx_value quoted in a mismatch is consistent with the corresponding row's actual value
+ *  - detecting results written with the input file missing (notes="input file missing")
+ *  - whether there is wording that suggests missing input or rebuilding (warning)
+ * Invalid files are moved to work/results-invalid/ and treated as incomplete.
  *
- * 出力: work/state.json — { validCount, invalid, warns, missingIds, retiredIds, nextIds }
- * nextIds をそのまま workflow.js の args.ids に渡せば途中から再開できる。
- * 終了条件は「missingIds が空」。failed はボット保護由来なら残してよい (未照合としてレポートに明示される)。
+ * Output: work/state.json — { validCount, invalid, warns, missingIds, retiredIds, nextIds }
+ * Passing nextIds as is to workflow.js's args.ids resumes from where it stopped.
+ * The end condition is "missingIds is empty". failed may remain when caused by bot protection (the report states it as unverified).
  */
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -24,7 +24,7 @@ const retryFailed = process.argv.includes("--retry-failed");
 const includePartial = process.argv.includes("--include-partial");
 
 const rows = JSON.parse(readFileSync(join(WORK_DIR, "rows-full.json"), "utf8"));
-// "+" は識別子になり得る (Big Knob Studio / Studio+ など) ため除去せず plus に置換する
+// "+" can be part of an identifier (Big Knob Studio / Studio+, etc.), so it is replaced with plus instead of removed
 const norm = (s) => String(s ?? "").normalize("NFKC").toLowerCase().replace(/\+/g, "plus").replace(/[^a-z0-9]/g, "");
 
 const REQUIRED = ["brand", "model", "fetch_status", "mismatches", "not_stated", "missing_in_xlsx", "notes"];
@@ -55,14 +55,14 @@ for (const { idx, file: path, r: parsed, error } of scanResults()) {
   if (r && !problems.length) {
     const row = rows[idx];
     if (String(r.notes).includes("input file missing")) {
-      // 入力欠損のまま書かれた結果。入力を復旧 (export) した上で再照合が必要
+      // A result written with the input missing. Needs re-verification after restoring the input (export)
       problems.push("verified without input file (notes=input file missing)");
     } else {
-      // 別行汚染の検出: brand/model の写しが該当行と一致すること
+      // Detecting contamination from a different row: the copied brand/model must match the corresponding row
       if (norm(r.brand) !== norm(row.Brand) || norm(r.model) !== norm(row.Model)) {
         problems.push(`brand/model mismatch: file="${r.brand} ${r.model}" row="${row.Brand} ${row.Model}"`);
       }
-      // mismatch の xlsx_value 引用が実値と矛盾しないこと (列名が実在する場合のみ判定)
+      // The xlsx_value quoted in a mismatch must not contradict the actual value (checked only when the column name exists)
       for (const x of r.mismatches || []) {
         const actual = row[x.column];
         if (actual === undefined) continue;
@@ -71,7 +71,7 @@ for (const { idx, file: path, r: parsed, error } of scanResults()) {
           problems.push(`mismatch value contradiction [${x.column}]: claimed="${x.xlsx_value}" actual="${actual}"`);
         }
       }
-      // 入力欠損・再構成の痕跡は警告 (brand/model と値が正当なら結果自体は保持)
+      // Traces of missing input or rebuilding are warnings (the result itself is kept when brand/model and the values are valid)
       const hitMarkers = MARKERS.filter((w) => String(r.notes || "").includes(w));
       if (hitMarkers.length) warns.push({ idx, markers: hitMarkers });
     }
@@ -85,7 +85,7 @@ for (const { idx, file: path, r: parsed, error } of scanResults()) {
   }
 }
 
-// failed / partial の再試行 (オプトイン): 旧結果を退避して未完了に戻す
+// Retrying failed / partial (opt-in): moves the old results aside and returns them to incomplete
 const retiredIds = [];
 if (retryFailed || includePartial) {
   mkdirSync(join(WORK_DIR, "results-retired"), { recursive: true });
@@ -116,11 +116,11 @@ const state = {
 writeFileSync(join(WORK_DIR, "state.json"), JSON.stringify(state, null, 1));
 
 console.log(`valid: ${valid.size}/${rows.length}  byStatus: ${JSON.stringify(state.byStatus)}`);
-console.log(`invalid (退避済): ${invalid.length}  warn: ${warns.length}  retired (再試行対象): ${retiredIds.length}`);
+console.log(`invalid (moved aside): ${invalid.length}  warn: ${warns.length}  retired (retry targets): ${retiredIds.length}`);
 for (const x of invalid) console.log(`  invalid idx ${x.idx}: ${x.problems.join(" / ")}`);
 if (missingIds.length) {
-  console.log(`nextIds (${missingIds.length} 件): ${JSON.stringify(missingIds)}`);
+  console.log(`nextIds (${missingIds.length}): ${JSON.stringify(missingIds)}`);
 } else {
   const failedLeft = state.byStatus.failed || 0;
-  console.log(`nextIds: なし — 照合完了${failedLeft ? ` (failed ${failedLeft} 件はボット保護等による未照合として許容。再挑戦は --retry-failed)` : ""}。node tools/verify/build-report.js でレポート生成可`);
+  console.log(`nextIds: none — verification complete${failedLeft ? ` (${failedLeft} failed are tolerated as unverified because of bot protection or similar. Retry with --retry-failed)` : ""}. The report can be generated with node tools/verify/build-report.js`);
 }

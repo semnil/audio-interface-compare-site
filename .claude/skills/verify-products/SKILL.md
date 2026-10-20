@@ -64,14 +64,14 @@ node tools/verify/partition-rechecks.js  # outputs the verdict sorting + draft q
 - Confirm only `page_correct` / `judgement_required` with the operator via AskUserQuestion. Group by model, at most 4 questions per batch, include an original-text quote + a proposed correction in each question, and base the choices on "apply correction / no change" (the flow used in this session)
 - Record the operator's decisions in a new round of corrections-gen.py (`ROUND<N>` → `corrections-round<N>.json`). idx shifts when rows are deleted, so leave a comment for each round stating which row count of rows-full.json it is based on
 - Permanent "no change needed" items (an error on the page side, a unit difference, a counting policy, an operator decision) are added to the gen's `KNOWN_HOLDS` as (brand, model, column). export-contested and build-report exclude them automatically from the next cycle on
-- Reference-price discrepancies are isolated in work/price-diffs.json. Ask for a bulk decision in the report's 「参考価格の相違」 (reference-price discrepancies) section
+- Reference-price discrepancies are isolated in work/price-diffs.json. Ask for a bulk decision in the report's "Reference-price discrepancies" section
 - Pre-lint (optional): `node tools/verify/lint-columns.js` detects contradictions between columns without agents
 
 ## Handling interruptions and failures
 
 - When the workflow ends with `aborted: true` (cut off after consecutive failures) or a usage-limit error, just "restart from validate → nextIds" after the limit lifts. No other recovery operation is needed
 - When validate detects invalid files, check the cause (verifying a different row, a contradiction in the quoted value). Invalid files are moved to `results-invalid/` automatically and put into nextIds, so no individual treatment is needed
-- Remaining `failed` items are due to bot protection and are normal. Retry with `--include-partial` or by adding them to nextIds by hand; sites that still cannot be fetched stay failed and the report states them as 「未照合」 (unverified)
+- Remaining `failed` items are due to bot protection and are normal. Retry with `--include-partial` or by adding them to nextIds by hand; sites that still cannot be fetched stay failed and the report lists them in its "Could not be fetched / unverified" section
 
 ## Full run from 0
 
@@ -85,11 +85,11 @@ node tools/verify/build-report.js            # → product-page-verification-rep
 
 - Always run validate before generating (prevents invalid files from getting in). Do not copy the report's figures into CLAUDE.md or elsewhere (the counts change quickly)
 - The report is outside git. Regenerate and overwrite it on every update, and delete it after the verification cycle is complete (once apply, row deletion and re-verification are done). Identify which version it is by the generation time in the header (only the latest version ever remains)
-- Model names of pending removals (`work/removals.json`) are displayed by the brand/model saved at the time, and matching against current rows is also done by name. When regenerated after the rows are deleted, those entries move to the 「削除済み (適用済み)」 (removed — applied) section (the saved idx shifts when rows are deleted or added, so it is used for neither display nor exclusion — in 2026-07, referring to the old idx caused an incident where every model name in the pending-removal table was displayed shifted)
+- Model names of pending removals (`work/removals.json`) are displayed by the brand/model saved at the time, and matching against current rows is also done by name. When regenerated after the rows are deleted, those entries move to the "Removed (… — applied)" section (the saved idx shifts when rows are deleted or added, so it is used for neither display nor exclusion — in 2026-07, referring to the old idx caused an incident where every model name in the pending-removal table was displayed shifted)
 - The discrepancy table has the form "model | column | **proposed correction (after)** | reason for change (stated on the official page + supplement) | before (xlsx)". The value after the change is placed on the left so the operator can approve easily. The proposed-correction column is filled from `work/corrections-edited.json` (items without one show 「—」), so when high-confidence discrepancies appear, finish creating the proposed corrections below before generating the report
 - Review progress is saved in `work/review-state.json` (`{ highReviewedUntilIdx, lowReviewedUntilIdx, missingReviewedUntilIdx }`). The report omits discrepancy rows in the range already reached as confirmed and shows only those not yet confirmed (reducing cognitive load)
 - For filling in "stated on the official page but blank in the xlsx" (missing_in_xlsx), add to corrections-edited.json only what mechanical conversion makes certain (a single number, DR/EIN explicitly A-weighted, THD+N with %/dB, gain range, Yes-type values), and output ambiguous ones (multiple values, unknown conditions, needs text editing) to `work/missing-pending.json` as pending. The report renders only the pending ones in a table and waits for the operator's decision
-- Rules for settling pending items by hand (operator decision): for multiple measured values, use the representative value (input side = Mic value, output side = Line/Main Out value, other conditions in note); counts are physical jack counts (Analog Main Output is L/R = 2); RCA jacks are separated into the RCA Input/Output columns (new columns); spec values with no corresponding column are appended to the end of Notes. Items settled by hand are shown with `missing: true` + `unreviewed` in the report's 「空欄追記の候補 — 未確認」 (candidates for filling blanks — unconfirmed) section, and are confirmed by updating `missingReviewedUntilIdx` in `review-state.json`
+- Rules for settling pending items by hand (operator decision): for multiple measured values, use the representative value (input side = Mic value, output side = Line/Main Out value, other conditions in note); counts are physical jack counts (Analog Main Output is L/R = 2); RCA jacks are separated into the RCA Input/Output columns (new columns); spec values with no corresponding column are appended to the end of Notes. Items settled by hand are shown with `missing: true` + `unreviewed` in the report's "Candidates for filling blanks — unconfirmed" section, and are confirmed by updating `missingReviewedUntilIdx` in `review-state.json`
 
 ## Running the operator's review
 
@@ -144,7 +144,7 @@ node tools/verify/export-products.js         # old verification results of chang
 ```
 
 Merges that involve deleting rows (resolving duplicate rows, etc.) are done in the order: corrections --apply → row deletion with `tools/apply-product-changes.js` → export. Deleting first shifts the idx of the following rows and invalidates the idx in the corrections.
-When some corrections use new columns (RCA Input/Output, etc.), add the columns before that (`node tools/add-rca-columns.js --apply`). Without the columns, apply-corrections stops with 「列が見つからない」 (column not found).
+When some corrections use new columns (RCA Input/Output, etc.), add the columns before that (`node tools/add-rca-columns.js --apply`). Without the columns, apply-corrections stops with "column not found".
 
 ## Prohibitions (preventing past incidents from recurring)
 

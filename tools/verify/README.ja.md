@@ -49,7 +49,7 @@ flowchart TD
 7. 同一公式サイトの Specifications ページ・データシート/マニュアル PDF (`pdftotext -layout` で解析)
 8. 記載 URL のドメイン廃止時に限り、同一ブランド所有の公式ドメイン (例: focusritepro.com → focusrite.com)。小売・レビューサイトは禁止
 
-Cloudflare Turnstile 等で全手段が失敗するサイトは `failed` として残し、レポートで「未照合 (データ誤りではない)」と明示する。
+Cloudflare Turnstile 等で全手段が失敗するサイトは `failed` として残し、レポートの「Could not be fetched / unverified」セクションに挙げてデータの誤りではないことを明示する。
 
 ## 汚染防止と健全性検証
 
@@ -77,7 +77,7 @@ node tools/verify/export-products.js
 node tools/verify/validate-results.js
 
 # 4. nextIds (= missingIds) が空になるまで 2-3 を繰り返す。
-#    failed (ボット保護等) は残ってよい: nextIds には入らず、レポートに「未照合」と明示される。
+#    failed (ボット保護等) は残ってよい: nextIds には入らず、レポートに未照合として挙げられる。
 #    failed / partial に再挑戦したいときだけ --retry-failed / --include-partial を付ける
 #    (対象の旧結果は results-retired/ へ退避され nextIds に載る)
 
@@ -120,14 +120,14 @@ node tools/verify/propose-corrections.js          # --all で low も含める
 #      - proposed: 修正後セル値。"" は空欄化 (非搭載・該当なし・未公表は 0 や No ではなく空欄の慣行)
 #      - note: レポート表示用の補足 / hold: 反映を保留する理由 (apply でスキップされる)
 #      - unreviewed: 操作者の確認待ち (apply でスキップ。review-state の境界更新で外れる)
-#      - missing: 空欄追記由来の印 (レポートの「空欄追記の候補」セクションに描画される)
+#      - missing: 空欄追記由来の印 (レポートの「Candidates for filling blanks — unconfirmed」セクションに描画される)
 #      - 相違由来でない一括修正 (書式統一・行統合の反映・空欄追記など) も同スキーマで追加できる
 #        (confidence キーが一致しないためレポートの相違表には出ず、apply にのみ効く)
 #    操作者レビューの進捗は work/review-state.json
 #    ({ highReviewedUntilIdx, lowReviewedUntilIdx, missingReviewedUntilIdx })。
 #    build-report.js は到達済み範囲の相違行を非表示にし、未確認分だけを表示する。
 #    missing_in_xlsx (空欄追記) のうち機械変換できない項目は work/missing-pending.json に保留として
-#    出力し、build-report.js は保留分のみを「空欄」セクションに描画する
+#    出力し、build-report.js は保留分のみを「Stated on the official page but blank in the xlsx — held」セクションに描画する
 
 # 6'. レポート生成 (リポジトリ直下 product-page-verification-report.md。git 管理外で、
 #    更新のたびに再生成・上書きし、照合サイクル完了後に削除する)
