@@ -1,6 +1,6 @@
 // tests/workflow-schedule.test.js
-// build-deploy.yml のトリガー契約: push (main) と workflow_dispatch のみで起動し、schedule トリガーを持たない
-// 検査対象のルートは WORKFLOW_ROOT (未設定ならリポジトリ直下)
+// Trigger contract of build-deploy.yml: starts only on push (main) and workflow_dispatch, and has no schedule trigger
+// The root of what is checked is WORKFLOW_ROOT (the repository root when unset)
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -17,14 +17,14 @@ function onBlock(yaml) {
 }
 
 describe("workflow-schedule: build-deploy.yml", () => {
-  test("schedule トリガーを持たないこと", () => {
+  test("has no schedule trigger", () => {
     const on = onBlock(WORKFLOW);
-    assert.ok(on, "on: ブロックが見つからない");
+    assert.ok(on, "on: block not found");
     assert.doesNotMatch(on, /^\s*schedule:/m);
     assert.doesNotMatch(WORKFLOW, /^\s*-\s*cron:/m);
   });
 
-  test("push と workflow_dispatch で起動すること", () => {
+  test("starts on push and workflow_dispatch", () => {
     const on = onBlock(WORKFLOW);
     assert.match(on, /^  workflow_dispatch:/m);
     assert.match(on, /^  push:/m);
