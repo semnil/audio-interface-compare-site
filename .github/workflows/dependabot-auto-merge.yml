@@ -4,6 +4,7 @@ name: Dependabot auto-merge
 # 自動マージ (merge commit) を予約する (古い head の実行が新しい head の予約を作れない)。それ以外の種別 (fetch-metadata が
 # 読めなかった場合を含む) では、前の head で予約された自動マージを解除する。Dependabot の push では予約が外れず、rebase で
 # patch が minor や major に変わることがある。Dependabot 以外のプルリクエストでは両ステップとも skip する。
+# 予約の有無を読めないときは、ステップを失敗させる。
 # ジョブ auto-merge は main の必須チェックで、その head コミットについての判定が出るまでプルリクエストをマージさせない。
 # そのため Dependabot の条件はジョブでなくステップに置き、トリガーにもフィルタを付けない (全 PR でジョブが結果を報告する)。
 # 自動マージによるマージは GITHUB_TOKEN によるものとして扱われ、main への push はワークフローを起動しない (build-deploy.yml も走らない)。
@@ -34,6 +35,12 @@ jobs:
         run: |
           if [ "$UPDATE_TYPE" = 'version-update:semver-patch' ]; then
             gh pr merge --auto --merge --match-head-commit "$HEAD_SHA" "$PR_URL"
-          elif [ "$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')" = 'true' ]; then
-            gh pr merge --disable-auto "$PR_URL"
+          else
+            enabled=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')
+            if [ "$enabled" = 'true' ]; then
+              gh pr merge --disable-auto "$PR_URL"
+            elif [ "$enabled" != 'false' ]; then
+              echo "::error::could not read whether auto-merge is enabled: '$enabled'"
+              exit 1
+            fi
           fi
