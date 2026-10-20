@@ -1,8 +1,8 @@
 // tests/xlsx-numeric-cells.test.js
-// data/audio_interfaces.xlsx の「常に数値」であるべき列が、テキスト文字列でなく数値セル
-// として格納されていることの契約テスト。追加行 (new-rows JSON) の値は全て文字列になりがちで、
-// そのまま書くと参照価格などが数値でなくテキスト化する。apply-product-changes.js の
-// coerceNumericCells がこれを防ぐ。この不具合の再発を検出する。
+// Contract test that the columns of data/audio_interfaces.xlsx that should "always be numeric" are stored as numeric cells
+// rather than text strings. Values of added rows (new-rows JSON) tend to all be strings,
+// and writing them as is turns the reference price and the like into text instead of numbers. coerceNumericCells in
+// apply-product-changes.js prevents this. This test detects a recurrence of that bug.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { join, dirname } from "node:path";
@@ -12,11 +12,11 @@ import ExcelJS from "exceljs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
-// 全行で数値のみ (空欄可) であるべき列。入出力数・測定値列は歴史的に文字列が混在するため対象外。
+// Columns that must be numeric only (blank allowed) in every row. I/O count and measurement columns historically mix in strings, so they are excluded.
 const ALWAYS_NUMERIC = ["Reference Price (USD)", "Max Sample Rate (kHz)", "Max Bit Depth (bit)"];
 
-describe("xlsx: 常に数値であるべき列の型契約", () => {
-  test("参照価格・サンプルレート・ビット深度がテキストでなく数値であること", async () => {
+describe("xlsx: type contract for columns that should always be numeric", () => {
+  test("reference price, sample rate, and bit depth are numbers, not text", async () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(DATA);
     const ws = wb.worksheets[0];
@@ -26,7 +26,7 @@ describe("xlsx: 常に数値であるべき列の型契約", () => {
     const colOf = {};
     for (const name of ALWAYS_NUMERIC) {
       const idx = hdr.indexOf(name);
-      assert.ok(idx > 0, `列が見つからない: ${name}`);
+      assert.ok(idx > 0, `column not found: ${name}`);
       colOf[name] = idx;
     }
 
@@ -41,6 +41,6 @@ describe("xlsx: 常に数値であるべき列の型契約", () => {
         }
       }
     });
-    assert.equal(offenders.length, 0, `数値でなくテキストのセル:\n  ${offenders.join("\n  ")}`);
+    assert.equal(offenders.length, 0, `cells that are text instead of numbers:\n  ${offenders.join("\n  ")}`);
   });
 });

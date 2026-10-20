@@ -1,6 +1,6 @@
 // tests/script-load-order.test.js
-// PAGE_JA (言語リソース) と i18n.js (変換処理) のスクリプト読み込み順序検証
-// 順序が逆になると i18n.js 実行時に PAGE_JA が undefined で日本語化が効かない
+// Checks the script load order of PAGE_JA (language resource) and i18n.js (translation logic)
+// If the order is reversed, PAGE_JA is undefined when i18n.js runs and Japanese localization does not take effect
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -19,29 +19,29 @@ function sampleDirs(allDirs, count) {
   return allDirs.filter((_, i) => i % step === 0).slice(0, count);
 }
 
-describe("スクリプト読み込み順序: PAGE_JA → i18n.js", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("index.html で PAGE_JA の宣言が i18n.js スクリプトタグより前にある", () => {
+describe("script load order: PAGE_JA -> i18n.js", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("in index.html the PAGE_JA declaration comes before the i18n.js script tag", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
     const pageJaIdx = html.indexOf("var PAGE_JA=");
     const i18nIdx = html.indexOf("i18n.js");
-    assert.ok(pageJaIdx > 0, "PAGE_JA 宣言が見つからない");
-    assert.ok(i18nIdx > 0, "i18n.js 参照が見つからない");
+    assert.ok(pageJaIdx > 0, "PAGE_JA declaration not found");
+    assert.ok(i18nIdx > 0, "i18n.js reference not found");
     assert.ok(pageJaIdx < i18nIdx,
-      `PAGE_JA (${pageJaIdx}) が i18n.js (${i18nIdx}) より後ろにある - 読み込み順序バグ`);
+      `PAGE_JA (${pageJaIdx}) comes after i18n.js (${i18nIdx}) - load order bug`);
   });
 
-  test("index.html で i18n.js が compare.js より前にある (window.__i18n を compare.js が利用する)", () => {
+  test("in index.html i18n.js comes before compare.js (compare.js uses window.__i18n)", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
-    // src 属性の script タグ位置で判定 (コメント中の "compare.js" 誤マッチを避ける)
+    // Judge by the position of script tags with a src attribute (avoids a false match on "compare.js" in comments)
     const i18nIdx = html.search(/<script src="[^"]*i18n\.js"/);
     const compareIdx = html.search(/<script src="[^"]*compare\.js"/);
-    assert.ok(i18nIdx > 0, "i18n.js script タグが見つからない");
-    assert.ok(compareIdx > 0, "compare.js script タグが見つからない");
+    assert.ok(i18nIdx > 0, "i18n.js script tag not found");
+    assert.ok(compareIdx > 0, "compare.js script tag not found");
     assert.ok(i18nIdx < compareIdx,
-      `i18n.js (${i18nIdx}) が compare.js (${compareIdx}) より後ろにある - window.__i18n 未定義バグ`);
+      `i18n.js (${i18nIdx}) comes after compare.js (${compareIdx}) - window.__i18n undefined bug`);
   });
 
-  test("製品ページ 10 件で PAGE_JA が i18n.js より前にある", () => {
+  test("PAGE_JA comes before i18n.js on 10 product pages", () => {
     const sample = sampleDirs(readdirSync(PRODUCTS_DIR), 10);
     const violations = [];
     for (const d of sample) {
@@ -53,36 +53,36 @@ describe("スクリプト読み込み順序: PAGE_JA → i18n.js", { skip: !dist
       }
     }
     assert.equal(violations.length, 0,
-      `読み込み順序違反: ${violations.slice(0, 3).join(" / ")}`);
+      `load order violations: ${violations.slice(0, 3).join(" / ")}`);
   });
 });
 
-describe("PAGE_JA の JS シンタックス健全性", { skip: !distExists ? "dist/ が未生成" : false }, () => {
-  test("index.html の PAGE_JA は JS としてパース可能", () => {
+describe("PAGE_JA JS syntax soundness", { skip: !distExists ? "dist/ not built" : false }, () => {
+  test("PAGE_JA in index.html parses as JS", () => {
     const html = readFileSync(INDEX_PATH, "utf8");
     const m = html.match(/var PAGE_JA=(\{[^}]+\})/);
-    assert.ok(m, "PAGE_JA 宣言が見つからない");
+    assert.ok(m, "PAGE_JA declaration not found");
     const pageJaLiteral = m[1];
-    // new Function で評価。SyntaxError が出たら壊れている
+    // Evaluate with new Function. A SyntaxError means it is broken
     let parsed;
     assert.doesNotThrow(() => {
       parsed = new Function(`return ${pageJaLiteral};`)();
-    }, `PAGE_JA が JS として parse 不能: ${pageJaLiteral.slice(0, 120)}`);
-    // 最低限のキー存在確認
-    assert.ok(parsed.subtitle, "PAGE_JA.subtitle が無い");
-    assert.ok(parsed.compareBtn, "PAGE_JA.compareBtn が無い");
-    assert.ok(parsed.footer, "PAGE_JA.footer が無い");
+    }, `PAGE_JA does not parse as JS: ${pageJaLiteral.slice(0, 120)}`);
+    // Minimal check that keys exist
+    assert.ok(parsed.subtitle, "PAGE_JA.subtitle is missing");
+    assert.ok(parsed.compareBtn, "PAGE_JA.compareBtn is missing");
+    assert.ok(parsed.footer, "PAGE_JA.footer is missing");
   });
 
-  test("製品ページの PAGE_JA も JS として parse 可能", () => {
+  test("PAGE_JA on product pages also parses as JS", () => {
     const dirs = sampleDirs(readdirSync(PRODUCTS_DIR), 5);
     for (const d of dirs) {
       const html = readFileSync(join(PRODUCTS_DIR, d, "index.html"), "utf8");
       const m = html.match(/var PAGE_JA=(\{[^}]+\})/);
-      assert.ok(m, `${d}: PAGE_JA 宣言が見つからない`);
+      assert.ok(m, `${d}: PAGE_JA declaration not found`);
       assert.doesNotThrow(() => {
         new Function(`return ${m[1]};`)();
-      }, `${d}: PAGE_JA parse 失敗`);
+      }, `${d}: PAGE_JA parse failed`);
     }
   });
 });

@@ -1,10 +1,10 @@
 // tests/basePath.test.js
-// build.js の BASE_PATH 正規化ロジックの境界値検証
-// src/build.js を import すると build() が走るため、ロジックをインライン再定義する
+// Boundary-value checks for the BASE_PATH normalization logic of build.js
+// Importing src/build.js runs build(), so the logic is redefined inline
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// build.js の BASE_PATH 算出ロジック (src/build.js:32-39) と同一
+// Same as the BASE_PATH computation logic of build.js (src/build.js:32-39)
 function normalizeBasePath(envValue) {
   let bp = (envValue || "/").trim();
   if (bp === "") bp = "/";
@@ -14,79 +14,79 @@ function normalizeBasePath(envValue) {
   return bp;
 }
 
-describe("BASE_PATH 正規化: 通常系", () => {
-  test("未指定 (undefined) → '/'", () => {
+describe("BASE_PATH normalization: normal cases", () => {
+  test("unset (undefined) -> '/'", () => {
     assert.equal(normalizeBasePath(undefined), "/");
   });
 
-  test("空文字 → '/'", () => {
+  test("empty string -> '/'", () => {
     assert.equal(normalizeBasePath(""), "/");
   });
 
-  test("'/' はそのまま '/'", () => {
+  test("'/' stays '/'", () => {
     assert.equal(normalizeBasePath("/"), "/");
   });
 
-  test("'/repo/' はそのまま", () => {
+  test("'/repo/' stays as is", () => {
     assert.equal(normalizeBasePath("/repo/"), "/repo/");
   });
 
-  test("先頭 / 無し 'repo/' → '/repo/'", () => {
+  test("no leading / 'repo/' -> '/repo/'", () => {
     assert.equal(normalizeBasePath("repo/"), "/repo/");
   });
 
-  test("末尾 / 無し '/repo' → '/repo/'", () => {
+  test("no trailing / '/repo' -> '/repo/'", () => {
     assert.equal(normalizeBasePath("/repo"), "/repo/");
   });
 
-  test("両端 / 無し 'repo' → '/repo/'", () => {
+  test("no / on either end 'repo' -> '/repo/'", () => {
     assert.equal(normalizeBasePath("repo"), "/repo/");
   });
 
-  test("ネストパス '/org/repo/' はそのまま", () => {
+  test("nested path '/org/repo/' stays as is", () => {
     assert.equal(normalizeBasePath("/org/repo/"), "/org/repo/");
   });
 });
 
-describe("BASE_PATH 正規化: 異常値の吸収", () => {
-  // GitHub Actions の actions/configure-pages から渡される値は
-  // "/" または "/repo/" 形式が基本。手動指定時の異常値も可能な範囲で吸収する。
+describe("BASE_PATH normalization: absorbing abnormal values", () => {
+  // The value passed from actions/configure-pages in GitHub Actions is
+  // basically of the form "/" or "/repo/". Abnormal values from manual settings are also absorbed as far as possible.
 
-  test("二重スラッシュ '//' は '/' に畳まれる", () => {
+  test("double slash '//' collapses to '/'", () => {
     assert.equal(normalizeBasePath("//"), "/");
   });
 
-  test("前後空白入り ' /repo/ ' はトリムされる", () => {
+  test("' /repo/ ' with surrounding spaces is trimmed", () => {
     assert.equal(normalizeBasePath(" /repo/ "), "/repo/");
   });
 
-  test("連続スラッシュ '/a//b/' は '/a/b/' に畳まれる", () => {
+  test("consecutive slashes '/a//b/' collapse to '/a/b/'", () => {
     assert.equal(normalizeBasePath("/a//b/"), "/a/b/");
   });
 });
 
-describe("BASE_PATH 経路: 絶対 URL 結合シミュレーション", () => {
-  // SITE_URL と BASE_PATH は build.js で concat される (canonical / og:url / sitemap)
-  // 正規化後の BASE_PATH が正しい URL を生成するか確認
+describe("BASE_PATH flow: absolute URL concatenation simulation", () => {
+  // SITE_URL and BASE_PATH are concatenated in build.js (canonical / og:url / sitemap)
+  // Checks that the normalized BASE_PATH produces a correct URL
   const SITE_URL = "https://semnil.github.io/audio-interface-compare-site";
 
-  test("ルート配信 ('/'): 製品ページ URL が二重スラッシュにならない", () => {
+  test("root serving ('/'): the product page URL does not get a double slash", () => {
     const bp = normalizeBasePath("/");
     const url = `${SITE_URL}${bp}products/a/`;
     assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/products/a/");
   });
 
-  test("サブディレクトリ配信 ('/repo/'): 製品ページ URL が正しく構築される", () => {
+  test("subdirectory serving ('/repo/'): the product page URL is built correctly", () => {
     const bp = normalizeBasePath("/repo/");
     const url = `${SITE_URL}${bp}products/a/`;
     assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/repo/products/a/");
   });
 
-  test("index URL は BASE_PATH 末尾スラッシュで確定する", () => {
+  test("the index URL ends with the trailing slash of BASE_PATH", () => {
     const bp = normalizeBasePath("/repo/");
     const url = `${SITE_URL}${bp}`;
     assert.equal(url, "https://semnil.github.io/audio-interface-compare-site/repo/");
-    // URL のパス部が "//" にならない
-    assert.equal(url.match(/\/\//g).length, 1, "https:// 以外に // が含まれてはならない");
+    // The path part of the URL does not become "//"
+    assert.equal(url.match(/\/\//g).length, 1, "the URL must not contain // other than in https://");
   });
 });

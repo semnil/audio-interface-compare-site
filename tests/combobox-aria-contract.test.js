@@ -1,6 +1,6 @@
 // tests/combobox-aria-contract.test.js
-// Round 4-6 のキーボード/ARIA 修正に対する回帰テスト
-// WAI-ARIA APG Combobox パターンの契約を dist/index.html で検証する
+// Regression tests for the keyboard/ARIA fixes of Rounds 4-6
+// Checks the contract of the WAI-ARIA APG Combobox pattern against dist/index.html
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
@@ -12,89 +12,89 @@ const ROOT = join(__dirname, "..");
 const INDEX_PATH = join(ROOT, "dist", "index.html");
 const distExists = existsSync(INDEX_PATH);
 
-describe("index.html の WAI-ARIA combobox 契約 (Round 4-6 回帰)", { skip: !distExists ? "dist/ が未生成" : false }, () => {
+describe("WAI-ARIA combobox contract of index.html (Rounds 4-6 regression)", { skip: !distExists ? "dist/ not built" : false }, () => {
   let html;
-  test("dist/index.html を読み込む", () => {
+  test("loads dist/index.html", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(html.length > 1000);
   });
 
-  test("search input に role=combobox / aria-controls=list-X / aria-autocomplete=list / aria-expanded 属性が揃う", () => {
+  test("the search input has all of the role=combobox / aria-controls=list-X / aria-autocomplete=list / aria-expanded attributes", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     for (const side of ["a", "b"]) {
       const re = new RegExp(`<input[^>]*id="search-${side}"[^>]*>`);
       const m = html.match(re);
-      assert.ok(m, `search-${side} input が見つからない`);
+      assert.ok(m, `search-${side} input not found`);
       const tag = m[0];
-      assert.ok(/role="combobox"/.test(tag), `search-${side}: role=combobox 欠落`);
-      assert.ok(new RegExp(`aria-controls="list-${side}"`).test(tag), `search-${side}: aria-controls=list-${side} 欠落`);
-      assert.ok(/aria-autocomplete="list"/.test(tag), `search-${side}: aria-autocomplete=list 欠落`);
-      assert.ok(/aria-expanded="true"/.test(tag), `search-${side}: aria-expanded 欠落`);
+      assert.ok(/role="combobox"/.test(tag), `search-${side}: role=combobox is missing`);
+      assert.ok(new RegExp(`aria-controls="list-${side}"`).test(tag), `search-${side}: aria-controls=list-${side} is missing`);
+      assert.ok(/aria-autocomplete="list"/.test(tag), `search-${side}: aria-autocomplete=list is missing`);
+      assert.ok(/aria-expanded="true"/.test(tag), `search-${side}: aria-expanded is missing`);
     }
   });
 
-  test("listbox (product-list) は tabindex=\"-1\" を明示し、role=listbox / aria-label を持つ (Round 6 回帰)", () => {
+  test("the listbox (product-list) sets tabindex=\"-1\" explicitly and has role=listbox / aria-label (Round 6 regression)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     for (const side of ["a", "b"]) {
       const re = new RegExp(`<div[^>]*id="list-${side}"[^>]*>`);
       const m = html.match(re);
-      assert.ok(m, `list-${side} が見つからない`);
+      assert.ok(m, `list-${side} not found`);
       const tag = m[0];
-      assert.ok(/role="listbox"/.test(tag), `list-${side}: role=listbox 欠落`);
-      // Round 6: tabindex=-1 明示 (キーボードフォーカスは input に集約するが、scrollIntoView の document.activeElement 復元で要る)
-      assert.ok(/tabindex="-1"/.test(tag), `list-${side}: tabindex=\"-1\" 欠落 (Round 6 回帰)`);
-      assert.ok(/aria-label="Product [AB]"/.test(tag), `list-${side}: aria-label 欠落`);
+      assert.ok(/role="listbox"/.test(tag), `list-${side}: role=listbox is missing`);
+      // Round 6: explicit tabindex=-1 (keyboard focus is consolidated on the input, but it is needed for restoring document.activeElement in scrollIntoView)
+      assert.ok(/tabindex="-1"/.test(tag), `list-${side}: tabindex=\"-1\" is missing (Round 6 regression)`);
+      assert.ok(/aria-label="Product [AB]"/.test(tag), `list-${side}: aria-label is missing`);
     }
   });
 
-  test("renderList の option テンプレートは tabindex=\"-1\" を付ける (listbox は非 focusable)", () => {
+  test("the option template of renderList adds tabindex=\"-1\" (the listbox is not focusable)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // build.js line 847 の innerHTML テンプレート
+    // The innerHTML template at build.js line 847
     assert.ok(
       /role="option" class="product-item[^"]*" id="' \+ optionId\(side, p\.slug\) \+ '" tabindex="-1"/.test(html),
-      "product-item template に tabindex=\"-1\" が無い"
+      "the product-item template has no tabindex=\"-1\""
     );
   });
 
-  test("option の disabled ガードは HTML 属性 (button disabled) で実装され、aria-disabled は重複しない (Round 5 回帰)", () => {
+  test("the disabled guard of options is implemented with the HTML attribute (button disabled), and aria-disabled is not duplicated (Round 5 regression)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // button の disabled 属性は暗黙で aria-disabled 相当なので、両方付けると SR が二重読みする
-    // Round 5 で aria-disabled を削除した回帰確認: renderList テンプレートに aria-disabled が出現しないこと
-    // PRODUCTS JSON (モデル名) に "aria-disabled" が含まれる可能性を除外するため、script 内のテンプレート文字列を対象にする
+    // The disabled attribute of a button is implicitly equivalent to aria-disabled, so setting both makes the SR read it twice
+    // Regression check for the removal of aria-disabled in Round 5: aria-disabled does not appear in the renderList template
+    // To rule out the PRODUCTS JSON (model names) containing "aria-disabled", the template strings inside the script are targeted
     const tmplRe = /isDisabled \? ' disabled' : ''/;
-    assert.ok(tmplRe.test(html), "disabled の条件出力が期待通りでない");
-    // 同じスクリプトブロック内に aria-disabled= リテラルが無いこと
+    assert.ok(tmplRe.test(html), "the conditional output of disabled is not as expected");
+    // No aria-disabled= literal in the same script block
     const scriptBlock = html.match(/const activeIdx = \{ a: -1, b: -1 \};[\s\S]*?\n\}\)\(\);/);
-    assert.ok(scriptBlock, "活性 idx を含むスクリプト block が見つからない");
+    assert.ok(scriptBlock, "the script block containing the active idx not found");
     assert.equal(
       /aria-disabled\s*=/.test(scriptBlock[0]),
       false,
-      "テンプレート内に aria-disabled が残存 (Round 5 回帰)"
+      "aria-disabled remains in the template (Round 5 regression)"
     );
   });
 
-  test("0 件時の 'No results'/'該当なし' は role=\"presentation\" (listbox の option 数から除外)", () => {
+  test("the 'No results'/'該当なし' placeholder for 0 results has role=\"presentation\" (excluded from the listbox option count)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     // build.js line 835
     assert.ok(
       /role="presentation"[^>]*>' \+ \(isJa \? '該当なし' : 'No results'\)/.test(html),
-      "0 件時のプレースホルダに role=\"presentation\" が付いていない"
+      "the placeholder for 0 results has no role=\"presentation\""
     );
   });
 
-  test("keydown ハンドラは IME composition ガード (isComposing / keyCode 229) を持つ (Round 5)", () => {
+  test("the keydown handler has an IME composition guard (isComposing / keyCode 229) (Round 5)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     assert.ok(
       /e\.isComposing\s*\|\|\s*e\.keyCode\s*===\s*229/.test(html),
-      "IME composition ガードが無い (Round 5 回帰)"
+      "no IME composition guard (Round 5 regression)"
     );
   });
 
-  test("keydown ハンドラは input 側にバインドされ、listbox に keydown は付けない (Round 4-5)", () => {
+  test("the keydown handler is bound to the input, and no keydown is attached to the listbox (Rounds 4-5)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // minify で改行圧縮されるので、function bindListKeyboard から次の function 宣言までを抽出
+    // Minification compresses line breaks, so extract from function bindListKeyboard to the next function declaration
     const bindIdx = html.indexOf("function bindListKeyboard");
-    assert.ok(bindIdx >= 0, "bindListKeyboard が見つからない");
+    assert.ok(bindIdx >= 0, "bindListKeyboard not found");
     const afterIdx = html.indexOf("function ", bindIdx + 1);
     const initIdx = html.indexOf("// Init", bindIdx);
     const endIdx = Math.min(
@@ -103,102 +103,102 @@ describe("index.html の WAI-ARIA combobox 契約 (Round 4-6 回帰)", { skip: !
     );
     const body = html.slice(bindIdx, endIdx);
     const listenerCount = (body.match(/addEventListener\('keydown'/g) || []).length;
-    assert.equal(listenerCount, 1, `keydown リスナーは 1 個 (input のみ) であるべき: actual=${listenerCount}`);
-    assert.ok(/inputEl\.addEventListener\('keydown'/.test(body), "input に keydown リスナーが付いていない");
-    // listbox (list-...) への keydown バインドが無いこと
+    assert.equal(listenerCount, 1, `there should be 1 keydown listener (input only): actual=${listenerCount}`);
+    assert.ok(/inputEl\.addEventListener\('keydown'/.test(body), "no keydown listener on the input");
+    // No keydown binding on the listbox (list-...)
     assert.equal(
       /getElementById\('list-' \+ side\)[\s\S]{0,200}?addEventListener\('keydown'/.test(body),
       false,
-      "listbox に keydown ハンドラが残存 (Round 4 回帰)"
+      "a keydown handler remains on the listbox (Round 4 regression)"
     );
   });
 
-  test("Escape は preventDefault + clearActive + (value != '' なら) value クリア + renderList + announceResultCount を実行 (Round 5)", () => {
+  test("Escape runs preventDefault + clearActive + clearing value (if value != '') + renderList + announceResultCount (Round 5)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // Escape ブロックが以下を含むことをざっくり順序検査
+    // Rough check that the Escape block contains each of the following
     const escBlock = html.match(/case 'Escape':[\s\S]*?break;/);
-    assert.ok(escBlock, "Escape ケースが見つからない");
+    assert.ok(escBlock, "Escape case not found");
     const body = escBlock[0];
-    assert.ok(/e\.preventDefault\(\)/.test(body), "Escape: preventDefault 欠落");
-    assert.ok(/clearActive\(side\)/.test(body), "Escape: clearActive 欠落");
-    assert.ok(/inputEl\.value !== ''/.test(body), "Escape: value 空判定欠落");
-    assert.ok(/inputEl\.value = ''/.test(body), "Escape: value リセット欠落");
-    assert.ok(/renderList\('list-' \+ side/.test(body), "Escape: renderList 欠落");
-    assert.ok(/announceResultCount\(side/.test(body), "Escape: announceResultCount 欠落");
+    assert.ok(/e\.preventDefault\(\)/.test(body), "Escape: preventDefault is missing");
+    assert.ok(/clearActive\(side\)/.test(body), "Escape: clearActive is missing");
+    assert.ok(/inputEl\.value !== ''/.test(body), "Escape: empty-value check is missing");
+    assert.ok(/inputEl\.value = ''/.test(body), "Escape: value reset is missing");
+    assert.ok(/renderList\('list-' \+ side/.test(body), "Escape: renderList is missing");
+    assert.ok(/announceResultCount\(side/.test(body), "Escape: announceResultCount is missing");
   });
 
-  test("Home/End は input 側の keydown で listbox ハイライト (results.length>0 ガード付き) (Round 5)", () => {
+  test("Home/End highlight the listbox from the input's keydown (with a results.length>0 guard) (Round 5)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const homeBlock = html.match(/case 'Home':[\s\S]*?break;/);
     const endBlock = html.match(/case 'End':[\s\S]*?break;/);
-    assert.ok(homeBlock && endBlock, "Home/End ケースが見つからない");
-    assert.ok(/results\.length > 0/.test(homeBlock[0]), "Home: results.length>0 ガード欠落");
-    assert.ok(/setActive\(side, 0\)/.test(homeBlock[0]), "Home: setActive(0) 欠落");
-    assert.ok(/results\.length > 0/.test(endBlock[0]), "End: results.length>0 ガード欠落");
-    assert.ok(/setActive\(side, results\.length - 1\)/.test(endBlock[0]), "End: setActive(len-1) 欠落");
+    assert.ok(homeBlock && endBlock, "Home/End cases not found");
+    assert.ok(/results\.length > 0/.test(homeBlock[0]), "Home: results.length>0 guard is missing");
+    assert.ok(/setActive\(side, 0\)/.test(homeBlock[0]), "Home: setActive(0) is missing");
+    assert.ok(/results\.length > 0/.test(endBlock[0]), "End: results.length>0 guard is missing");
+    assert.ok(/setActive\(side, results\.length - 1\)/.test(endBlock[0]), "End: setActive(len-1) is missing");
   });
 
-  test("selectItem は選択後に input フォーカスを復帰する (innerHTML 再描画で click 元が消えるため)", () => {
+  test("selectItem restores focus to the input after selection (because the innerHTML re-render removes the click source)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const sIdx = html.indexOf("function selectItem(item, side)");
-    assert.ok(sIdx >= 0, "selectItem が見つからない");
+    assert.ok(sIdx >= 0, "selectItem not found");
     const endIdx = html.indexOf("function ", sIdx + 10);
     const body = html.slice(sIdx, endIdx > 0 ? endIdx : sIdx + 2000);
-    assert.ok(/inputEl\.focus\(\)/.test(body), "selectItem: input フォーカス復帰が無い (Round 5 回帰)");
+    assert.ok(/inputEl\.focus\(\)/.test(body), "selectItem: no input focus restore (Round 5 regression)");
   });
 
-  test("aria-activedescendant は input 側のみに設定される (Round 5: listbox→input 移管)", () => {
+  test("aria-activedescendant is set only on the input (Round 5: moved from the listbox to the input)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     const sIdx = html.indexOf("function syncActiveDescendant(side)");
-    assert.ok(sIdx >= 0, "syncActiveDescendant が見つからない");
+    assert.ok(sIdx >= 0, "syncActiveDescendant not found");
     const endIdx = html.indexOf("function ", sIdx + 10);
     const body = html.slice(sIdx, endIdx > 0 ? endIdx : sIdx + 1500);
-    // input 側への設定のみ存在 (listbox side への setAttribute が無い)
-    assert.ok(/getElementById\('search-' \+ side\)/.test(body), "syncActiveDescendant: input 取得欠落");
+    // Only the setting on the input exists (no setAttribute on the listbox side)
+    assert.ok(/getElementById\('search-' \+ side\)/.test(body), "syncActiveDescendant: input lookup is missing");
     assert.ok(
       /inputEl\.setAttribute\('aria-activedescendant'/.test(body),
-      "syncActiveDescendant: input に aria-activedescendant を設定していない"
+      "syncActiveDescendant: does not set aria-activedescendant on the input"
     );
-    // listbox (list-{side}) 側に aria-activedescendant が設定されていない
+    // aria-activedescendant is not set on the listbox (list-{side}) side
     assert.equal(
       /getElementById\('list-' \+ side\)[\s\S]*?aria-activedescendant/.test(body),
       false,
-      "syncActiveDescendant が listbox 側にも aria-activedescendant を付けている (Round 5 回帰)"
+      "syncActiveDescendant also sets aria-activedescendant on the listbox side (Round 5 regression)"
     );
   });
 
-  test("opt-{side}-{slug} ID は PRODUCTS slug と整合する (activedescendant の参照整合性)", () => {
+  test("opt-{side}-{slug} IDs are consistent with PRODUCTS slugs (referential integrity of activedescendant)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // optionId が 'opt-' + side + '-' + slug で組み立てられる
+    // optionId is assembled as 'opt-' + side + '-' + slug
     assert.ok(/function optionId\(side, slug\)\s*\{[^}]*return 'opt-' \+ side \+ '-' \+ slug/.test(html),
-      "optionId の組み立てが変更されている (テスト更新要)");
-    // syncActiveDescendant が optionId(side, results[idx].slug) で参照
+      "the assembly of optionId has changed (the test needs updating)");
+    // syncActiveDescendant references it via optionId(side, results[idx].slug)
     assert.ok(/setAttribute\('aria-activedescendant', optionId\(side, results\[idx\]\.slug\)\)/.test(html),
-      "aria-activedescendant が optionId を参照していない");
-    // renderList が id='opt-...' を出力している
+      "aria-activedescendant does not reference optionId");
+    // renderList outputs id='opt-...'
     assert.ok(/id="' \+ optionId\(side, p\.slug\) \+ '"/.test(html),
-      "renderList が optionId を使って id を出力していない");
+      "renderList does not output the id using optionId");
   });
 });
 
 const STYLE_PATH = join(ROOT, "dist", "style.css");
 const styleExists = existsSync(STYLE_PATH);
 
-describe("dist/style.css の CSS 回帰 (Round 6)", { skip: !styleExists ? "dist/style.css が未生成" : false }, () => {
-  test(".compare-btn ルールに min-height: 44px が含まれる (タッチターゲット WCAG 2.5.5)", () => {
+describe("CSS regression of dist/style.css (Round 6)", { skip: !styleExists ? "dist/style.css not built" : false }, () => {
+  test("the .compare-btn rule contains min-height: 44px (touch target, WCAG 2.5.5)", () => {
     const css = readFileSync(STYLE_PATH, "utf8");
-    // .compare-btn { ... } ブロックを抽出。同名プレフィックス (.compare-btn-wrap, .compare-btn:hover, .compare-btn:focus-visible, .compare-btn:disabled) を除外するため \s*\{ で境界
+    // Extract the .compare-btn { ... } block. Bounded by \s*\{ to exclude rules with the same prefix (.compare-btn-wrap, .compare-btn:hover, .compare-btn:focus-visible, .compare-btn:disabled)
     const m = css.match(/\.compare-btn\s*\{[^}]*\}/);
-    assert.ok(m, ".compare-btn のルールブロックが抽出できない");
-    assert.ok(/min-height\s*:\s*44px/.test(m[0]), `.compare-btn に min-height:44px が無い (Round 6 回帰): ${m[0].slice(0,200)}`);
+    assert.ok(m, "cannot extract the .compare-btn rule block");
+    assert.ok(/min-height\s*:\s*44px/.test(m[0]), `.compare-btn has no min-height:44px (Round 6 regression): ${m[0].slice(0,200)}`);
   });
 
-  test(".product-list:focus-visible ルールは削除されている (listbox は非 focusable、Round 6)", () => {
+  test("the .product-list:focus-visible rule has been removed (the listbox is not focusable, Round 6)", () => {
     const css = readFileSync(STYLE_PATH, "utf8");
     assert.equal(
       /\.product-list:focus(-visible)?\s*[,{]/.test(css),
       false,
-      ".product-list:focus(-visible) ルールが残存 (Round 6 回帰)"
+      ".product-list:focus(-visible) rule remains (Round 6 regression)"
     );
   });
 });

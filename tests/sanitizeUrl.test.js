@@ -1,10 +1,10 @@
 // tests/sanitizeUrl.test.js
-// build.js の sanitizeUrl (src/build.js:157-160) の境界値・契約検証
-// src/ 変更禁止のため同等ロジックをインライン再現する
+// Boundary and contract tests for build.js sanitizeUrl (src/build.js:157-160)
+// src/ must not be changed, so equivalent logic is reproduced inline
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-// build.js の sanitizeUrl と同一ロジック (new URL() ベースで http/https のみ許可)
+// Same logic as build.js sanitizeUrl (built on new URL(), allows only http/https)
 function sanitizeUrl(u) {
   if (u == null) return "";
   const s = String(u).trim();
@@ -18,114 +18,114 @@ function sanitizeUrl(u) {
   }
 }
 
-describe("sanitizeUrl: 正常系 (http/https スキーム)", () => {
-  test("https:// で始まる URL は正規化されて返る", () => {
-    // new URL() はホスト末尾に "/" を付与する (RFC 準拠)
+describe("sanitizeUrl: normal cases (http/https schemes)", () => {
+  test("a URL starting with https:// is returned normalized", () => {
+    // new URL() adds "/" after the host (RFC compliant)
     assert.equal(sanitizeUrl("https://example.com"), "https://example.com/");
   });
 
-  test("http:// で始まる URL は正規化されて返る", () => {
+  test("a URL starting with http:// is returned normalized", () => {
     assert.equal(sanitizeUrl("http://example.com"), "http://example.com/");
   });
 
-  test("HTTPS:// 大文字は小文字スキームに正規化される", () => {
+  test("uppercase HTTPS:// is normalized to a lowercase scheme", () => {
     assert.equal(sanitizeUrl("HTTPS://EXAMPLE.COM"), "https://example.com/");
   });
 
-  test("前後の空白はトリムされる", () => {
+  test("leading and trailing whitespace is trimmed", () => {
     assert.equal(sanitizeUrl("  https://example.com  "), "https://example.com/");
   });
 
-  test("タブ前置も trim で吸収される", () => {
+  test("a leading tab is also absorbed by trim", () => {
     assert.equal(sanitizeUrl("\thttps://example.com"), "https://example.com/");
   });
 
-  test("パス付き URL のクエリ / パスはそのまま保持", () => {
+  test("query / path of a URL with a path are kept as is", () => {
     assert.equal(sanitizeUrl("https://example.com/path?x=1"), "https://example.com/path?x=1");
   });
 });
 
-describe("sanitizeUrl: 危険スキームを空文字化", () => {
-  test("javascript: は空文字", () => {
+describe("sanitizeUrl: dangerous schemes become an empty string", () => {
+  test("javascript: is an empty string", () => {
     assert.equal(sanitizeUrl("javascript:alert(1)"), "");
   });
 
-  test("vbscript: は空文字", () => {
+  test("vbscript: is an empty string", () => {
     assert.equal(sanitizeUrl("vbscript:msgbox(1)"), "");
   });
 
-  test("data:text/html,... は空文字", () => {
+  test("data:text/html,... is an empty string", () => {
     assert.equal(sanitizeUrl("data:text/html,<script>alert(1)</script>"), "");
   });
 
-  test("file:// は空文字", () => {
+  test("file:// is an empty string", () => {
     assert.equal(sanitizeUrl("file:///etc/passwd"), "");
   });
 
-  test("ftp:// は空文字", () => {
+  test("ftp:// is an empty string", () => {
     assert.equal(sanitizeUrl("ftp://evil.com"), "");
   });
 
-  test("プロトコル相対 URL '//evil.com' は空文字", () => {
+  test("protocol-relative URL '//evil.com' is an empty string", () => {
     assert.equal(sanitizeUrl("//evil.com"), "");
   });
 
-  test("前置空白 + javascript: は空文字", () => {
+  test("leading whitespace + javascript: is an empty string", () => {
     assert.equal(sanitizeUrl(" javascript:alert(1)"), "");
   });
 });
 
-describe("sanitizeUrl: null/undefined/空値の処理", () => {
-  test("null は空文字", () => {
+describe("sanitizeUrl: handling of null/undefined/empty values", () => {
+  test("null is an empty string", () => {
     assert.equal(sanitizeUrl(null), "");
   });
 
-  test("undefined は空文字", () => {
+  test("undefined is an empty string", () => {
     assert.equal(sanitizeUrl(undefined), "");
   });
 
-  test("空文字は空文字", () => {
+  test("an empty string is an empty string", () => {
     assert.equal(sanitizeUrl(""), "");
   });
 
-  test("数値入力は空文字 (http/https プレフィックス無し)", () => {
+  test("numeric input is an empty string (no http/https prefix)", () => {
     assert.equal(sanitizeUrl(123), "");
   });
 
-  test("ブーリアン true は空文字", () => {
+  test("boolean true is an empty string", () => {
     assert.equal(sanitizeUrl(true), "");
   });
 });
 
-describe("sanitizeUrl: new URL() による厳格化", () => {
-  // new URL() ベースの実装は、パース不能な URL (空白・タグ等) を拒否する。
-  // ただし WHATWG URL パーサは寛容な部分があり、一部の不正文字は URL エンコードして受け入れる。
-  // その場合は後段の escapeHtml で HTML 属性脱出を防ぐ (深層防御)。
+describe("sanitizeUrl: stricter checks via new URL()", () => {
+  // The new URL()-based implementation rejects URLs that cannot be parsed (whitespace, tags, etc.).
+  // However, the WHATWG URL parser is lenient in places and accepts some invalid characters by URL-encoding them.
+  // In that case the later escapeHtml stage prevents HTML attribute escape (defense in depth).
 
-  test("https プレフィックス後に空白が挟まる URL は空文字 (パース失敗)", () => {
+  test("a URL with whitespace after the https prefix is an empty string (parse failure)", () => {
     const input = "https://example.com javascript:alert(1)";
     assert.equal(sanitizeUrl(input), "");
   });
 
-  test("https + タグ (<>) 混入 URL は空文字 (パース失敗)", () => {
-    // > はホスト部では不正文字扱いとなり new URL() がエラーを投げる
+  test("an https URL containing tags (<>) is an empty string (parse failure)", () => {
+    // > is treated as an invalid character in the host part, and new URL() throws an error
     const input = "https://a.com><script>alert(1)</script>";
     assert.equal(sanitizeUrl(input), "");
   });
 
-  test("https + ダブルクォート混入 URL は URL エンコードされて受理される (escapeHtml 依存)", () => {
-    // WHATWG URL パーサは " を %22 相当のまま保持する (エラーにしない)
-    // HTML 属性脱出は後段 escapeHtml で防ぐ
+  test("an https URL containing a double quote is URL-encoded and accepted (relies on escapeHtml)", () => {
+    // The WHATWG URL parser keeps " as the equivalent of %22 (does not raise an error)
+    // The later escapeHtml stage prevents HTML attribute escape
     const out = sanitizeUrl('https://a.com"onclick="alert(1)');
-    assert.ok(out.startsWith("https://"), `https スキーム以外: ${out}`);
-    // 出力内に素の " は含まれない (URL パースにより正規化済み)
-    // note: 実装によってはエンコードされる / ホスト内のため残る場合あり。
-    //        契約: 出力は常に http(s) プロトコルであること。
+    assert.ok(out.startsWith("https://"), `not an https scheme: ${out}`);
+    // The output contains no raw " (already normalized by URL parsing)
+    // note: depending on the implementation it is encoded / it may remain because it is inside the host.
+    //        Contract: the output always has the http(s) protocol.
     assert.ok(/^https?:\/\//.test(out));
   });
 });
 
-describe("sanitizeUrl + escapeHtml 合成: 最終 HTML 属性の安全性", () => {
+describe("sanitizeUrl + escapeHtml combined: safety of the final HTML attribute", () => {
   function escapeHtml(str) {
     if (str == null) return "";
     return String(str)
@@ -135,18 +135,18 @@ describe("sanitizeUrl + escapeHtml 合成: 最終 HTML 属性の安全性", () =
       .replace(/"/g, "&quot;");
   }
 
-  test("javascript: スキームは空文字 → href が空になる", () => {
+  test("the javascript: scheme is an empty string -> href becomes empty", () => {
     const href = escapeHtml(sanitizeUrl("javascript:alert(1)"));
     assert.equal(href, "");
   });
 
-  test("https + 属性脱出試行 (ダブルクォート): escapeHtml で &quot; に変換され属性脱出を防ぐ", () => {
+  test("https + attribute escape attempt (double quote): escapeHtml converts it to &quot; and prevents the attribute escape", () => {
     const href = escapeHtml(sanitizeUrl('https://a.com"onclick="alert(1)'));
-    // " が素で残っていないこと
-    assert.equal(href.includes('"'), false, `" が escape されていない: ${href}`);
+    // No raw " remains
+    assert.equal(href.includes('"'), false, `" is not escaped: ${href}`);
   });
 
-  test("https + タグ脱出試行: URL パースで拒否されて空文字 → 安全な href", () => {
+  test("https + tag escape attempt: rejected by URL parsing -> empty string -> safe href", () => {
     const href = escapeHtml(sanitizeUrl("https://a.com><script>alert(1)</script>"));
     assert.equal(href, "");
   });

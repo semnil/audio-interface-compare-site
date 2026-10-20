@@ -1,13 +1,13 @@
 name: Dependabot auto-merge
 
-# Dependabot のプルリクエストを自動でマージするかを決める。更新が semver の patch なら、読んだ head コミットに固定して
-# 自動マージ (merge commit) を予約する (古い head の実行が新しい head の予約を作れない)。それ以外の種別 (fetch-metadata が
-# 読めなかった場合を含む) では、前の head で予約された自動マージを解除する。Dependabot の push では予約が外れず、rebase で
-# patch が minor や major に変わることがある。Dependabot 以外のプルリクエストでは両ステップとも skip する。
-# 予約の有無を読めないときは、ステップを失敗させる。
-# ジョブ auto-merge は main の必須チェックで、その head コミットについての判定が出るまでプルリクエストをマージさせない。
-# そのため Dependabot の条件はジョブでなくステップに置き、トリガーにもフィルタを付けない (全 PR でジョブが結果を報告する)。
-# 自動マージによるマージは GITHUB_TOKEN によるものとして扱われ、main への push はワークフローを起動しない (build-deploy.yml も走らない)。
+# Decides whether to merge a Dependabot pull request automatically. If the update is a semver patch, schedules auto-merge (merge commit)
+# pinned to the head commit it read (a run for an old head cannot create a schedule for a new head). For other update types (including when
+# fetch-metadata could not read it), cancels auto-merge scheduled on an earlier head. A Dependabot push does not remove the schedule, and a rebase
+# can turn a patch into a minor or major. On pull requests not from Dependabot, both steps are skipped.
+# When whether a schedule exists cannot be read, the step fails.
+# The job auto-merge is a required check on main and keeps the pull request from being merged until a verdict on its head commit is out.
+# So the Dependabot condition is on the steps rather than the job, and the trigger has no filter either (the job reports a result on every PR).
+# A merge by auto-merge counts as done by GITHUB_TOKEN, and its push to main starts no workflow (build-deploy.yml does not run either).
 on:
   pull_request:
 
