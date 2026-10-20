@@ -86,7 +86,7 @@ Concatenate all batches' row JSON into one file, present the content (models and
 ```bash
 # Rewrite REMOVALS in tools/apply-product-changes.js for each cycle (empty if only adding. Do not reuse leftovers from the previous cycle)
 node tools/apply-product-changes.js tools/discover/work/new-rows.json
-npm run build     # check the slug collision fail-fast and the page count (O(n²))
+npm run build     # check the slug collision fail-fast and the page count (O(n) in the number of products)
 ```
 
 ### 6. Connecting to verification

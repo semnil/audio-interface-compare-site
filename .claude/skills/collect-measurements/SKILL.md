@@ -70,7 +70,7 @@ node -e "const fs=require('fs'); const dir='tools/measurements/work'; const file
 node tools/update-xlsx.js tools/measurements/work/collect-result.json         # dry-run: per-model markdown preview + matched/unmatched
 # → present PREVIEW and UNMATCHED to the operator and get consent
 node tools/update-xlsx.js tools/measurements/work/collect-result.json --apply  # writes only after consent
-npm run build   # check the rendering of renderMeasurements (links on comparison/individual pages)
+npm run build   # check the rendering of renderMeasurements (links on individual product pages and in the comparison view)
 ```
 
 - update-xlsx.js is idempotent and **overwrites per cell**. It replaces the whole cell of the models included in the result and keeps the models not included. To add while keeping existing URLs, include the existing ones in the result too (it is not a diff append)
