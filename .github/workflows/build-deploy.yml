@@ -44,6 +44,9 @@ jobs:
       - run: npm ci
         timeout-minutes: 10
 
+      # The site is built and deployed only when the tests pass on the pushed commit
+      - run: npm test
+
       # Build with BASE_PATH
       # It becomes "/" for a custom domain and "/repo-name/" for repo pages
       - run: npm run build

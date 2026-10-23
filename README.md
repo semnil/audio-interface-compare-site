@@ -45,7 +45,7 @@ The tests use `node:test`. The workflow checks parse YAML with [yq](https://gith
 
 ## Deployment
 
-`.github/workflows/build-deploy.yml` builds and deploys to GitHub Pages on a push to `main` that changes the spreadsheet, `src/`, the package files or the workflow itself, and on a manual run.
+`.github/workflows/build-deploy.yml` runs the tests, then builds and deploys to GitHub Pages on a push to `main` that changes the spreadsheet, `src/`, the package files or the workflow itself, and on a manual run.
 
 ## Feedback
 

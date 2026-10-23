@@ -45,7 +45,7 @@ npm test
 
 ## デプロイ
 
-`.github/workflows/build-deploy.yml` が、スプレッドシート・`src/`・パッケージのファイル・ワークフロー自身を変更する `main` への push と、手動実行のときに、ビルドして GitHub Pages へデプロイする。
+`.github/workflows/build-deploy.yml` が、スプレッドシート・`src/`・パッケージのファイル・ワークフロー自身を変更する `main` への push と、手動実行のときに、テストを走らせてからビルドして GitHub Pages へデプロイする。
 
 ## フィードバック
 
