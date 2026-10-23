@@ -1,6 +1,6 @@
 name: CI
 
-# Installs dependencies, runs the tests and builds on every PR. Does not deploy (that is build-deploy.yml's role).
+# Installs dependencies, builds, and runs the tests on the build on every PR (the suites that read dist/ skip without it). Does not deploy (that is build-deploy.yml's role).
 # The build is given no BASE_PATH or the like and uses src/build.js's defaults.
 # The job test is a required check on main. The trigger has no filter (on a PR that a filter kept from starting, the required check would not be reported and the PR could not be merged).
 on:
@@ -29,6 +29,6 @@ jobs:
       - run: npm ci
         timeout-minutes: 10
 
-      - run: npm test
-
       - run: npm run build
+
+      - run: npm test

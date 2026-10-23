@@ -52,6 +52,10 @@ jobs:
           SITE_URL: ${{ steps.pages.outputs.origin }}
           CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
 
+      # The tests run on the pushed commit and on the site it built (the suites that read dist/ skip without it),
+      # so the site is uploaded and deployed only when they pass
+      - run: npm test
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
