@@ -1,10 +1,13 @@
 name: Dependabot auto-merge
 
-# Decides whether to merge a Dependabot pull request automatically. If the update is a semver patch, schedules auto-merge (merge commit)
-# pinned to the head commit it read (a run for an old head cannot create a schedule for a new head). For other update types (including when
-# fetch-metadata could not read it), cancels auto-merge scheduled on an earlier head. A Dependabot push does not remove the schedule, and a rebase
-# can turn a patch into a minor or major. On pull requests not from Dependabot, both steps are skipped.
-# When whether a schedule exists cannot be read, the step fails.
+# Decides whether to merge a Dependabot pull request automatically. If the update is a semver patch or minor, schedules auto-merge (merge
+# commit) pinned to the head commit it read (a run for an old head cannot create a schedule for a new head), and only when the pull request has
+# one commit, that commit is the head the event names, dependabot[bot] wrote it, GitHub (web-flow) committed it and GitHub verified its
+# signature: fetch-metadata classifies the first commit alone, and an amend keeps the author while it makes the amending person the committer.
+# For other update types (including when fetch-metadata could not read it) and for any other commit history, cancels
+# auto-merge scheduled on an earlier head. A push does not remove the schedule, and a rebase or an added commit can change the update. On pull
+# requests not from Dependabot, both steps are skipped.
+# When the commits of the pull request or whether a schedule exists cannot be read, the step fails.
 # The job auto-merge is a required check on main and keeps the pull request from being merged until a verdict on its head commit is out.
 # So the Dependabot condition is on the steps rather than the job, and the trigger has no filter either (the job reports a result on every PR).
 # A merge by auto-merge counts as done by GITHUB_TOKEN, and its push to main starts no workflow (build-deploy.yml does not run either).
@@ -25,15 +28,25 @@ jobs:
       - id: metadata
         if: github.event.pull_request.user.login == 'dependabot[bot]'
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
-      - name: Enable auto-merge for a patch update, disable it otherwise
+      - name: Enable auto-merge for a patch or minor update Dependabot alone wrote, disable it otherwise
         if: github.event.pull_request.user.login == 'dependabot[bot]'
         env:
           GH_TOKEN: ${{ github.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
-          if [ "$UPDATE_TYPE" = 'version-update:semver-patch' ]; then
+          eligible=false
+          if [ "$UPDATE_TYPE" = 'version-update:semver-patch' ] || [ "$UPDATE_TYPE" = 'version-update:semver-minor' ]; then
+            commits=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits?per_page=100")
+            eligible=$(printf '%s' "$commits" | jq -r --arg head "$HEAD_SHA" '
+              length == 1 and .[0].sha == $head
+              and .[0].author.login == "dependabot[bot]"
+              and .[0].committer.login == "web-flow"
+              and .[0].commit.verification.verified == true')
+          fi
+          if [ "$eligible" = 'true' ]; then
             gh pr merge --auto --merge --match-head-commit "$HEAD_SHA" "$PR_URL"
           else
             enabled=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')
