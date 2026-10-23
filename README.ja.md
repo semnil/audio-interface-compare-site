@@ -35,7 +35,7 @@ npm run preview    # dist/ を http://localhost:3000 で配信する
 npm test
 ```
 
-テストは `node:test` で書いている。ワークフローの検査は [yq](https://github.com/mikefarah/yq) で YAML を解析し、yq が入っていないローカル環境ではスキップされる (環境変数 `YQ` に yq の実行ファイルを指定すると走る)。
+テストは `node:test` で書いている。ワークフローの検査は [yq](https://github.com/mikefarah/yq) で YAML を解析し、yq が入っていないローカル環境ではスキップされる (環境変数 `YQ` に yq の実行ファイルを指定すると走る)。ビルドしたサイトのテストは `dist/` が無いとスキップされるので、先に `npm run build` を走らせる。CI はビルドしてからテストする。
 
 ## データの保守
 
@@ -45,7 +45,7 @@ npm test
 
 ## デプロイ
 
-`.github/workflows/build-deploy.yml` が、スプレッドシート・`src/`・パッケージのファイル・ワークフロー自身を変更する `main` への push と、手動実行のときに、テストを走らせてからビルドして GitHub Pages へデプロイする。
+`.github/workflows/build-deploy.yml` が、スプレッドシート・`src/`・パッケージのファイル・ワークフロー自身を変更する `main` への push と、手動実行のときに、ビルドしたサイトにテストを走らせてから GitHub Pages へデプロイする。
 
 ## フィードバック
 

@@ -44,9 +44,6 @@ jobs:
       - run: npm ci
         timeout-minutes: 10
 
-      # The site is built and deployed only when the tests pass on the pushed commit
-      - run: npm test
-
       # Build with BASE_PATH
       # It becomes "/" for a custom domain and "/repo-name/" for repo pages
       - run: npm run build
@@ -54,6 +51,10 @@ jobs:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
           SITE_URL: ${{ steps.pages.outputs.origin }}
           CUSTOM_DOMAIN: ${{ vars.CUSTOM_DOMAIN }}
+
+      # The tests run on the pushed commit and on the site it built (the suites that read dist/ skip without it),
+      # so the site is uploaded and deployed only when they pass
+      - run: npm test
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0

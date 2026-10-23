@@ -35,7 +35,7 @@ npm run preview    # serves dist/ at http://localhost:3000
 npm test
 ```
 
-The tests use `node:test`. The workflow checks parse YAML with [yq](https://github.com/mikefarah/yq); when yq is not installed they are skipped locally (point the `YQ` environment variable at a yq binary to run them).
+The tests use `node:test`. The workflow checks parse YAML with [yq](https://github.com/mikefarah/yq); when yq is not installed they are skipped locally (point the `YQ` environment variable at a yq binary to run them). The tests of the built site skip when `dist/` does not exist, so run `npm run build` first; CI builds before it tests.
 
 ## Maintaining the data
 
@@ -45,7 +45,7 @@ The tests use `node:test`. The workflow checks parse YAML with [yq](https://gith
 
 ## Deployment
 
-`.github/workflows/build-deploy.yml` runs the tests, then builds and deploys to GitHub Pages on a push to `main` that changes the spreadsheet, `src/`, the package files or the workflow itself, and on a manual run.
+`.github/workflows/build-deploy.yml` builds, runs the tests on the built site, and deploys to GitHub Pages on a push to `main` that changes the spreadsheet, `src/`, the package files or the workflow itself, and on a manual run.
 
 ## Feedback
 
