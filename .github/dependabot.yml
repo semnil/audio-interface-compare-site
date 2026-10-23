@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # npm dependencies (Dependabot reads package-lock.json).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+  # The actions the workflows use.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: daily
+    ignore:
+      # workflow-checks-main.yml uses these two, and its required check workflow-tests-main
+      # fails on any change to that file, so they stay with the manual updates.
+      - dependency-name: "actions/checkout"
+      - dependency-name: "actions/setup-node"
