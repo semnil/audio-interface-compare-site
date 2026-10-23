@@ -180,7 +180,7 @@ npm run build && npm run preview
 
 ## Data source
 
-`data/audio_interfaces.xlsx` — the "Audio Interfaces" sheet, header in row 1, data from row 2.
+`data/audio_interfaces.xlsx` — `build.js` reads the first worksheet (`wb.worksheets[0]`, by index, not by sheet name), header in row 1, data from row 2. The workbook also holds a "Category Summary" sheet the build does not read, so the data sheet must stay first.
 The headers are English names, and columns are identified by matching `COLUMNS[].label` in `build.js` (not the Japanese names).
 A column whose header does not exactly match a `COLUMNS[].label` is skipped, and without an error that column becomes empty for every product (for the Brand / Model columns, every row is skipped).
 Main columns: Brand, Model, Category, Reference Price (USD), Mic Preamps, Combo Inputs,
