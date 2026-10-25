@@ -4,7 +4,7 @@ name: Dependabot auto-merge
 # commit) pinned to the head commit it read (a run for an old head cannot create a schedule for a new head), and only when the pull request has
 # one commit, that commit is the head the event names, dependabot[bot] wrote it, GitHub (web-flow) committed it and GitHub verified its
 # signature: fetch-metadata classifies the first commit alone, and an amend keeps the author while it makes the amending person the committer.
-# For other update types (including when fetch-metadata could not read it) and for any other commit history, cancels
+# For other update types (including when fetch-metadata could not read it or failed) and for any other commit history, cancels
 # auto-merge scheduled on an earlier head. A push does not remove the schedule, and a rebase or an added commit can change the update. On pull
 # requests not from Dependabot, both steps are skipped.
 # When the commits of the pull request or whether a schedule exists cannot be read, the step fails.
@@ -27,6 +27,7 @@ jobs:
     steps:
       - id: metadata
         if: github.event.pull_request.user.login == 'dependabot[bot]'
+        continue-on-error: true # the deciding step keeps auto-merge off and the check passes (dependabot-auto-merge-test.sh:107)
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
       - name: Enable auto-merge for a patch or minor update Dependabot alone wrote, disable it otherwise
         if: github.event.pull_request.user.login == 'dependabot[bot]'
@@ -35,10 +36,13 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          METADATA_OUTCOME: ${{ steps.metadata.outcome }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
           eligible=false
-          if [ "$UPDATE_TYPE" = 'version-update:semver-patch' ] || [ "$UPDATE_TYPE" = 'version-update:semver-minor' ]; then
+          if [ "$METADATA_OUTCOME" != 'success' ]; then
+            echo "::warning::fetch-metadata did not classify this pull request (${METADATA_OUTCOME}), so auto-merge stays off"
+          elif [ "$UPDATE_TYPE" = 'version-update:semver-patch' ] || [ "$UPDATE_TYPE" = 'version-update:semver-minor' ]; then
             commits=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/commits?per_page=100")
             eligible=$(printf '%s' "$commits" | jq -r --arg head "$HEAD_SHA" '
               length == 1 and .[0].sha == $head
