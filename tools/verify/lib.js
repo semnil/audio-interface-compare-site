@@ -48,56 +48,85 @@ export function retireResult(idx) {
   renameSync(resultFile(idx), join(WORK_DIR, "results-retired", `product-${pad(idx)}.json.${Date.now()}`));
 }
 
-const rowKey = (r) => (r && r.Brand !== undefined && r.Model !== undefined ? `${r.Brand}\u0000${r.Model}` : null);
+// Comparison form of a name or value: NFKC, lower case, only a-z 0-9. "+" can be part of an identifier
+// (Big Knob Studio / Studio+, etc.), so it is replaced with plus instead of removed
+export const norm = (s) => String(s ?? "").normalize("NFKC").toLowerCase().replace(/\+/g, "plus").replace(/[^a-z0-9]/g, "");
+
+// Brand + Model in comparison form, the form in which validate-results.js matches a result file to its row
+const nameKey = (brand, model) => `${norm(brand)}\u0000${norm(model)}`;
+const rowKey = (r) => (r && r.Brand !== undefined && r.Model !== undefined ? nameKey(r.Brand, r.Model) : null);
+
+// The Brand + Model a result or recheck file was written for (its brand / model fields), or null
+const fileKey = (path) => {
+  try {
+    const j = JSON.parse(readFileSync(path, "utf8"));
+    return j && typeof j.brand === "string" && typeof j.model === "string" ? nameKey(j.brand, j.model) : null;
+  } catch {
+    return null;
+  }
+};
 
 // When rows were added, removed or reordered since the previous export (oldRows = the previous rows-full.json), renames
-// the idx-named files in work/results and work/rechecks so that each one follows its Brand + Model to the new idx, and
-// moves the files of rows that are gone to results-retired/ and rechecks-retired/ with a timestamp. Returns
-// { aligned, moved, gone }: aligned is oldRows rearranged into the new order (null for new rows). With a duplicate
-// Brand + Model in either list it renames nothing and returns { aligned: oldRows, duplicate }.
+// the idx-named files in work/results and work/rechecks so that each one sits at the idx of the Brand + Model it was
+// written for (its brand / model fields; the previous rows-full.json for a file without them), compared in the form of
+// norm, and moves the files of rows that are gone to results-retired/ and rechecks-retired/ with a timestamp. Files
+// already at their row's idx stay, and files left in <dir>-follow-staging/ by an interrupted run are placed the same way,
+// so a run after an interruption ends in the same state as an uninterrupted one. Returns { aligned, moved, gone }:
+// aligned is oldRows rearranged into the new order (null for new rows). With two rows of the same Brand + Model in that
+// form in either list it renames nothing and returns { aligned: oldRows, duplicate }.
 export function followRowKeys(oldRows, rows) {
   const newKeys = rows.map(rowKey);
-  if (oldRows.length === rows.length && oldRows.every((r, i) => rowKey(r) === newKeys[i])) {
+  const stagingOf = (sub) => join(WORK_DIR, `${sub}-follow-staging`);
+  const leftover = ["results", "rechecks"].some((sub) => existsSync(stagingOf(sub)));
+  if (!leftover && oldRows.length === rows.length && oldRows.every((r, i) => rowKey(r) === newKeys[i])) {
     return { aligned: oldRows, moved: 0, gone: 0 };
   }
+  const duplicate = (r) => ({ aligned: oldRows, moved: 0, gone: 0, duplicate: rowKey(r) === null ? "(row without Brand/Model)" : `${r.Brand}\u0000${r.Model}` });
   const newIdx = new Map();
   for (const [i, k] of newKeys.entries()) {
-    if (k === null || newIdx.has(k)) return { aligned: oldRows, moved: 0, gone: 0, duplicate: k ?? "(row without Brand/Model)" };
+    if (k === null || newIdx.has(k)) return duplicate(rows[i]);
     newIdx.set(k, i);
   }
   const oldKeys = new Set();
   for (const r of oldRows) {
     const k = rowKey(r);
-    if (k === null || oldKeys.has(k)) return { aligned: oldRows, moved: 0, gone: 0, duplicate: k ?? "(row without Brand/Model)" };
+    if (k === null || oldKeys.has(k)) return duplicate(r);
     oldKeys.add(k);
   }
   let moved = 0, gone = 0;
   for (const sub of ["results", "rechecks"]) {
     const dir = join(WORK_DIR, sub);
-    if (!existsSync(dir)) continue;
-    const staging = join(WORK_DIR, `${sub}-follow-staging`);
-    if (existsSync(staging)) throw new Error(`${staging} exists (left over from an interrupted export); move its files back by hand first`);
-    mkdirSync(staging);
+    const staging = stagingOf(sub);
+    if (!existsSync(dir) && !existsSync(staging)) continue;
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(staging, { recursive: true });
+    const retire = (from, f) => {
+      mkdirSync(join(WORK_DIR, `${sub}-retired`), { recursive: true });
+      renameSync(join(from, f), join(WORK_DIR, `${sub}-retired`, `${f}.${Date.now()}`));
+      gone++;
+    };
     for (const f of readdirSync(dir)) {
       const m = /^product-(\d{3,})\.json$/.exec(f);
       if (!m) continue;
       const from = Number(m[1]);
-      const k = rowKey(oldRows[from]);
+      const k = fileKey(join(dir, f)) ?? rowKey(oldRows[from]);
       if (k === null) continue;
       const to = newIdx.get(k);
       if (to === from) continue;
-      if (to === undefined) {
-        mkdirSync(join(WORK_DIR, `${sub}-retired`), { recursive: true });
-        renameSync(join(dir, f), join(WORK_DIR, `${sub}-retired`, `${f}.${Date.now()}`));
-        gone++;
-      } else {
-        renameSync(join(dir, f), join(staging, `product-${pad(to)}.json`));
-        moved++;
-      }
+      if (to === undefined) { retire(dir, f); continue; }
+      const dest = join(staging, `product-${pad(to)}.json`);
+      if (existsSync(dest)) throw new Error(`two ${sub} files for idx ${to}: ${f} and ${dest}`);
+      renameSync(join(dir, f), dest);
+      moved++;
     }
     for (const f of readdirSync(staging)) {
-      if (existsSync(join(dir, f))) throw new Error(`${sub}/${f} exists; the moved file is left in ${staging}`);
-      renameSync(join(staging, f), join(dir, f));
+      const m = /^product-(\d{3,})\.json$/.exec(f);
+      const k = fileKey(join(staging, f));
+      const to = k !== null ? newIdx.get(k) : m ? Number(m[1]) : undefined;
+      if (to === undefined) { retire(staging, f); continue; }
+      const dest = join(dir, `product-${pad(to)}.json`);
+      if (existsSync(dest)) throw new Error(`${sub}/product-${pad(to)}.json exists; ${f} is left in ${staging}`);
+      renameSync(join(staging, f), dest);
     }
     rmdirSync(staging);
   }

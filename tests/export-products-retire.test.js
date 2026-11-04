@@ -17,7 +17,7 @@ const toRow = (r) => Object.fromEntries(HEADERS.map((h, i) => [h, r[i]]).filter(
 
 // Builds a copy of export-products.js + lib.js with the given spreadsheet rows, previous rows-full.json and idx-named
 // result / recheck files ({ idx: { brand, model } }), runs it and returns the work directory and its output
-async function runExport({ current, previous, results, rechecks = {} }) {
+async function runExport({ current, previous, results, rechecks = {}, staging = {} }) {
   // Under the repository's ignored work/ directory so that the copied script resolves exceljs from node_modules
   mkdirSync(join(ROOT, "work"), { recursive: true });
   const base = mkdtempSync(join(ROOT, "work", "test-export-products-"));
@@ -35,7 +35,8 @@ async function runExport({ current, previous, results, rechecks = {} }) {
   await wb.xlsx.writeFile(join(base, "data", "audio_interfaces.xlsx"));
 
   writeFileSync(join(work, "rows-full.json"), JSON.stringify(previous.map(toRow)));
-  for (const [sub, files] of [["results", results], ["rechecks", rechecks]]) {
+  for (const [sub, files] of [["results", results], ["rechecks", rechecks], ...Object.entries(staging).map(([s, f]) => [`${s}-follow-staging`, f])]) {
+    mkdirSync(join(work, sub), { recursive: true });
     for (const [idx, body] of Object.entries(files)) {
       writeFileSync(join(work, sub, `product-${String(idx).padStart(3, "0")}.json`), JSON.stringify(body));
     }
@@ -123,5 +124,54 @@ describe("export-products: results follow their row when rows are added and remo
 
   test("no result of an unchanged row is reported as changed", () => {
     assert.ok(!/row changed/.test(run.output), run.output);
+  });
+});
+
+describe("export-products: a run after an interrupted one places the files like an uninterrupted run", () => {
+  // Alpha is removed. An interrupted export has already moved some files but has not written rows-full.json, so the
+  // previous rows still list Alpha, Beta, Gamma
+  const previous = [["Alpha", "One", "a", ""], ["Beta", "Two", "b", ""], ["Gamma", "Three", "c", ""]];
+  const current = [["Beta", "Two", "b", ""], ["Gamma", "Three", "c", ""]];
+  const B = { brand: "Beta", model: "Two" };
+  const G = { brand: "Gamma", model: "Three" };
+  const cases = [
+    ["results moved, rechecks not yet", { results: { 0: B, 1: G }, rechecks: { 1: B, 2: G } }],
+    ["results and rechecks moved", { results: { 0: B, 1: G }, rechecks: { 0: B, 1: G } }],
+    ["a result left in the staging directory", { results: { 0: B }, rechecks: { 1: B, 2: G }, staging: { results: { 1: G } } }],
+  ];
+  for (const [label, files] of cases) {
+    test(label, async () => {
+      const run = await runExport({ current, previous, ...files });
+      try {
+        for (const sub of ["results", "rechecks"]) {
+          assert.deepEqual(readdirSync(join(run.work, sub)).sort(), ["product-000.json", "product-001.json"], `${sub}: ${run.output}`);
+          assert.equal(readModel(run.work, sub, 0), "Two", `${sub}/product-000.json`);
+          assert.equal(readModel(run.work, sub, 1), "Three", `${sub}/product-001.json`);
+        }
+        assert.ok(!existsSync(join(run.work, "results-follow-staging")), "the staging directory is left");
+        assert.ok(!/row changed/.test(run.output), run.output);
+      } finally {
+        rmSync(run.base, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
+describe("export-products: a result follows its row when its brand / model differ from the row only in case and punctuation", () => {
+  // validate-results.js matches a result to its row in the form of norm (tools/verify/lib.js), so following does too
+  test("Alpha moves 0 -> 1 with a result written for ALPHA / one", async () => {
+    const run = await runExport({
+      current: [["Aardvark", "New", "a", ""], ["Alpha", "One", "b", ""], ["Beta", "Two", "c", ""]],
+      previous: [["Alpha", "One", "b", ""], ["Beta", "Two", "c", ""]],
+      results: { 0: { brand: "ALPHA", model: "one" }, 1: { brand: "Beta", model: "Two" } },
+    });
+    try {
+      assert.deepEqual(readdirSync(join(run.work, "results")).sort(), ["product-001.json", "product-002.json"], run.output);
+      assert.equal(readModel(run.work, "results", 1), "one");
+      assert.equal(readModel(run.work, "results", 2), "Two");
+      assert.deepEqual(readdirSync(join(run.work, "results-retired")), [], "a result was moved aside");
+    } finally {
+      rmSync(run.base, { recursive: true, force: true });
+    }
   });
 });
