@@ -79,7 +79,7 @@ npm run build   # check the rendering of renderMeasurements (links on individual
 
 ## Relation to the verification pipeline (do not confuse them)
 
-- The `Measurement Reports` column is not verified by verify-products (export-products excludes it). URLs added here do not affect the verification results. Re-running verification is not needed
+- The `Measurement Reports` column is not verified by verify-products (export-products leaves it out of the verification input and out of the change check that retires results). URLs added here do not affect the verification results. Re-running verification is not needed
 - **The published figures themselves (DR/THD+N/EIN, etc.)** found in measurement reports concern the spec body columns, not the Measurement Reports column. Applying figures to the xlsx is the responsibility of verify-products / discover-products, so this skill does not rewrite the numeric columns (it concentrates on the link column)
 
 ## Prohibitions

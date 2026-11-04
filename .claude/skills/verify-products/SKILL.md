@@ -16,7 +16,7 @@ node tools/verify/validate-results.js        # soundness validation + computing 
 - `nextIds` in `work/state.json` are the re-run targets (unverified + invalidated by validation). Verification is complete when missingIds is empty; failed items (bot protection, etc.) remaining is normal
 - Add `--retry-failed` / `--include-partial` only when retrying failed / partial (the old results of those targets are moved to results-retired/ and put into nextIds)
 - If `work/` is missing or empty, this is the first run: start with `node tools/verify/export-products.js`
-- Always re-run export after updating the xlsx too. Old results of rows whose content changed since last time are moved aside automatically and become re-verification targets
+- Always re-run export after updating the xlsx too. Old results of rows whose verified columns (every column except Measurement Reports) changed since last time are moved aside automatically and become re-verification targets. When rows were added, removed or reordered (apply-product-changes.js), the result and recheck files first follow their Brand + Model to the new idx, so rows whose content did not change keep their results
 
 ## Running verification
 

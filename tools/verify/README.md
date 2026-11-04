@@ -64,7 +64,9 @@ Sites where every method fails, such as with Cloudflare Turnstile, are left as `
 
 ```bash
 # 1. Generate the input from the xlsx (safe to re-run. Always re-run when the xlsx is updated.
-#    Old results of rows whose content changed since the previous export are automatically moved to results-retired/ and become re-verification targets)
+#    Old results of rows whose verified columns (every column except Measurement Reports) changed since the previous export are automatically moved to results-retired/ and become re-verification targets.
+#    When rows were added, removed or reordered, the result and recheck files first follow their Brand + Model to the new idx,
+#    and those of removed rows go to results-retired/ and rechecks-retired/)
 node tools/verify/export-products.js
 
 # 2. Start the Workflow in Claude Code (ids: everything the first time, state.json's nextIds when resuming)

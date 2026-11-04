@@ -64,7 +64,9 @@ Cloudflare Turnstile 等で全手段が失敗するサイトは `failed` とし�
 
 ```bash
 # 1. xlsx から入力を生成 (再実行しても安全。xlsx 更新時は必ず再実行。
-#    前回 export から内容が変わった行の旧結果は自動で results-retired/ へ退避され再照合対象になる)
+#    前回 export から照合対象の列 (Measurement Reports 以外の全列) が変わった行の旧結果は自動で results-retired/ へ退避され再照合対象になる。
+#    行の追加・削除・並び替えがあったときは、結果と精査結果のファイルが先に Brand + Model で新しい idx へ移り、
+#    削除された行の分は results-retired/ と rechecks-retired/ へ退避される)
 node tools/verify/export-products.js
 
 # 2. Claude Code で Workflow を起動 (ids は初回は全件、再開時は state.json の nextIds)

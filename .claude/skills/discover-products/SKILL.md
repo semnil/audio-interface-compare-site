@@ -94,7 +94,7 @@ npm run build     # check the slug collision fail-fast and the page count (O(n) 
 Always put added rows through verification, as a net that catches the collection agents' errors:
 
 ```bash
-node tools/verify/export-products.js        # new rows go into nextIds
+node tools/verify/export-products.js        # new rows go into nextIds; the other rows' results follow their Brand + Model to the new idx
 # from here on, the verify-products skill's procedure (Workflow → validate → build-report)
 ```
 
