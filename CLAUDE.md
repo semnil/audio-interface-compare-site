@@ -37,7 +37,7 @@ flowchart LR
   dist --> distJson["products.json<br>JSON of all product data (data source for search + dynamic comparison)"]
   dist --> distSitemap["sitemap.xml<br>(index + products + hubs) × (en + ja)"]
   dist --> distRobots["robots.txt / 404.html<br>Sitemap line only / custom 404 (no automatic redirect, noindex)"]
-  dist --> distOg["og/<br>og:image share cards (site.png, products/, brands/, categories/)"]
+  dist --> distOg["og/<br>og:image share cards as JPEG (site.jpg, products/, brands/, categories/)"]
   dist --> distProducts["products/{slug}/<br>Individual product pages (one per product)"]
   dist --> distHubs["brands/{slug}/ , categories/{slug}/<br>Per-brand and per-category hub pages"]
   dist --> distJa["ja/<br>Japanese mirror (index, products/, brands/, categories/)"]
@@ -96,7 +96,7 @@ flowchart LR
 - Highlighting in the comparison view applies only to items where "the larger number wins" (I/O counts, DR, etc.). Price depends on the buyer's values, so it is not highlighted
 - Numeric range strings are compared by the average of both ends. The canonical form is the signed `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`); the parser also accepts the old forms (`"0-65"` / `"-18-65"`)
 - The spec summary sentence on product pages (`specSummary`) is generated only from existing xlsx data (never filled in by guessing)
-- og images keep the order "draw every canvas → `encode("png")` all at once" per batch (8 items), and must not be rewritten into sequential awaits (a constraint of @napi-rs/canvas on darwin arm64. The global conventions' 「開発環境」)
+- og images keep the order "draw every canvas → `encode("jpeg")` all at once" per batch (8 items), and must not be rewritten into sequential awaits (a constraint of @napi-rs/canvas on darwin arm64. The global conventions' 「開発環境」)
 
 ### Multilingual (/ja/ + hreflang)
 - Languages are separated by URL: `/` = English (lang="en"), `/ja/` = Japanese (lang="ja"). The body's translation language is decided by `<html lang>`, not navigator.language (navigator.language is invisible to Googlebot). navigator.language is consulted only by the first-visit language redirect below (one-way, en→ja)
@@ -153,7 +153,7 @@ flowchart LR
 - **SEO for comparison queries ("A vs B") is given up**. The static comparison pages for every pair (67,340 pages) were damaging the quality assessment, judging from the record of more than 20,000 "Crawled - currently not indexed" and 41 indexed, so they were abolished entirely
 - Indexed: index + products + brand hubs + category hubs (× en/ja)
 - Implemented: meta description on every page / OGP + og:image (1200×630 share cards, summary_large_image) / self-referencing canonical / hreflang (en/ja/x-default) / sitemap.xml (every indexed URL) / robots.txt (Sitemap line only) / custom 404.html (noindex, static guidance links only, automatic redirects forbidden) / JSON-LD (Product + ItemList) / spec summary sentences on product pages (machine-generated, more unique text)
-- The social share card of the comparison view is the site-wide og:image (`og/site.png`) (per-pair OGP disappeared with the static pages, which the policy accepts)
+- The social share card of the comparison view is the site-wide og:image (`og/site.jpg`) (per-pair OGP disappeared with the static pages, which the policy accepts)
 - GSC's 404 report is aggregated over a window of the past month
 
 ## Build commands
