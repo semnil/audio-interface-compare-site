@@ -16,9 +16,8 @@ const DATA_FILE = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
 // Products removed as discontinued or merged duplicates ("Brand Model"). Rewritten for each cycle
 const REMOVALS = new Set([
-  // Removed again on 2026-10-10 (approved by the operator)
-  "TASCAM SERIES 102i", // tascam.jp/jp/product/series_102i says 「この製品は生産完了になりました。」 (this product has been discontinued)
-  "TASCAM SERIES 208i", // tascam.jp/jp/product/series_208i says 「この製品は生産完了になりました。」 (this product has been discontinued)
+  // Removed on 2026-11-04 (approved by the operator)
+  "Apogee Jam+", // apogeedigital.com/legacy-and-obsolete-products/ lists Jam+ under "EOL Products"
 ]);
 
 // Turns cell values of added rows into numbers. new-rows JSON tends to hold every value as a string, and written
