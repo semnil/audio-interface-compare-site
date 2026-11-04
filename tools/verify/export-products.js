@@ -61,7 +61,7 @@ if (oldRows) {
     console.log(`row changed -> retire result idx ${i} (${obj.Brand} ${obj.Model})`);
   });
   if (retired) console.log(`retired: ${retired} (validate-results.js puts them back into nextIds)`);
-  if (countChanged) {
+  if (countChanged && follow.duplicate) {
     console.log(`Note: the row count changed ${countChanged}. validate-results.js moves aside old results out of range`);
   }
 }
