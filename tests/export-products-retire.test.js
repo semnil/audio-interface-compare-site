@@ -16,7 +16,8 @@ const HEADERS = ["Brand", "Model", "Notes", "Measurement Reports"];
 const toRow = (r) => Object.fromEntries(HEADERS.map((h, i) => [h, r[i]]).filter(([, v]) => v !== ""));
 
 // Builds a copy of export-products.js + lib.js with the given spreadsheet rows, previous rows-full.json and idx-named
-// result / recheck files ({ idx: { brand, model } }), runs it and returns the work directory and its output
+// result / recheck files ({ idx: { brand, model } }), runs it and returns the work directory and its output. When the
+// export fails, the copy is removed before the error is rethrown
 async function runExport({ current, previous, results, rechecks = {}, staging = {} }) {
   // Under the repository's ignored work/ directory so that the copied script resolves exceljs from node_modules
   mkdirSync(join(ROOT, "work"), { recursive: true });
@@ -41,8 +42,13 @@ async function runExport({ current, previous, results, rechecks = {}, staging = 
       writeFileSync(join(work, sub, `product-${String(idx).padStart(3, "0")}.json`), JSON.stringify(body));
     }
   }
-  const output = execFileSync(process.execPath, [join(verifyDir, "export-products.js")], { cwd: base, encoding: "utf8" });
-  return { base, work, output };
+  try {
+    const output = execFileSync(process.execPath, [join(verifyDir, "export-products.js")], { cwd: base, encoding: "utf8" });
+    return { base, work, output };
+  } catch (err) {
+    rmSync(base, { recursive: true, force: true });
+    throw err;
+  }
 }
 
 const readModel = (work, sub, idx) => JSON.parse(readFileSync(join(work, sub, `product-${String(idx).padStart(3, "0")}.json`), "utf8")).model;
