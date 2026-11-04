@@ -195,6 +195,7 @@ tools/verify/
     ├── results-retired/   ← where old results replaced by a retry or an xlsx update are moved
     ├── contested/         ← stage 2 input (only models with contested items. export-contested recreates it every time)
     ├── rechecks/          ← stage 2 results (checkpoints)
+    ├── rechecks-retired/  ← where stage 2 results of rows removed from the xlsx are moved
     ├── contested-index.json      ← target ids of stage 2
     ├── price-diffs.json          ← isolated reference-price discrepancies (the report's bulk-decision section)
     ├── known-holds.json          ← permanent suppression of known holds (the authoritative copy. partition-rechecks.js appends the automatic holds)

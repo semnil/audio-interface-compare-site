@@ -194,6 +194,7 @@ tools/verify/
     ├── results-retired/   ← 再試行・xlsx 更新で置き換え対象になった旧結果の退避先
     ├── contested/         ← 第 2 段入力 (争点のある機種のみ。export-contested が毎回作り直す)
     ├── rechecks/          ← 第 2 段結果 (チェックポイント)
+    ├── rechecks-retired/  ← xlsx から削除された行の第 2 段結果の退避先
     ├── contested-index.json      ← 第 2 段の対象 ids
     ├── price-diffs.json          ← 隔離された参考価格の相違 (レポートの一括判断セクション)
     ├── known-holds.json          ← 既知 hold の恒久 suppression (正本。自動 hold は partition-rechecks.js が追記する)
