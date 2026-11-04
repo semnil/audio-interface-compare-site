@@ -18,9 +18,9 @@ flowchart TD
     E -->|No: incomplete items remain| B
     E -->|Yes: remaining failed is acceptable| F[export-contested.js\nextract mismatches to work/contested/\nknown holds/unit differences excluded, prices isolated]
     F --> G[Stage 2: recheck-workflow.js via Workflow\ndifferent model + manual/PDF original text required\nwrite verdicts to work/rechecks/]
-    G --> H[partition-rechecks.js\nxlsx_correct → automatic hold\npage_correct/judgement needed → question candidates]
+    G --> H[partition-rechecks.js\nxlsx_correct → automatic hold, appended to known-holds.json\npage_correct/judgement needed → question candidates]
     H --> I[Stage 3: confirm with the operator via AskUserQuestion\npresent original-text quotes + proposed corrections]
-    I --> J[record decisions in a new round of\ncorrections-gen.py → generate]
+    I --> J[write the decisions as a\ncorrections JSON for the round]
     J --> K[apply-corrections.js dry-run → consent → --apply\napply to xlsx → export, re-verify changed rows only]
     K --> A
 ```
@@ -98,10 +98,14 @@ node tools/verify/export-contested.js             # extract mismatches to work/c
 
 # 6. Stage 3: sorting and resolving questions
 node tools/verify/partition-rechecks.js           # → work/corrections-recheck.json + draft questions
-#    xlsx_correct becomes an automatic hold (no question needed). Only page_correct / judgement_required
-#    go to AskUserQuestion per model (original-text quote + proposed correction + apply correction/no change),
-#    the operator's decisions are recorded in a new round of work/corrections-gen.py, and corrections-round*.json is generated.
-#    A permanent "no change needed" is also added to the gen's KNOWN_HOLDS (excluded automatically from the next cycle on)
+#    It reads only the current examination (ids in contested-index.json, files written after it; leftovers of an earlier
+#    cycle are skipped). xlsx_correct becomes an automatic hold (no question needed) and is appended to work/known-holds.json
+#    (excluded automatically from the next cycle on). Only page_correct / judgement_required go to AskUserQuestion per model
+#    (original-text quote + proposed correction + apply correction/no change). Write the operator's decisions as a corrections
+#    JSON for the round ([{ idx, column, current, proposed }]); a permanent "no change needed" the operator decides is appended
+#    to known-holds.json as { brand, model, column, note }.
+#    Do not re-run corrections-gen.py as a whole: it rewrites known-holds.json from its KNOWN_HOLDS list plus the holds in the
+#    current corrections-recheck.json, so every other entry is lost (on 2026-10-10 a re-run shrank known-holds.json from 99 to 44)
 
 # 7. Applying to the xlsx (requires the operator's consent) and confirming consistency
 node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json          # dry-run
@@ -193,12 +197,12 @@ tools/verify/
     ├── rechecks/          ← stage 2 results (checkpoints)
     ├── contested-index.json      ← target ids of stage 2
     ├── price-diffs.json          ← isolated reference-price discrepancies (the report's bulk-decision section)
-    ├── known-holds.json          ← permanent suppression of known holds (the authoritative copy is KNOWN_HOLDS in corrections-gen.py)
+    ├── known-holds.json          ← permanent suppression of known holds (the authoritative copy. partition-rechecks.js appends the automatic holds)
     ├── corrections-recheck.json  ← stage 3 sorting result (automatic holds + unreviewed proposed corrections. Intermediate output)
     ├── rows-full.json     ← every xlsx row (idx 0 = sheet row 2)
     ├── state.json         ← validate's tallies, nextIds
     ├── corrections-proposal.json ← correction proposals from propose-corrections.js (raw text stated on the page)
-    ├── corrections-gen.py        ← script accumulating proposed corrections and the operator's decisions (FIX/HOLD/KNOWN_HOLDS/rounds, etc.) (the authoritative copy)
+    ├── corrections-gen.py        ← script accumulating proposed corrections and the operator's decisions of the bulk-review path (FIX/HOLD/KNOWN_HOLDS/rounds, etc.). Re-running it rewrites known-holds.json from its KNOWN_HOLDS plus the current corrections-recheck.json holds
     ├── corrections-edited.json   ← output of corrections-gen.py (inserted into the report + apply input. Do not edit directly)
     ├── corrections-round*.json   ← the operator's decisions for each round (output of gen. Apply input)
     ├── review-state.json         ← the idx the operator's review has reached (the range already reached is omitted from the report)

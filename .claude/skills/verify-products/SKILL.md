@@ -60,10 +60,12 @@ Workflow({
 node tools/verify/partition-rechecks.js  # outputs the verdict sorting + draft questions
 ```
 
-- `xlsx_correct` is an automatic hold — **do not ask** (settled as a false positive)
+- It reads only the current examination: the ids in contested-index.json, from files written after export-contested wrote it (results of an earlier cycle left in rechecks/ are skipped)
+- `xlsx_correct` is an automatic hold — **do not ask** (settled as a false positive). partition-rechecks.js appends it to `work/known-holds.json`, so export-contested leaves it out from the next cycle on
 - Confirm only `page_correct` / `judgement_required` with the operator via AskUserQuestion. Group by model, at most 4 questions per batch, include an original-text quote + a proposed correction in each question, and base the choices on "apply correction / no change" (the flow used in this session)
-- Record the operator's decisions in a new round of corrections-gen.py (`ROUND<N>` → `corrections-round<N>.json`). idx shifts when rows are deleted, so leave a comment for each round stating which row count of rows-full.json it is based on
-- Permanent "no change needed" items (an error on the page side, a unit difference, a counting policy, an operator decision) are added to the gen's `KNOWN_HOLDS` as (brand, model, column). export-contested and build-report exclude them automatically from the next cycle on
+- Write the operator's decisions as a corrections JSON for the round (`[{ idx, column, current, proposed, note }]`, idx from the current rows-full.json) and apply it with apply-corrections.js (dry-run → consent → `--apply`)
+- Permanent "no change needed" items the operator decides (an error on the page side, a unit difference, a counting policy) are appended to `work/known-holds.json` as `{ brand, model, column, note }`. export-contested and build-report exclude them automatically from the next cycle on
+- Do not re-run `corrections-gen.py` as a whole: it rewrites known-holds.json from its `KNOWN_HOLDS` list plus the holds in the current corrections-recheck.json, so every other entry is lost (on 2026-10-10 a re-run shrank known-holds.json from 99 to 44 entries)
 - Reference-price discrepancies are isolated in work/price-diffs.json. Ask for a bulk decision in the report's "Reference-price discrepancies" section
 - Pre-lint (optional): `node tools/verify/lint-columns.js` detects contradictions between columns without agents
 
@@ -93,7 +95,7 @@ node tools/verify/build-report.js            # → product-page-verification-rep
 
 ## Running the operator's review
 
-- Proposed corrections and the operator's decisions (FIX/HOLD/removal/review boundary) are accumulated in `work/corrections-gen.py`. corrections-edited.json is that script's output; do not edit it directly by hand
+- On the bulk-review path, proposed corrections and the operator's decisions (FIX/HOLD/removal/review boundary) are accumulated in `work/corrections-gen.py`. corrections-edited.json is that script's output; do not edit it directly by hand. Running the script also rewrites known-holds.json from its `KNOWN_HOLDS` plus the holds in the current corrections-recheck.json, so copy every entry of known-holds.json into `KNOWN_HOLDS` before running it
 - Rules for interpreting the operator's feedback: 「機種 (タブ) 列: 値」 (model (tab) column: value) = change that item's proposed correction to the given value / 「◯◯まで確認」 (confirmed up to ◯◯) = update the corresponding boundary in review-state to that model's idx / a given value identical to the current cell value = an expression of no change (remove the entry or record it with hold) / 「生産終了」 (discontinued) or 「削除」 (remove) = add to REMOVALS
 - The standard flow for applying feedback (run these 3 every time):
 
