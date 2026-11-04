@@ -11,8 +11,9 @@
  *
  * Safeguards:
  *  - Applying always means the operator checks the dry-run's list of changes, and --apply runs only after consent
- *  - When an entry has brand and model and they are not the Brand / Model of the row at idx, or its current does not
- *    match the current cell value, that entry is rejected as inconsistent, and with --apply even one aborts the run
+ *  - When an entry has brand and model and they are not the Brand / Model the row at idx had before any write, or its
+ *    current does not match the current cell value, that entry is rejected as inconsistent, and with --apply even one
+ *    aborts the run
  *  - After writing, re-run export-products.js (old verification results of changed rows are moved aside automatically and become re-verification targets)
  */
 import { readFileSync } from "node:fs";
@@ -37,6 +38,12 @@ const ws = wb.worksheets[0];
 
 const headerCol = readHeaders(ws).byName;
 const TEXT_COLUMNS = new Set(["Brand", "Model", "Category"]);
+// Brand / Model of each entry's row before any write. The row check reads these, so an entry that corrects Brand or
+// Model does not change the row that the later entries of the same row are checked against
+const namesBefore = new Map(corrections.map((c) => {
+  const row = ws.getRow(c.idx + 2);
+  return [c.idx, [plain(row.getCell(headerCol.Brand).value, "Brand"), plain(row.getCell(headerCol.Model).value, "Model")]];
+}));
 
 let ok = 0, bad = 0, held = 0, unrev = 0;
 for (const c of corrections) {
@@ -59,8 +66,7 @@ for (const c of corrections) {
     continue;
   }
   if (c.brand !== undefined && c.model !== undefined) {
-    const brand = plain(ws.getRow(rowNum).getCell(headerCol.Brand).value, "Brand");
-    const model = plain(ws.getRow(rowNum).getCell(headerCol.Model).value, "Model");
+    const [brand, model] = namesBefore.get(c.idx);
     if (brand !== String(c.brand).trim() || model !== String(c.model).trim()) {
       console.error(`NG ${label}: row mismatch (corrections="${c.brand} ${c.model}" row ${c.idx}="${brand} ${model}")`);
       bad++;
