@@ -99,12 +99,13 @@ node tools/verify/export-contested.js             # mismatch を work/contested/
 # 6. 第 3 段: 仕分けと質問解決
 node tools/verify/partition-rechecks.js           # → work/corrections-recheck.json + 質問下書き
 #    読むのは今回の精査だけ (contested-index.json にある ids で、それより後に書かれたファイル。前サイクルの残りは読み飛ばす)。
-#    xlsx_correct は自動 hold (質問不要) で、work/known-holds.json へ追記される (次サイクルから自動除外される)。
+#    xlsx_correct は自動 hold (質問不要) で、セル値と一緒に work/known-holds.json へ追記される (次サイクルから、セルがその値のあいだ自動除外される。同じ機種・列の既存の自動 hold は新しい値に書き換わる)。
 #    page_correct / judgement_required だけを機種単位で AskUserQuestion (原文引用 + 修正候補 + 修正適用/変更なし) にかけ、
 #    操作者決定はそのラウンドの corrections JSON ([{ idx, column, current, proposed }]) に書く。操作者が決めた恒久的な
 #    「変更不要」は known-holds.json へ { brand, model, column, note } で追記する。
 #    corrections-gen.py を丸ごと再実行しない: known-holds.json を gen の KNOWN_HOLDS と今の corrections-recheck.json の
-#    hold だけから書き直すため、それ以外の登録が消える (2026-10-10 の再実行で known-holds.json が 99 件から 44 件に減った)
+#    hold だけから書き直すため、それ以外の登録が消える (2026-10-10 の再実行で known-holds.json が 99 件から 44 件に減った)。
+#    書き出す登録は value を持たないので、セルの値にかかわらずその列を除外する
 
 # 7. xlsx への反映 (要・操作者の同意) と整合確認
 node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json          # dry-run
@@ -198,7 +199,7 @@ tools/verify/
     ├── rechecks-retired/  ← xlsx から削除された行の第 2 段結果の退避先
     ├── contested-index.json      ← 第 2 段の対象 ids
     ├── price-diffs.json          ← 隔離された参考価格の相違 (レポートの一括判断セクション)
-    ├── known-holds.json          ← 既知 hold の恒久 suppression (正本。自動 hold は partition-rechecks.js が追記する)
+    ├── known-holds.json          ← 既知 hold の恒久 suppression (正本。自動 hold は partition-rechecks.js が対象のセル値と一緒に追記する)
     ├── corrections-recheck.json  ← 第 3 段の仕分け結果 (自動 hold + unreviewed 修正候補。中間生成物)
     ├── rows-full.json     ← xlsx 全行 (idx 0 = シート 2 行目)
     ├── state.json         ← validate の集計・nextIds

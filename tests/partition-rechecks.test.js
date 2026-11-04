@@ -1,7 +1,7 @@
 // tests/partition-rechecks.test.js
 // Runs a copy of tools/verify/partition-rechecks.js on fixture rechecks and checks that it reads only the current
 // examination (ids in contested-index.json, written after it), and that xlsx_correct verdicts are appended to
-// known-holds.json once
+// known-holds.json once, with the cell value they were confirmed with
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, copyFileSync, writeFileSync, readFileSync, rmSync, utimesSync } from "node:fs";
@@ -69,6 +69,36 @@ describe("partition-rechecks: current examination only, holds appended", () => {
     const holds = JSON.parse(readFileSync(join(work, "known-holds.json"), "utf8"));
     assert.deepEqual(holds.map((h) => `${h.brand}|${h.model}|${h.column}`), ["Gamma|Three|Notes", "Alpha|One|Notes"]);
     assert.match(holds[1].note, /^xlsx note one is correct \(page_omission\): q-notes/);
+    assert.equal(holds[1].value, "note one", "the hold does not carry the cell value it was confirmed with");
     assert.ok(!/appended/.test(secondOutput), secondOutput);
+  });
+});
+
+describe("partition-rechecks: a hold whose cell changed gets the new value when the examination confirms it", () => {
+  let base, work, output;
+  before(() => {
+    mkdirSync(join(ROOT, "work"), { recursive: true });
+    base = mkdtempSync(join(ROOT, "work", "test-partition-rechecks-"));
+    const verifyDir = join(base, "tools", "verify");
+    work = join(verifyDir, "work");
+    mkdirSync(join(work, "rechecks"), { recursive: true });
+    for (const f of ["partition-rechecks.js", "lib.js"]) copyFileSync(join(ROOT, "tools", "verify", f), join(verifyDir, f));
+    writeFileSync(join(work, "rows-full.json"), JSON.stringify(ROWS));
+    writeFileSync(join(work, "known-holds.json"), JSON.stringify([{ brand: "Alpha", model: "One", column: "Notes", value: "note old", note: "earlier" }]));
+    const t = Date.now() / 1000;
+    writeFileSync(join(work, "contested-index.json"), JSON.stringify([0]));
+    utimesSync(join(work, "contested-index.json"), t - 100, t - 100);
+    writeFileSync(join(work, "rechecks", "product-000.json"), JSON.stringify(recheck(ROWS[0], [
+      { column: "Notes", verdict: "xlsx_correct", reason: "page_omission", quote: "q-new" },
+    ])));
+    output = execFileSync(process.execPath, [join(verifyDir, "partition-rechecks.js")], { cwd: base, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  });
+  after(() => { if (base) rmSync(base, { recursive: true, force: true }); });
+
+  test("the hold keeps one entry and now carries the current cell value", () => {
+    const holds = JSON.parse(readFileSync(join(work, "known-holds.json"), "utf8"));
+    assert.equal(holds.length, 1, output);
+    assert.equal(holds[0].value, "note one");
+    assert.match(holds[0].note, /^xlsx note one is correct \(page_omission\): q-new/);
   });
 });

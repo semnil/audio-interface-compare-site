@@ -61,11 +61,11 @@ node tools/verify/partition-rechecks.js  # outputs the verdict sorting + draft q
 ```
 
 - It reads only the current examination: the ids in contested-index.json, from files written after export-contested wrote it (results of an earlier cycle left in rechecks/ are skipped)
-- `xlsx_correct` is an automatic hold — **do not ask** (settled as a false positive). partition-rechecks.js appends it to `work/known-holds.json`, so export-contested leaves it out from the next cycle on
+- `xlsx_correct` is an automatic hold — **do not ask** (settled as a false positive). partition-rechecks.js appends it to `work/known-holds.json` with the cell value, so export-contested and build-report leave it out from the next cycle on while the cell keeps that value
 - Confirm only `page_correct` / `judgement_required` with the operator via AskUserQuestion. Group by model, at most 4 questions per batch, include an original-text quote + a proposed correction in each question, and base the choices on "apply correction / no change" (the flow used in this session)
 - Write the operator's decisions as a corrections JSON for the round (`[{ idx, column, current, proposed, note }]`, idx from the current rows-full.json) and apply it with apply-corrections.js (dry-run → consent → `--apply`)
 - Permanent "no change needed" items the operator decides (an error on the page side, a unit difference, a counting policy) are appended to `work/known-holds.json` as `{ brand, model, column, note }`. export-contested and build-report exclude them automatically from the next cycle on
-- Do not re-run `corrections-gen.py` as a whole: it rewrites known-holds.json from its `KNOWN_HOLDS` list plus the holds in the current corrections-recheck.json, so every other entry is lost (on 2026-10-10 a re-run shrank known-holds.json from 99 to 44 entries)
+- Do not re-run `corrections-gen.py` as a whole: it rewrites known-holds.json from its `KNOWN_HOLDS` list plus the holds in the current corrections-recheck.json, so every other entry is lost (on 2026-10-10 a re-run shrank known-holds.json from 99 to 44 entries), and the entries it writes carry no `value`, so they cover their column whatever the cell holds
 - Reference-price discrepancies are isolated in work/price-diffs.json. Ask for a bulk decision in the report's "Reference-price discrepancies" section
 - Pre-lint (optional): `node tools/verify/lint-columns.js` detects contradictions between columns without agents
 

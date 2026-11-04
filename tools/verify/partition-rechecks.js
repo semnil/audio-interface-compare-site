@@ -9,7 +9,9 @@
  * export-contested wrote that index; older files are left over from an earlier cycle and are skipped — and generates
  * work/corrections-recheck.json, compatible with the corrections schema:
  *  - verdict = xlsx_correct       → hold (confirmed. No question needed, and apply skips it). It is also appended to
- *                                   known-holds.json (brand, model, column), so export-contested leaves it out from now on
+ *                                   known-holds.json (brand, model, column, value; an automatic hold of the same
+ *                                   brand, model and column gets the new value), so export-contested leaves it out
+ *                                   while the cell keeps that value
  *  - verdict = page_correct       → proposed correction (unreviewed: true. Not applied until the operator confirms)
  *  - verdict = judgement_required → proposed correction or held (unreviewed: true + the material for the decision in note)
  * It also prints draft question batches (model | column | current value | proposal | quoted evidence) to the console.
@@ -32,12 +34,12 @@ if (!existsSync(INDEX_FILE)) {
 const currentIds = new Set(JSON.parse(readFileSync(INDEX_FILE, "utf8")));
 const indexTime = statSync(INDEX_FILE).mtimeMs;
 const holds = existsSync(HOLDS_FILE) ? JSON.parse(readFileSync(HOLDS_FILE, "utf8")) : [];
-const holdKeys = new Set(holds.map((h) => `${h.brand}\u0000${h.model}\u0000${h.column}`));
+const holdByKey = new Map(holds.map((h) => [`${h.brand}\u0000${h.model}\u0000${h.column}`, h]));
 const today = new Date().toISOString().slice(0, 10);
 
 const entries = [];
 const questions = [];
-let nAutoHold = 0, nFix = 0, nJudge = 0, nFailed = 0, nNewHolds = 0;
+let nAutoHold = 0, nFix = 0, nJudge = 0, nFailed = 0, nNewHolds = 0, nUpdatedHolds = 0;
 
 const files = readdirSync(RECHECKS).filter((f) => /^product-\d{3,}\.json$/.test(f)).sort();
 for (const f of files) {
@@ -60,10 +62,18 @@ for (const f of files) {
       nAutoHold++;
       entries.push({ ...base, proposed: current, hold: `Examination found the xlsx correct (${v.reason}): ${v.quote}`.slice(0, 500) });
       const key = `${r.brand}\u0000${r.model}\u0000${v.column}`;
-      if (!holdKeys.has(key)) {
-        holdKeys.add(key);
-        holds.push({ brand: r.brand, model: r.model, column: v.column, note: `xlsx ${current} is correct (${v.reason}): ${v.quote}`.slice(0, 480) + ` (${today})` });
+      const note = `xlsx ${current} is correct (${v.reason}): ${v.quote}`.slice(0, 480) + ` (${today})`;
+      const prev = holdByKey.get(key);
+      if (!prev) {
+        const h = { brand: r.brand, model: r.model, column: v.column, value: current, note };
+        holds.push(h);
+        holdByKey.set(key, h);
         nNewHolds++;
+      } else if (prev.value !== undefined && prev.value !== current) {
+        // The cell changed after its hold was written and the examination found the new value correct too
+        prev.value = current;
+        prev.note = note;
+        nUpdatedHolds++;
       }
     } else {
       const judge = v.verdict === "judgement_required";
@@ -76,9 +86,9 @@ for (const f of files) {
 
 writeFileSync(OUT_FILE, JSON.stringify(entries, null, 1));
 console.log(`${OUT_FILE}: ${entries.length} entries (automatic hold ${nAutoHold} / proposed corrections ${nFix} / judgement required ${nJudge} / could not be fetched ${nFailed} models)`);
-if (nNewHolds) {
+if (nNewHolds || nUpdatedHolds) {
   writeFileSync(HOLDS_FILE, JSON.stringify(holds, null, 1) + "\n");
-  console.log(`${HOLDS_FILE}: appended ${nNewHolds} automatic holds (${holds.length} in total)`);
+  console.log(`${HOLDS_FILE}: appended ${nNewHolds} automatic holds, updated the cell value of ${nUpdatedHolds} (${holds.length} in total)`);
 }
 
 if (questions.length) {

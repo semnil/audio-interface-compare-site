@@ -100,12 +100,13 @@ node tools/verify/export-contested.js             # extract mismatches to work/c
 node tools/verify/partition-rechecks.js           # → work/corrections-recheck.json + draft questions
 #    It reads only the current examination (ids in contested-index.json, files written after it; leftovers of an earlier
 #    cycle are skipped). xlsx_correct becomes an automatic hold (no question needed) and is appended to work/known-holds.json
-#    (excluded automatically from the next cycle on). Only page_correct / judgement_required go to AskUserQuestion per model
+#    with the cell value (excluded automatically from the next cycle on while the cell keeps that value; an earlier automatic hold of the same model and column gets the new value). Only page_correct / judgement_required go to AskUserQuestion per model
 #    (original-text quote + proposed correction + apply correction/no change). Write the operator's decisions as a corrections
 #    JSON for the round ([{ idx, column, current, proposed }]); a permanent "no change needed" the operator decides is appended
 #    to known-holds.json as { brand, model, column, note }.
 #    Do not re-run corrections-gen.py as a whole: it rewrites known-holds.json from its KNOWN_HOLDS list plus the holds in the
-#    current corrections-recheck.json, so every other entry is lost (on 2026-10-10 a re-run shrank known-holds.json from 99 to 44)
+#    current corrections-recheck.json, so every other entry is lost (on 2026-10-10 a re-run shrank known-holds.json from 99 to 44),
+#    and the entries it writes carry no value, so they cover their column whatever the cell holds
 
 # 7. Applying to the xlsx (requires the operator's consent) and confirming consistency
 node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json          # dry-run
@@ -199,7 +200,7 @@ tools/verify/
     ├── rechecks-retired/  ← where stage 2 results of rows removed from the xlsx are moved
     ├── contested-index.json      ← target ids of stage 2
     ├── price-diffs.json          ← isolated reference-price discrepancies (the report's bulk-decision section)
-    ├── known-holds.json          ← permanent suppression of known holds (the authoritative copy. partition-rechecks.js appends the automatic holds)
+    ├── known-holds.json          ← permanent suppression of known holds (the authoritative copy. partition-rechecks.js appends the automatic holds with the cell value they cover)
     ├── corrections-recheck.json  ← stage 3 sorting result (automatic holds + unreviewed proposed corrections. Intermediate output)
     ├── rows-full.json     ← every xlsx row (idx 0 = sheet row 2)
     ├── state.json         ← validate's tallies, nextIds

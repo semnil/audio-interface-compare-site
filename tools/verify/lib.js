@@ -29,6 +29,17 @@ export function verificationInput(row) {
   return out;
 }
 
+// Known holds (work/known-holds.json) cover a discrepancy of their Brand + Model + column. A hold that carries the cell
+// value it was confirmed with (`value`, written by partition-rechecks.js) covers it only while the cell still holds
+// that value. Returns (row, column) => boolean
+export function knownHoldMatcher(holds) {
+  const byKey = new Map(holds.map((h) => [`${h.brand}\t${h.model}\t${h.column}`, h]));
+  return (row, column) => {
+    const h = byKey.get(`${row.Brand}\t${row.Model}\t${column}`);
+    return h !== undefined && (h.value === undefined || h.value === String(row[column] ?? ""));
+  };
+}
+
 export const pad = (i) => String(i).padStart(3, "0");
 export const resultFile = (idx) => join(WORK_DIR, "results", `product-${pad(idx)}.json`);
 
