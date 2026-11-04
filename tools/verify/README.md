@@ -123,6 +123,7 @@ node tools/verify/propose-corrections.js          # --all also includes low
 #    → edit proposed (the raw text stated on the page) in work/corrections-proposal.json into the
 #      "corrected cell value" in the xlsx cell format, and save it as work/corrections-edited.json:
 #      [{ idx, brand, model, column, confidence?, current, proposed, note?, hold?, unreviewed?, missing? }]
+#      - brand / model: apply-corrections.js rejects an entry whose brand / model is not the row at idx
 #      - proposed: the corrected cell value. "" blanks the cell (the convention for not equipped / not applicable / unpublished is blank, not 0 or No)
 #      - note: a supplement shown in the report / hold: the reason to hold off applying (skipped by apply)
 #      - unreviewed: awaiting the operator's confirmation (skipped by apply. Removed by the boundary update of review-state)

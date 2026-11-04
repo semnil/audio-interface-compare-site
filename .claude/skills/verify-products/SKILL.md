@@ -135,6 +135,7 @@ node tools/verify/propose-corrections.js     # generates correction proposals wo
 # proposed in the proposal is the raw text stated on the page. Edit it into the "corrected cell value"
 # matching the cell format conventions above, and generate work/corrections-edited.json via work/corrections-gen.py:
 #   [{ idx, brand, model, column, confidence?, current, proposed, note?, hold?, unreviewed?, missing? }]
+#   - brand / model: apply-corrections.js rejects an entry whose brand / model is not the row at idx
 #   - proposed: the corrected cell value. "" blanks the cell
 #   - note: a supplement shown in the report (measurement conditions, rounding, etc.)
 #   - hold: the reason to hold off applying (e.g. a duplicate row that a column fix does not resolve). Entries with hold are skipped by apply

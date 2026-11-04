@@ -122,6 +122,7 @@ node tools/verify/propose-corrections.js          # --all で low も含める
 #    → work/corrections-proposal.json の proposed (ページ記載の生テキスト) を xlsx セル書式の
 #      「修正後セル値」に編集し、work/corrections-edited.json として保存する:
 #      [{ idx, brand, model, column, confidence?, current, proposed, note?, hold?, unreviewed?, missing? }]
+#      - brand / model: idx の行と一致しないエントリは apply-corrections.js が拒否する
 #      - proposed: 修正後セル値。"" は空欄化 (非搭載・該当なし・未公表は 0 や No ではなく空欄の慣行)
 #      - note: レポート表示用の補足 / hold: 反映を保留する理由 (apply でスキップされる)
 #      - unreviewed: 操作者の確認待ち (apply でスキップ。review-state の境界更新で外れる)
