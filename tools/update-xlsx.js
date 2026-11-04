@@ -62,12 +62,14 @@ function labelFor(u) {
   return host || u.source || "Link";
 }
 
-// ── Assemble the markdown link column per product. Duplicate labels get (2),(3) ──
+// ── Assemble the markdown link column per product. Independent sources keep their order and come first,
+// manufacturer links follow them. Duplicate labels get (2),(3) ──
 function markdownFor(urls) {
   const counts = {};
-  return urls
-    .map((u) => {
-      let label = labelFor(u);
+  const labelled = urls.map((u) => ({ u, label: labelFor(u) }));
+  return [...labelled.filter((x) => x.label !== "Manufacturer"), ...labelled.filter((x) => x.label === "Manufacturer")]
+    .map(({ u, label: base }) => {
+      let label = base;
       counts[label] = (counts[label] || 0) + 1;
       if (counts[label] > 1) label = `${label} (${counts[label]})`;
       return `[${label}](${u.url})`;

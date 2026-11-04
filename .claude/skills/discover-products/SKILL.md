@@ -100,7 +100,7 @@ node tools/verify/export-products.js        # new rows go into nextIds; the othe
 
 ### 7. Connecting to measurement report collection
 
-After verification, run the collect-measurements skill on the rows added with new-rows.json to fill `Measurement Reports`. The targets are both rows where `Measurement Reports` is empty and rows that have only a `[Manufacturer]` link, and the target list is made from the Brand + Model of new-rows.json (collect-measurements' default gap-fill picks up only empty rows and does not target rows with only a manufacturer link). For rows where a third-party bench is found, add it while keeping the existing manufacturer link. The collection and application procedure (update-xlsx.js dry-run → the operator's consent → `--apply`) follows the collect-measurements skill.
+After verification, run the collect-measurements skill on the rows added with new-rows.json to fill `Measurement Reports`. The targets are both rows where `Measurement Reports` is empty and rows that have only a `[Manufacturer]` link, and the target list is made from the Brand + Model of new-rows.json (collect-measurements' default gap-fill picks up only empty rows and does not target rows with only a manufacturer link). For rows where a third-party bench is found, add it while keeping the existing manufacturer link. The collection and application procedure (update-xlsx.js dry-run → the operator's consent → `--apply`) follows the collect-measurements skill. update-xlsx.js writes the independent sources first and the manufacturer link after them.
 
 ## Agent operation know-how (past track record)
 

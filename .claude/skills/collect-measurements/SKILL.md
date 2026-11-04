@@ -73,7 +73,7 @@ node tools/update-xlsx.js tools/measurements/work/collect-result.json --apply  #
 npm run build   # check the rendering of renderMeasurements (links on individual product pages and in the comparison view)
 ```
 
-- update-xlsx.js is idempotent and **overwrites per cell**. It replaces the whole cell of the models included in the result and keeps the models not included. To add while keeping existing URLs, include the existing ones in the result too (it is not a diff append)
+- update-xlsx.js is idempotent and **overwrites per cell**. It replaces the whole cell of the models included in the result and keeps the models not included. To add while keeping existing URLs, include the existing ones in the result too (it is not a diff append). It writes the independent sources first, in the order given, and the `Manufacturer` links after them
 - If `UNMATCHED` appears (a model name in the result is not in the xlsx), suspect notation variants of `Brand`/`Model` and align with the spelling in targets.json
 - `renderMeasurements` drops anything other than http(s) via `sanitizeUrl`, so do not list schemes other than http(s) at the collection stage
 
