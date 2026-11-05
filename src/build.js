@@ -393,6 +393,9 @@ function generateFaviconIco() {
 // Uses @napi-rs/canvas to draw text (the font falls back to the OS's sans-serif).
 const OG_W = 1200;
 const OG_H = 630;
+// Cards are written as JPEG files with this extension and quality
+const OG_EXTENSION = "jpg";
+const OG_JPEG_QUALITY = 90;
 
 function ogWrapText(ctx, text, maxWidth, maxLines) {
   const words = String(text).split(/\s+/).filter(Boolean);
@@ -421,7 +424,7 @@ function ogWrapText(ctx, text, maxWidth, maxLines) {
   return lines;
 }
 
-// Only draws and returns the canvas. The caller does the PNG encoding with canvas.encode("png") (async),
+// Only draws and returns the canvas. The caller does the JPEG encoding with canvas.encode("jpeg") (async),
 // run in parallel per batch — with the synchronous toBuffer, encoding (17ms/card × 309 cards) took 80% of the build time.
 // Caution: drawing another canvas while an encode is in flight crashes @napi-rs/canvas 1.x, so
 // within a batch keep the order "finish all drawing → encode all" (see the og loop in build())
@@ -1285,7 +1288,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     title: "Audio Interface Comparator",
     description: descEn,
     url: `${SITE_URL}${BASE_PATH}`,
-    image: `${SITE_URL}${BASE_PATH}og/site.png`,
+    image: `${SITE_URL}${BASE_PATH}og/site.${OG_EXTENSION}`,
   };
   const headExtra = `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${SITE_URL}${BASE_PATH}">`;
   const alternates = { enUrl: `${SITE_URL}${BASE_PATH}`, jaUrl: `${SITE_URL}${BASE_PATH}ja/` };
@@ -1804,7 +1807,7 @@ function productPage(product, allProducts, buildDate) {
   const summary = specSummary(product);
   const title = `${product.displayName} Specs — Audio Interface Comparator`;
   const ogp = { title: `${product.displayName} Specs`, description: descEn, url: pageUrl,
-    image: `${SITE_URL}${BASE_PATH}og/products/${product.slug}.png` };
+    image: `${SITE_URL}${BASE_PATH}og/products/${product.slug}.${OG_EXTENSION}` };
   const alternates = { enUrl: pageUrl, jaUrl: `${SITE_URL}${BASE_PATH}ja/products/${product.slug}/` };
 
   return `${htmlHead(title, `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${jsonLd}</script>`, ogp, alternates)}
@@ -1904,7 +1907,7 @@ function hubPage(kind, name, slug, items, totalProducts, buildDate) {
   }).join("\n");
 
   const ogp = { title: titleEn, description: descEn, url: pageUrl,
-    image: `${SITE_URL}${BASE_PATH}og/${dir}/${slug}.png` };
+    image: `${SITE_URL}${BASE_PATH}og/${dir}/${slug}.${OG_EXTENSION}` };
   const extra = `<meta name="description" content="${escapeHtml(descEn)}" data-i18n-content="metaDesc" data-i18n-val="${escapeHtml(descJa)}">\n<link rel="canonical" href="${escapeHtml(pageUrl)}">\n<script type="application/ld+json">${itemListLd}</script>`;
   const alternates = { enUrl: pageUrl, jaUrl: `${SITE_URL}${BASE_PATH}ja/${dir}/${slug}/` };
 
@@ -2129,13 +2132,13 @@ async function build() {
   console.log(`Wrote sitemap.xml (${pagePaths.length * 2} URLs: ${pagePaths.length} paths × en/ja)`);
 
   // 7. og:image (social share cards. Shared by en/ja, so not generated per language)
-  // PNG encoding takes over 90% of the measured og step, so it is parallelized asynchronously per batch.
+  // Encoding is parallelized asynchronously per batch.
   // Within a batch the order "finish all drawing → start all encoding" is required (see drawOgCard's comment)
   mkdirSync(join(DIST, "og", "products"), { recursive: true });
   for (const { dir } of hubSets) mkdirSync(join(DIST, "og", dir), { recursive: true });
   const ogJobs = [
     {
-      file: join(DIST, "og", "site.png"),
+      file: join(DIST, "og", `site.${OG_EXTENSION}`),
       opts: {
         title: "Audio Interface Comparator",
         subtitle: `${products.length} audio interfaces compared side by side`,
@@ -2143,7 +2146,7 @@ async function build() {
       },
     },
     ...products.map((p) => ({
-      file: join(DIST, "og", "products", `${p.slug}.png`),
+      file: join(DIST, "og", "products", `${p.slug}.${OG_EXTENSION}`),
       opts: {
         title: p.displayName,
         subtitle: `${p.category || ""}${p.price ? ` · ${fmtPrice(p.price)}` : ""}`,
@@ -2151,7 +2154,7 @@ async function build() {
       },
     })),
     ...hubSets.flatMap(({ dir, groups }) => groups.map((g) => ({
-      file: join(DIST, "og", dir, `${g.slug}.png`),
+      file: join(DIST, "og", dir, `${g.slug}.${OG_EXTENSION}`),
       opts: {
         title: `${g.name} Audio Interfaces`,
         subtitle: `${g.items.length} product${g.items.length === 1 ? "" : "s"} compared`,
@@ -2164,7 +2167,7 @@ async function build() {
     // Keep the order: draw every canvas → encode all at once. Interleaving drawing and encoding makes
     // @napi-rs/canvas SIGSEGV on darwin arm64 (100% reproducible), so do not change it
     const canvases = batch.map((job) => drawOgCard(job.opts));
-    const bufs = await Promise.all(canvases.map((c) => c.encode("png")));
+    const bufs = await Promise.all(canvases.map((c) => c.encode("jpeg", OG_JPEG_QUALITY)));
     batch.forEach((job, k) => writeFileSync(job.file, bufs[k]));
   }
   console.log(`Wrote og images (${ogJobs.length}: 1 site + ${products.length} products + ${brandGroups.length + categoryGroups.length} hubs)`);
