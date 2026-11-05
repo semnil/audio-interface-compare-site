@@ -10,7 +10,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
-import { WORK_DIR, DATA_FILE, plain, readHeaders, pad, resultFile, retireResult } from "./lib.js";
+import { WORK_DIR, DATA_FILE, plain, readHeaders, pad, resultFile, retireResult, verificationInput, followRowKeys } from "./lib.js";
 
 const wb = new ExcelJS.Workbook();
 await wb.xlsx.readFile(DATA_FILE);
@@ -36,7 +36,7 @@ mkdirSync(join(WORK_DIR, "results"), { recursive: true });
 mkdirSync(join(WORK_DIR, "results-invalid"), { recursive: true });
 mkdirSync(join(WORK_DIR, "results-retired"), { recursive: true });
 
-// Detecting xlsx updates: moves aside existing results of rows whose content changed since the previous export (keeps stale verification results out)
+// Detecting xlsx updates: moves aside existing results of rows whose verified columns changed since the previous export (keeps stale verification results out)
 let oldRows = null;
 if (existsSync(join(WORK_DIR, "rows-full.json"))) {
   try {
@@ -46,28 +46,30 @@ if (existsSync(join(WORK_DIR, "rows-full.json"))) {
   }
 }
 if (oldRows) {
+  const countChanged = oldRows.length !== rows.length ? `${oldRows.length} → ${rows.length}` : "";
+  // Rows added, removed or reordered: results and rechecks follow their Brand + Model before the change check
+  const follow = followRowKeys(oldRows, rows);
+  if (follow.duplicate) console.log(`Note: duplicate Brand + Model (${follow.duplicate.replace("\u0000", " ")}); result files keep their idx`);
+  if (follow.moved || follow.gone) console.log(`rows added/removed/reordered: ${follow.moved} result/recheck files follow their Brand + Model, ${follow.gone} of removed rows moved to results-retired/ or rechecks-retired/`);
+  oldRows = follow.aligned;
   let retired = 0;
   rows.forEach((obj, i) => {
-    if (JSON.stringify(obj) === JSON.stringify(oldRows[i] ?? null)) return;
+    if (JSON.stringify(verificationInput(obj)) === JSON.stringify(verificationInput(oldRows[i]))) return;
     if (!existsSync(resultFile(i))) return;
     retireResult(i);
     retired++;
     console.log(`row changed -> retire result idx ${i} (${obj.Brand} ${obj.Model})`);
   });
   if (retired) console.log(`retired: ${retired} (validate-results.js puts them back into nextIds)`);
-  if (oldRows.length !== rows.length) {
-    console.log(`Note: the row count changed ${oldRows.length} → ${rows.length}. validate-results.js moves aside old results out of range`);
+  if (countChanged && follow.duplicate) {
+    console.log(`Note: the row count changed ${countChanged}. validate-results.js moves aside old results out of range`);
   }
 }
 
 rows.forEach((obj, i) => {
-  const out = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (k !== "Measurement Reports") out[k] = v;
-  }
   writeFileSync(
     join(WORK_DIR, "products", `product-${pad(i)}.json`),
-    JSON.stringify(out, null, 1)
+    JSON.stringify(verificationInput(obj), null, 1)
   );
 });
 writeFileSync(join(WORK_DIR, "rows-full.json"), JSON.stringify(rows));

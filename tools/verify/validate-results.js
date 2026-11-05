@@ -18,14 +18,12 @@
  */
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { WORK_DIR, STATUSES, pad, scanResults, retireResult } from "./lib.js";
+import { WORK_DIR, STATUSES, pad, scanResults, retireResult, norm } from "./lib.js";
 
 const retryFailed = process.argv.includes("--retry-failed");
 const includePartial = process.argv.includes("--include-partial");
 
 const rows = JSON.parse(readFileSync(join(WORK_DIR, "rows-full.json"), "utf8"));
-// "+" can be part of an identifier (Big Knob Studio / Studio+, etc.), so it is replaced with plus instead of removed
-const norm = (s) => String(s ?? "").normalize("NFKC").toLowerCase().replace(/\+/g, "plus").replace(/[^a-z0-9]/g, "");
 
 const REQUIRED = ["brand", "model", "fetch_status", "mismatches", "not_stated", "missing_in_xlsx", "notes"];
 const ARRAYS = ["attempts", "sources", "mismatches", "not_stated", "missing_in_xlsx"];

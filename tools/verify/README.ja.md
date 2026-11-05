@@ -18,9 +18,9 @@ flowchart TD
     E -->|いいえ: 未完了あり| B
     E -->|はい: failed の残存は許容| F[export-contested.js\nmismatch を work/contested/ に抽出\n既知 hold/単位差は除外、価格は隔離]
     F --> G[第 2 段: Workflow で recheck-workflow.js\n別モデル + マニュアル/PDF 原文必須\nverdict を work/rechecks/ に書込]
-    G --> H[partition-rechecks.js\nxlsx_correct → 自動 hold\npage_correct/要判断 → 質問候補]
+    G --> H[partition-rechecks.js\nxlsx_correct → 自動 hold、known-holds.json へ追記\npage_correct/要判断 → 質問候補]
     H --> I[第 3 段: AskUserQuestion で操作者に確認\n原文引用 + 修正候補を提示]
-    I --> J[決定を corrections-gen.py の\n新ラウンドに記録 → 生成]
+    I --> J[決定をラウンドの\ncorrections JSON に書く]
     J --> K[apply-corrections.js dry-run → 同意 → --apply\nxlsx へ反映 → export で変更行のみ再照合]
     K --> A
 ```
@@ -64,7 +64,9 @@ Cloudflare Turnstile 等で全手段が失敗するサイトは `failed` とし�
 
 ```bash
 # 1. xlsx から入力を生成 (再実行しても安全。xlsx 更新時は必ず再実行。
-#    前回 export から内容が変わった行の旧結果は自動で results-retired/ へ退避され再照合対象になる)
+#    前回 export から照合対象の列 (Measurement Reports 以外の全列) が変わった行の旧結果は自動で results-retired/ へ退避され再照合対象になる。
+#    行の追加・削除・並び替えがあったときは、結果と精査結果のファイルが先に Brand + Model で新しい idx へ移り、
+#    削除された行の分は results-retired/ と rechecks-retired/ へ退避される)
 node tools/verify/export-products.js
 
 # 2. Claude Code で Workflow を起動 (ids は初回は全件、再開時は state.json の nextIds)
@@ -96,10 +98,14 @@ node tools/verify/export-contested.js             # mismatch を work/contested/
 
 # 6. 第 3 段: 仕分けと質問解決
 node tools/verify/partition-rechecks.js           # → work/corrections-recheck.json + 質問下書き
-#    xlsx_correct は自動 hold (質問不要)。page_correct / judgement_required だけを
-#    機種単位で AskUserQuestion (原文引用 + 修正候補 + 修正適用/変更なし) にかけ、
-#    操作者決定を work/corrections-gen.py の新ラウンドに記録して corrections-round*.json を生成する。
-#    恒久的な「変更不要」は gen の KNOWN_HOLDS にも追加する (次サイクルから自動除外される)
+#    読むのは今回の精査だけ (contested-index.json にある ids で、それより後に書かれたファイル。前サイクルの残りは読み飛ばす)。
+#    xlsx_correct は自動 hold (質問不要) で、セル値と一緒に work/known-holds.json へ追記される (次サイクルから、セルがその値のあいだ自動除外される。同じ機種・列の既存の自動 hold は新しい値に書き換わる)。
+#    page_correct / judgement_required だけを機種単位で AskUserQuestion (原文引用 + 修正候補 + 修正適用/変更なし) にかけ、
+#    操作者決定はそのラウンドの corrections JSON ([{ idx, column, current, proposed }]) に書く。操作者が決めた恒久的な
+#    「変更不要」は known-holds.json へ { brand, model, column, note } で追記する。
+#    corrections-gen.py を丸ごと再実行しない: known-holds.json を gen の KNOWN_HOLDS と今の corrections-recheck.json の
+#    hold だけから書き直すため、それ以外の登録が消える (2026-10-10 の再実行で known-holds.json が 99 件から 44 件に減った)。
+#    書き出す登録は value を持たないので、セルの値にかかわらずその列を除外する
 
 # 7. xlsx への反映 (要・操作者の同意) と整合確認
 node tools/verify/apply-corrections.js tools/verify/work/corrections-round<N>.json          # dry-run
@@ -117,6 +123,7 @@ node tools/verify/propose-corrections.js          # --all で low も含める
 #    → work/corrections-proposal.json の proposed (ページ記載の生テキスト) を xlsx セル書式の
 #      「修正後セル値」に編集し、work/corrections-edited.json として保存する:
 #      [{ idx, brand, model, column, confidence?, current, proposed, note?, hold?, unreviewed?, missing? }]
+#      - brand / model: idx の行と一致しないエントリは apply-corrections.js が拒否する
 #      - proposed: 修正後セル値。"" は空欄化 (非搭載・該当なし・未公表は 0 や No ではなく空欄の慣行)
 #      - note: レポート表示用の補足 / hold: 反映を保留する理由 (apply でスキップされる)
 #      - unreviewed: 操作者の確認待ち (apply でスキップ。review-state の境界更新で外れる)
@@ -189,14 +196,15 @@ tools/verify/
     ├── results-retired/   ← 再試行・xlsx 更新で置き換え対象になった旧結果の退避先
     ├── contested/         ← 第 2 段入力 (争点のある機種のみ。export-contested が毎回作り直す)
     ├── rechecks/          ← 第 2 段結果 (チェックポイント)
+    ├── rechecks-retired/  ← xlsx から削除された行の第 2 段結果の退避先
     ├── contested-index.json      ← 第 2 段の対象 ids
     ├── price-diffs.json          ← 隔離された参考価格の相違 (レポートの一括判断セクション)
-    ├── known-holds.json          ← 既知 hold の恒久 suppression (正本は corrections-gen.py の KNOWN_HOLDS)
+    ├── known-holds.json          ← 既知 hold の恒久 suppression (正本。自動 hold は partition-rechecks.js が対象のセル値と一緒に追記する)
     ├── corrections-recheck.json  ← 第 3 段の仕分け結果 (自動 hold + unreviewed 修正候補。中間生成物)
     ├── rows-full.json     ← xlsx 全行 (idx 0 = シート 2 行目)
     ├── state.json         ← validate の集計・nextIds
     ├── corrections-proposal.json ← propose-corrections.js の修正案 (ページ記載の生テキスト)
-    ├── corrections-gen.py        ← 修正候補と操作者判断 (FIX/HOLD/KNOWN_HOLDS/ラウンド等) の蓄積スクリプト (正本)
+    ├── corrections-gen.py        ← 一括レビュー経路の修正候補と操作者判断 (FIX/HOLD/KNOWN_HOLDS/ラウンド等) の蓄積スクリプト。再実行すると known-holds.json を自身の KNOWN_HOLDS と今の corrections-recheck.json の hold から書き直す
     ├── corrections-edited.json   ← corrections-gen.py の生成物 (レポート差込 + apply 入力。直接編集しない)
     ├── corrections-round*.json   ← 各ラウンドの操作者決定 (gen の生成物。apply 入力)
     ├── review-state.json         ← 操作者レビューの到達 idx (到達済み範囲はレポートから省く)

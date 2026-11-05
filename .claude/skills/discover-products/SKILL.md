@@ -11,6 +11,7 @@ Detect current products not yet listed in the xlsx from the brands' official sit
 
 - What is listed: current audio interfaces + USB/streaming mixers + streaming devices
 - **Pro Dante/MADI/AVB/converter/PCIe-class gear is deliberately kept to a minimum** (the curation policy in CLAUDE.md). Even when found, it is not listed by default; report it as a candidate and ask for the operator's decision
+- Products that are only announced, on pre-order or "coming soon" are not listed (operator decision). Listing needs shipping evidence (the `status` / `evidence` of step 1, settled in step 2c)
 - Listed models that disappeared from the official list are **only reported** as removal candidates (for the evidence rules of removal and recording in REMOVALS, see the verify-products skill)
 
 ## Procedure
@@ -28,13 +29,16 @@ Split the Agent tool (general-purpose, model: sonnet) into batches of 5–8 bran
 
 - **"Do NOT delegate or spawn subagents — do the work yourself"** (with multi-brand instructions, agents have tried to delegate to and monitor subagents)
 - The assigned brands and each brand's list of listed models (copied from catalog-by-brand.json)
+- Per brand, the models already decided in earlier cycles (the candidate review file of the previous cycle in `tools/discover/work/`): ones kept out by an operator decision are not reported again, and ones deferred because they were not shipping yet are re-checked and reported with their current status
 - Fetch the official site's product list/category pages, enumerate the current in-scope lineup → diff against what is listed. **The only primary source is the official site** (retailers, review sites and communities are forbidden)
 - The agent itself Writes the result to `tools/discover/work/sweep-<batch>.json` (a checkpoint. /tmp and scratchpads are forbidden). It also returns the same content in its final text
 - Output schema (an array per brand):
 
 ```json
 [{ "brand": "...", "sources": ["URLs of the list pages checked"],
-   "new_candidates": [{ "model": "...", "url": "product page", "category": "...", "note": "grounds for the scope judgement" }],
+   "new_candidates": [{ "model": "...", "url": "product page", "category": "...",
+                       "status": "shipping | pre-order | announced only | unknown", "evidence": "official quote behind the status",
+                       "note": "grounds for the scope judgement" }],
    "discontinued_candidates": [{ "model": "...", "evidence": "gone from the list, etc." }],
    "notes": "means used for fetching, caveats (3 sentences or fewer)" }]
 ```
@@ -58,9 +62,18 @@ The brand sweep (step 1) only visits the existing brands in catalog-by-brand.jso
 - **What the official confirmation gate drops (report only, do not add)**: ① out of scope (real case: Audio-Technica AT-PMX5P is a portable analog mixer without USB) ② items that the official page shows to be discontinued — the same evidence as the removal rules (official 301/404, a discontinued notice, the official discontinued list) also applies to seed candidates (real case: YAMAHA QL1 is not collected even when it appears in the ranking, because Yamaha announced the end of production of the CL/QL series in 2024-09). Rankings keep listing discontinued items even as best sellers, so always confirm the currency of seed model numbers with the manufacturer
 - Put the fetched rankings in `tools/discover/work/` as seeds (e.g. `seed-mixer-ranking.json`), and do not copy them into commits/reports as grounds. Rankings change daily (especially hot), so fetch them each time a periodic run happens
 
+### 2c. Confirming weak evidence (parallel agents)
+
+Settle on the official site the candidates whose `status` is `unknown` or rests only on weak evidence, and the discontinued candidates with weak evidence, before step 3 (on 2026-11-04 a confirmation pass of two agents settled 35 items the sweep had left open). Rules to put in the prompt:
+
+- Strong evidence of shipping: an official store page with a price and an active add-to-cart (not pre-order or "notify me"), an official "now available" / "now shipping" announcement, an official release date in the past
+- Weak evidence (stays `unknown`): only a "Where to buy" / dealer button, published manuals or drivers, the absence of a "coming soon" label
+- Strong evidence of discontinuation is the same as the removal rules (official discontinued/EOL list, a discontinued notice, an official 301/404); "sold out", "notify me" or a missing entry on one category page is weak
+- Official sources only; retail and review sites are never evidence
+
 ### 3. Candidate review (operator's decision)
 
-Match all batches' new_candidates against catalog-by-brand.json to exclude notation variants of already-listed models, then present them in a table of "brand / model / category / URL / scope judgement" and ask for a decision on whether to list them. discontinued_candidates are shown separately as removal candidates after confirming the evidence.
+Match all batches' new_candidates against catalog-by-brand.json to exclude notation variants of already-listed models, then present them in a table of "brand / model / category / URL / scope judgement / shipping status and its evidence" and ask for a decision on whether to list them. discontinued_candidates are shown separately as removal candidates after confirming the evidence.
 
 ### 4. Spec collection (parallel agents)
 
@@ -79,6 +92,10 @@ node -e "import('./src/build.js').then(m=>console.log(JSON.stringify(m.COLUMNS.m
 - `Measurement Reports` only when found, in the form `[label](url) / ...`. For this column only, measurement sources (ASR/RMAA/Sound on Sound, etc.) other than the manufacturer are allowed. The search for third-party benches is done in step 7
 - The agent itself Writes the result to `tools/discover/work/rows-<batch>.json` (an array of {Header:value})
 
+### 4b. Recounting the jacks of mixers (parallel agents)
+
+Verification compares rows with the product pages, which mostly state channel counts rather than jack counts, so it does not catch jack-count errors (on 2026-11-04 it reported no mismatch for the 9 added mixers, while the recount found the talkback XLR counted as a mic preamp on the 4 Soundcraft Signature Plus rows). For mixers and other rows with many jacks, have an agent that did not collect the rows recount every input and output jack from the official manual under the cell format conventions, and compare with the collected values. Adopt a difference only after reading the quoted manual text yourself (on 2026-11-04 the recount's proposal for the ZED60-14FX GTR jacks contradicted the guide's "can be used with normal line level signals").
+
 ### 5. Applying the row additions (requires the operator's consent)
 
 Concatenate all batches' row JSON into one file, present the content (models and main values) to the operator and get consent before applying:
@@ -94,13 +111,13 @@ npm run build     # check the slug collision fail-fast and the page count (O(n) 
 Always put added rows through verification, as a net that catches the collection agents' errors:
 
 ```bash
-node tools/verify/export-products.js        # new rows go into nextIds
+node tools/verify/export-products.js        # new rows go into nextIds; the other rows' results follow their Brand + Model to the new idx
 # from here on, the verify-products skill's procedure (Workflow → validate → build-report)
 ```
 
 ### 7. Connecting to measurement report collection
 
-After verification, run the collect-measurements skill on the rows added with new-rows.json to fill `Measurement Reports`. The targets are both rows where `Measurement Reports` is empty and rows that have only a `[Manufacturer]` link, and the target list is made from the Brand + Model of new-rows.json (collect-measurements' default gap-fill picks up only empty rows and does not target rows with only a manufacturer link). For rows where a third-party bench is found, add it while keeping the existing manufacturer link. The collection and application procedure (update-xlsx.js dry-run → the operator's consent → `--apply`) follows the collect-measurements skill.
+After verification, run the collect-measurements skill on the rows added with new-rows.json to fill `Measurement Reports`. The targets are both rows where `Measurement Reports` is empty and rows that have only a `[Manufacturer]` link, and the target list is made from the Brand + Model of new-rows.json (collect-measurements' default gap-fill picks up only empty rows and does not target rows with only a manufacturer link). For rows where a third-party bench is found, add it while keeping the existing manufacturer link. The collection and application procedure (update-xlsx.js dry-run → the operator's consent → `--apply`) follows the collect-measurements skill. update-xlsx.js writes the independent sources first and the manufacturer link after them.
 
 ## Agent operation know-how (past track record)
 

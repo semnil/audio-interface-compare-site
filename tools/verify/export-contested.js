@@ -5,22 +5,21 @@
  *
  * Extracts the mismatches in work/results/ per model into work/contested/product-NNN.json.
  * Pre-sorting without agents reduces what is examined:
- *  - known holds (work/known-holds.json; the authoritative copy is KNOWN_HOLDS in corrections-gen.py):
- *    discrepancies whose (Brand, Model, column) match are excluded as already confirmed
+ *  - known holds (work/known-holds.json): discrepancies whose (Brand, Model, column) match are excluded as already
+ *    confirmed; a hold with a value excludes them only while the cell still holds that value (knownHoldMatcher in lib.js)
  *  - unit differences: discrepancies in the measurement columns (DR/THD+N/EIN) whose leading number matches are excluded as unit/notation differences
  *  - reference prices: Reference Price (USD) discrepancies are isolated in work/price-diffs.json (decided in bulk in the report)
  * Only the remaining contested items go to recheck-workflow.js (stage 2).
  */
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { WORK_DIR, STATUSES, pad, scanResults } from "./lib.js";
+import { WORK_DIR, STATUSES, pad, scanResults, knownHoldMatcher } from "./lib.js";
 
 const rows = JSON.parse(readFileSync(join(WORK_DIR, "rows-full.json"), "utf8"));
 const readJson = (f, fallback) => {
   try { return JSON.parse(readFileSync(join(WORK_DIR, f), "utf8")); } catch { return fallback; }
 };
-const knownHolds = readJson("known-holds.json", []);
-const holdMap = new Map(knownHolds.map((h) => [`${h.brand}\t${h.model}\t${h.column}`, h]));
+const isHeld = knownHoldMatcher(readJson("known-holds.json", []));
 
 const MEASURE_RE = /^(DR |THD\+N |EIN )/;
 const firstNum = (s) => (String(s ?? "").match(/-?\d+(?:\.\d+)?/) || [null])[0];
@@ -42,7 +41,7 @@ for (const { idx, file, r } of scanResults()) {
   const row = rows[idx];
   const contested = [];
   for (const m of r.mismatches || []) {
-    if (holdMap.has(`${row.Brand}\t${row.Model}\t${m.column}`)) { nHold++; continue; }
+    if (isHeld(row, m.column)) { nHold++; continue; }
     if (m.column === "Reference Price (USD)") {
       priceDiffs.push({ idx, brand: row.Brand, model: row.Model, xlsx_value: m.xlsx_value, page_value: m.page_value, evidence: m.evidence ?? "" });
       continue;

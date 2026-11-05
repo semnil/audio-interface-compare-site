@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { WORK_DIR, STATUSES, scanResults } from "./lib.js";
+import { WORK_DIR, STATUSES, scanResults, knownHoldMatcher } from "./lib.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = process.argv[2] || join(__dirname, "..", "..", "product-page-verification-report.md");
@@ -78,9 +78,8 @@ for (const { idx, file, r } of scanResults()) {
   results.set(idx, r);
 }
 
-// Known holds (confirmed permanent discrepancies; the authoritative copy is KNOWN_HOLDS in corrections-gen.py) are excluded from the tables automatically
-const knownHolds = readJson("known-holds.json", []);
-const knownHoldSet = new Set(knownHolds.map((h) => `${h.brand}\t${h.model}\t${h.column}`));
+// Known holds (confirmed permanent discrepancies, work/known-holds.json) are excluded from the tables automatically
+const isHeld = knownHoldMatcher(readJson("known-holds.json", []));
 
 const idxs = [...results.keys()].sort((a, b) => a - b);
 const byStatus = {};
@@ -92,7 +91,7 @@ for (const i of idxs) {
   if (r.fetch_status === "ok" && !(r.mismatches || []).length) cleanCount++;
   if ((r.mismatches || []).length) mismatchCount++;
   for (const m of r.mismatches || []) {
-    if (knownHoldSet.has(`${rows[i].Brand}\t${rows[i].Model}\t${m.column}`)) { knownCount++; continue; }
+    if (isHeld(rows[i], m.column)) { knownCount++; continue; }
     if (m.column === "Reference Price (USD)") { priceDiffs.push({ idx: i, ...m }); continue; }
     (m.confidence === "high" ? high : low).push({ idx: i, ...m });
   }

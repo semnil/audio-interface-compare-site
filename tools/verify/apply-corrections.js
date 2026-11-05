@@ -5,13 +5,15 @@
  *   Dry-run by default: only lists the changes (model / column / old value → new value) and writes nothing.
  *   With --apply it writes data/audio_interfaces.xlsx.
  *
- * corrections.json: [{ idx, column, current, proposed, hold?, unreviewed? }] (the output of propose-corrections.js,
+ * corrections.json: [{ idx, column, current, proposed, brand?, model?, hold?, unreviewed? }] (the output of propose-corrections.js,
  * edited. proposed is the value actually written. Entries with hold (the reason for holding) or unreviewed (awaiting the operator's confirmation)
- * are skipped without applying. Extra keys such as brand/model/evidence are ignored)
+ * are skipped without applying. Other extra keys such as evidence are ignored)
  *
  * Safeguards:
  *  - Applying always means the operator checks the dry-run's list of changes, and --apply runs only after consent
- *  - When an entry's current does not match the current cell value, that entry is rejected as inconsistent, and with --apply even one aborts the run
+ *  - When an entry has brand and model and they are not the Brand / Model the row at idx had before any write, or its
+ *    current does not match the current cell value, that entry is rejected as inconsistent, and with --apply even one
+ *    aborts the run
  *  - After writing, re-run export-products.js (old verification results of changed rows are moved aside automatically and become re-verification targets)
  */
 import { readFileSync } from "node:fs";
@@ -36,6 +38,12 @@ const ws = wb.worksheets[0];
 
 const headerCol = readHeaders(ws).byName;
 const TEXT_COLUMNS = new Set(["Brand", "Model", "Category"]);
+// Brand / Model of each entry's row before any write. The row check reads these, so an entry that corrects Brand or
+// Model does not change the row that the later entries of the same row are checked against
+const namesBefore = new Map(corrections.map((c) => {
+  const row = ws.getRow(c.idx + 2);
+  return [c.idx, [plain(row.getCell(headerCol.Brand).value, "Brand"), plain(row.getCell(headerCol.Model).value, "Model")]];
+}));
 
 let ok = 0, bad = 0, held = 0, unrev = 0;
 for (const c of corrections) {
@@ -56,6 +64,14 @@ for (const c of corrections) {
     console.error(`NG ${label}: column not found`);
     bad++;
     continue;
+  }
+  if (c.brand !== undefined && c.model !== undefined) {
+    const [brand, model] = namesBefore.get(c.idx);
+    if (brand !== String(c.brand).trim() || model !== String(c.model).trim()) {
+      console.error(`NG ${label}: row mismatch (corrections="${c.brand} ${c.model}" row ${c.idx}="${brand} ${model}")`);
+      bad++;
+      continue;
+    }
   }
   const cell = ws.getRow(rowNum).getCell(col);
   const actual = plain(cell.value, c.column);
