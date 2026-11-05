@@ -12,11 +12,17 @@ import ExcelJS from "exceljs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DATA = join(__dirname, "..", "data", "audio_interfaces.xlsx");
 
-// Columns that must be numeric only (blank allowed) in every row. I/O count and measurement columns historically mix in strings, so they are excluded.
-const ALWAYS_NUMERIC = ["Reference Price (USD)", "Max Sample Rate (kHz)", "Max Bit Depth (bit)"];
+// Columns that must be numeric only (blank allowed) in every row. The gain range and measurement columns mix in strings, so they are excluded.
+const ALWAYS_NUMERIC = [
+  "Reference Price (USD)", "Max Sample Rate (kHz)", "Max Bit Depth (bit)",
+  "Mic Preamps", "Combo Inputs (XLR/TRS)", "Line Inputs", "RCA Input", "Hi-Z Inputs", "ADAT Input (ch@48kHz)", "Optical Ports (Input)",
+  "S/PDIF (Coax) Input", "S/PDIF (Optical) Input", "AES/EBU Input",
+  "Analog Main Output", "Analog Line Output", "RCA Output", "Headphone Output", "ADAT Output (ch@48kHz)", "Optical Ports (Output)",
+  "S/PDIF (Coax) Output", "S/PDIF (Optical) Output", "AES/EBU Output",
+];
 
 describe("xlsx: type contract for columns that should always be numeric", () => {
-  test("reference price, sample rate, and bit depth are numbers, not text", async () => {
+  test("reference price, I/O counts, sample rate, and bit depth are numbers, not text", async () => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(DATA);
     const ws = wb.worksheets[0];

@@ -84,9 +84,11 @@ for (const c of corrections) {
   ok++;
   if (apply) {
     const v = String(c.proposed ?? "").trim();
-    // A numeric cell, or a pure number into an empty cell, is written as a number. Existing text cells and Brand / Model / Category stay text
+    // A pure number is written as a number into a numeric cell or an empty cell, and into a text cell when the number
+    // reads the same as the text ("-127.0" stays text). Brand / Model / Category stay text
     const empty = cell.value === null || cell.value === undefined || cell.value === "";
-    const asNum = (typeof cell.value === "number" || (empty && !TEXT_COLUMNS.has(c.column))) && /^-?\d+(\.\d+)?$/.test(v);
+    const readsTheSame = String(Number(v)) === v;
+    const asNum = (typeof cell.value === "number" || (!TEXT_COLUMNS.has(c.column) && (empty || readsTheSame))) && /^-?\d+(\.\d+)?$/.test(v);
     cell.value = v === "" ? null : asNum ? Number(v) : v;
   }
 }
