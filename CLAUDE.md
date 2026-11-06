@@ -76,6 +76,7 @@ flowchart LR
 - `safeJsonForScriptLD(obj)` — for JSON-LD (the above + `&` → `&`)
 - `sanitizeUrl(s)` — passes only http/https via the WHATWG URL parser. Scheme validation for external product links
 - `escapeHtml` is designed to be called only once, inside `htmlHead`, avoiding double escaping
+- `withCsp(html)` adds a `Content-Security-Policy` meta tag right after the charset on every page, as the last step on the page's final text (after `localizeToJa` and `minifyHtml`), because it lists the sha256 of each inline `<script>` on that page. The policy is `default-src 'none'` with `script-src`, `style-src`, `img-src` and `connect-src` limited to the site's own origin, and `base-uri` and `form-action` set to `'none'`. Inline scripts carry no attributes, and templates and inserted markup use neither `style=` attributes nor inline event handlers (`tests/csp.test.js`). A meta tag cannot carry `frame-ancestors`
 - Preventing side effects: `src/build.js` uses the guard `import.meta.url === pathToFileURL(process.argv[1]).href` so that importing it does not run the build
 
 ### Accessibility (UI)

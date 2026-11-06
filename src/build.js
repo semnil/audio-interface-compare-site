@@ -13,6 +13,7 @@
  */
 
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setPriority, constants } from "node:os";
@@ -239,6 +240,25 @@ function minifyHtml(html) {
     .replace(/>\s*\n\s*</g, "><")  // remove whitespace between tags
     .replace(/\n+/g, "\n")         // collapse multiple newlines
     .trim();
+}
+
+// Adds the Content-Security-Policy meta tag to a finished page. Each inline script is allowed by its hash, so this runs
+// on the final text, after localizeToJa and minifyHtml. External scripts and styles come from the site's own origin.
+const CHARSET_META = '<meta charset="utf-8">';
+function withCsp(html) {
+  if (html.split(CHARSET_META).length !== 2) throw new Error("withCsp: expected one charset meta");
+  const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((m) => `'sha256-${createHash("sha256").update(m[1], "utf8").digest("base64")}'`);
+  const policy = [
+    "default-src 'none'",
+    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    "style-src 'self'",
+    "img-src 'self'",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+  return html.replace(CHARSET_META, `${CHARSET_META}<meta http-equiv="Content-Security-Policy" content="${policy}">`);
 }
 
 // ─── Favicon ICO generation ─────────────────────────────────────────────
@@ -740,9 +760,9 @@ function renderCompare(a,b){
     +'<div class="compare-header">'+card(a)+card(b)+'</div>'
     +'<div class="spec-table-wrap"><table class="spec-table">'
     +'<caption class="sr-only">Audio interface spec comparison: '+escapeHtml(a.displayName)+' vs '+escapeHtml(b.displayName)+'</caption>'
-    +'<thead><tr><th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>'
-    +'<th scope="col" class="val-col" style="font-weight:700">'+escapeHtml(a.displayName)+'</th>'
-    +'<th scope="col" class="val-col" style="font-weight:700">'+escapeHtml(b.displayName)+'</th></tr></thead>'
+    +'<thead><tr><th scope="col" class="label-col" data-i18n="specLabel">Spec</th>'
+    +'<th scope="col" class="val-col">'+escapeHtml(a.displayName)+'</th>'
+    +'<th scope="col" class="val-col">'+escapeHtml(b.displayName)+'</th></tr></thead>'
     +'<tbody>'+buildRows(a,b)+'</tbody></table></div>';
 }
 var DATA=null,loading=null;
@@ -953,6 +973,10 @@ header .subtitle {
   color: var(--text-secondary);
   margin-top: 2px;
 }
+header .subtitle a {
+  color: inherit;
+  text-decoration: none;
+}
 main { padding: 32px 0 64px; }
 
 .ai-disclaimer {
@@ -1123,6 +1147,7 @@ main { padding: 32px 0 64px; }
   padding: 24px;
   box-shadow: 0 1px 3px var(--shadow);
 }
+.product-card-single { margin-bottom: 32px; }
 .product-card h2 {
   font-size: 1.1rem;
   margin: 0 0 4px;
@@ -1191,6 +1216,8 @@ main { padding: 32px 0 64px; }
   text-align: left;
   white-space: nowrap;
 }
+.spec-table thead th.label-col,
+.spec-table thead th.val-col { font-weight: 700; }
 .spec-table .val-col { width: 36%; }
 .spec-table thead th { background: var(--thead-bg); }
 .spec-table .na { color: var(--text-secondary); }
@@ -1901,7 +1928,7 @@ function productPage(product, allProducts, buildDate) {
   <div class="container header-bar">
     <div>
       <h1>${escapeHtml(product.displayName)} Specs</h1>
-      <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
+      <div class="subtitle"><a href="${BASE_PATH}">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
     </div>
     ${langToggle(`${BASE_PATH}ja/products/${product.slug}/`, "ja")}
   </div>
@@ -1910,7 +1937,7 @@ function productPage(product, allProducts, buildDate) {
   <div class="container">
     <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
 
-    <div class="product-card" style="margin-bottom:32px">
+    <div class="product-card product-card-single">
       <div class="cat">${escapeHtml(product.category || "")}</div>
       ${priceStr ? `<div class="price">${escapeHtml(priceStr)}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
       ${extUrl ? `<a class="ext-link" href="${escapeHtml(extUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
@@ -1923,8 +1950,8 @@ function productPage(product, allProducts, buildDate) {
         <caption class="sr-only">Audio interface specs: ${escapeHtml(product.displayName)}</caption>
         <thead>
           <tr>
-            <th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
-            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(product.displayName)}</th>
+            <th scope="col" class="label-col" data-i18n="specLabel">Spec</th>
+            <th scope="col" class="val-col">${escapeHtml(product.displayName)}</th>
           </tr>
         </thead>
         <tbody>
@@ -2002,7 +2029,7 @@ function hubPage(kind, name, slug, items, totalProducts, buildDate) {
   <div class="container header-bar">
     <div>
       <h1 data-i18n="hubTitle">${escapeHtml(titleEn)}</h1>
-      <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="hubCount">${items.length} of ${totalProducts} products</span></div>
+      <div class="subtitle"><a href="${BASE_PATH}">Audio Interface Comparator</a> — <span data-i18n="hubCount">${items.length} of ${totalProducts} products</span></div>
     </div>
     ${langToggle(`${BASE_PATH}ja/${dir}/${slug}/`, "ja")}
   </div>
@@ -2156,12 +2183,12 @@ async function build() {
     const jaHref = `${BASE_PATH}ja/${relPath}`;
     const enDir = join(DIST, relPath);
     mkdirSync(enDir, { recursive: true });
-    writeFileSync(join(enDir, "index.html"), minifyHtml(enHtml));
+    writeFileSync(join(enDir, "index.html"), withCsp(minifyHtml(enHtml)));
     const jaDir = join(DIST, "ja", relPath);
     mkdirSync(jaDir, { recursive: true });
     // Only index has the inline PAGE_BASE (for specs-link)
     const jaHtml = localizeToJa(enHtml, enHref, jaHref, { hasInlineBase: relPath === "" });
-    writeFileSync(join(jaDir, "index.html"), minifyHtml(jaHtml));
+    writeFileSync(join(jaDir, "index.html"), withCsp(minifyHtml(jaHtml)));
   };
 
   // 2. Index page (en + ja)
@@ -2261,7 +2288,7 @@ async function build() {
   console.log("Wrote robots.txt");
 
   // 9. 404.html (GitHub Pages' custom 404. No automatic redirect)
-  writeFileSync(join(DIST, "404.html"), minifyHtml(notFoundPage()));
+  writeFileSync(join(DIST, "404.html"), withCsp(minifyHtml(notFoundPage())));
   console.log("Wrote 404.html");
 
   console.timeEnd("build");
