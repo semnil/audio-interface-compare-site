@@ -1,20 +1,10 @@
 // tests/safeJsonForScriptLD.test.js
-// Contract tests for build.js safeJsonForScriptLD (src/build.js:157-159)
+// Contract tests for build.js safeJsonForScriptLD
 // In addition to the ordinary safeJsonForScript, it also escapes & -> \u0026
 // Inside JSON-LD (application/ld+json), a raw & also helps a <script> escape because of how HTML is parsed
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Reproduces the same logic as src/build.js (redefined inline to avoid import side effects)
-function safeJsonForScript(obj) {
-  return JSON.stringify(obj)
-    .replace(/</g, "\\u003c")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
-function safeJsonForScriptLD(obj) {
-  return safeJsonForScript(obj).replace(/&/g, "\\u0026");
-}
+import { _safeJsonForScript as safeJsonForScript, _safeJsonForScriptLD as safeJsonForScriptLD } from "../src/build.js";
 
 describe("safeJsonForScriptLD: escapes & to \\u0026 (difference from safeJsonForScript)", () => {
   test("brand name 'Allen & Heath' is converted to a string containing \\u0026", () => {

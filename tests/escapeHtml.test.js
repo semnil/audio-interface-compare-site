@@ -1,18 +1,8 @@
 // tests/escapeHtml.test.js
 // Unit tests for the escapeHtml function of build.js
-// Importing build.js reads the xlsx, so equivalent logic is defined inline and tested
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as escapeHtml of build.js (src/build.js:132-139)
-function escapeHtml(str) {
-  if (str == null) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+import { _escapeHtml as escapeHtml } from "../src/build.js";
 
 describe("escapeHtml: XSS protection", () => {
   test("a <script> tag is escaped", () => {

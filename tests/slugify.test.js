@@ -1,17 +1,8 @@
 // tests/slugify.test.js
 // Unit tests for the build.js slugify function
-// Importing build.js would read the xlsx, so equivalent logic is defined inline and tested
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as build.js slugify (src/build.js:124-130)
-function slugify(brand, model) {
-  return `${brand}-${model}`
-    .toLowerCase()
-    .replace(/\+/g, "-plus")    // "2+" → "2-plus"
-    .replace(/[^a-z0-9\u3040-\u9fff]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+import { _slugify as slugify } from "../src/build.js";
 
 describe("slugify", () => {
   test("a brand name containing an ampersand is converted correctly", () => {

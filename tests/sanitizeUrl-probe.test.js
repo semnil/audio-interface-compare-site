@@ -3,29 +3,7 @@
 // Pins the behavior for 'gray zone' inputs that the WHATWG URL parser accepts
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as src/build.js
-function sanitizeUrl(u) {
-  if (u == null) return "";
-  const s = String(u).trim();
-  if (!s) return "";
-  try {
-    const parsed = new URL(s);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
-    return "";
-  } catch (_) {
-    return "";
-  }
-}
-
-function escapeHtml(str) {
-  if (str == null) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+import { _sanitizeUrl as sanitizeUrl, _escapeHtml as escapeHtml } from "../src/build.js";
 
 describe("sanitizeUrl: behavior specific to the WHATWG URL parser (odd inputs that are accepted)", () => {
   test("the 'https:' scheme alone fails to parse -> empty string", () => {

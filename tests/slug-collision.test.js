@@ -3,15 +3,7 @@
 // Guarantees the current data has no collisions and detects collisions early when products are added
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as build.js slugify (src/build.js:124-130)
-function slugify(brand, model) {
-  return `${brand}-${model}`
-    .toLowerCase()
-    .replace(/\+/g, "-plus")
-    .replace(/[^a-z0-9\u3040-\u9fff]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
+import { _slugify as slugify } from "../src/build.js";
 
 describe("slugify: combinations that can collide (regression pin of a known constraint)", () => {
   // The following patterns produce the same slug by design.
