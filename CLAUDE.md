@@ -88,6 +88,7 @@ flowchart LR
   - After search filtering, the active option is restored by slug
 - skip-link, `<main id="main">`, `<caption class="sr-only">` + `scope="col"/"row"` on tables, ✓ + `<span class="sr-only">Better value</span>` on highlighted cells
 - `prefers-reduced-motion` support
+- Dark mode follows `prefers-color-scheme` (no toggle). Every colour is a token on `:root`, redefined in the dark block. `tests/color-tokens.test.js` checks that no colour literal stands outside the token blocks, that both themes define the same tokens, and that the text and background pairs meet WCAG AA in both themes
 
 ### Build invariants
 - A slug collision fails fast at build time with `Error('Slug collision: ...')` (a guard before generating product pages)
