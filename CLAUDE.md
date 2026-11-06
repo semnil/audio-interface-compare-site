@@ -84,7 +84,7 @@ flowchart LR
   - The listbox has `tabindex="-1"` (suppresses Chromium's implicit focus on scroll containers)
   - Each option is a `<button role="option">` + only the `disabled` attribute (aria-disabled is redundant, so it is not added)
   - Each item is wrapped in `.product-item-wrap`, with a "Specs ↗" link absolutely positioned at the right edge (`tabindex="-1"`, separated from the selection action with `stopPropagation`)
-  - Keyboard: ArrowUp/Down/Home/End/Enter/Escape are consolidated on the input. Ignored during IME composition (`e.isComposing`)
+  - Keyboard: ArrowUp/Down/Home/End/Enter/Escape are consolidated on the input. Ignored during IME composition (`e.isComposing`). The option they reach carries the `active` class, which draws the keyboard focus ring while the focus stays on the input
   - After search filtering, the active option is restored by slug
 - skip-link, `<main id="main">`, `<caption class="sr-only">` + `scope="col"/"row"` on tables, ✓ + `<span class="sr-only">Better value</span>` on highlighted cells
 - `prefers-reduced-motion` support

@@ -988,9 +988,11 @@ main { padding: 32px 0 64px; }
 }
 .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
 .compare-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.product-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -2px; }
+.product-item:focus-visible,
+.product-item.active { outline: 3px solid var(--accent); outline-offset: -2px; }
 /* The selected item has an accent background, so a white inner ring makes the focus ring visible */
-.product-item.selected:focus-visible {
+.product-item.selected:focus-visible,
+.product-item.selected.active {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--on-accent), 0 0 0 3px var(--accent);
 }
@@ -1488,8 +1490,12 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     const inputEl = document.getElementById('search-' + side);
     const idx = activeIdx[side];
     const results = lastResults[side];
+    const previous = document.querySelector('#list-' + side + ' .product-item.active');
+    if (previous) previous.classList.remove('active');
     if (idx >= 0 && idx < results.length) {
       inputEl.setAttribute('aria-activedescendant', optionId(side, results[idx].slug));
+      const option = document.getElementById(optionId(side, results[idx].slug));
+      if (option) option.classList.add('active');
     } else {
       inputEl.removeAttribute('aria-activedescendant');
     }

@@ -167,6 +167,18 @@ describe("WAI-ARIA combobox contract of index.html (Rounds 4-6 regression)", { s
     );
   });
 
+  test("the option the arrow keys reached is shown: syncActiveDescendant moves the active class, and the stylesheet outlines it", () => {
+    html = readFileSync(INDEX_PATH, "utf8");
+    const sIdx = html.indexOf("function syncActiveDescendant(side)");
+    const endIdx = html.indexOf("function ", sIdx + 10);
+    const body = html.slice(sIdx, endIdx > 0 ? endIdx : sIdx + 1500);
+    assert.ok(/\.classList\.remove\('active'\)/.test(body), "the previous option keeps the active class");
+    assert.ok(/\.classList\.add\('active'\)/.test(body), "the current option does not get the active class");
+    const css = readFileSync(join(ROOT, "dist", "style.css"), "utf8");
+    assert.match(css, /\.product-item\.active\s*\{\s*outline:\s*3px solid/);
+    assert.match(css, /\.product-item\.selected\.active\s*\{[^}]*box-shadow/);
+  });
+
   test("opt-{side}-{slug} IDs are consistent with PRODUCTS slugs (referential integrity of activedescendant)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
     // optionId is assembled as 'opt-' + side + '-' + slug
