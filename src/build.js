@@ -13,6 +13,7 @@
  */
 
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setPriority, constants } from "node:os";
@@ -238,6 +239,25 @@ function minifyHtml(html) {
     .replace(/>\s*\n\s*</g, "><")  // remove whitespace between tags
     .replace(/\n+/g, "\n")         // collapse multiple newlines
     .trim();
+}
+
+// Adds the Content-Security-Policy meta tag to a finished page. Each inline script is allowed by its hash, so this runs
+// on the final text, after localizeToJa and minifyHtml. External scripts and styles come from the site's own origin.
+const CHARSET_META = '<meta charset="utf-8">';
+function withCsp(html) {
+  if (html.split(CHARSET_META).length !== 2) throw new Error("withCsp: expected one charset meta");
+  const hashes = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    .map((m) => `'sha256-${createHash("sha256").update(m[1], "utf8").digest("base64")}'`);
+  const policy = [
+    "default-src 'none'",
+    `script-src 'self' ${hashes.join(" ")}`.trim(),
+    "style-src 'self'",
+    "img-src 'self'",
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join("; ");
+  return html.replace(CHARSET_META, `${CHARSET_META}<meta http-equiv="Content-Security-Policy" content="${policy}">`);
 }
 
 // ─── Favicon ICO generation ─────────────────────────────────────────────
@@ -2085,12 +2105,12 @@ async function build() {
     const jaHref = `${BASE_PATH}ja/${relPath}`;
     const enDir = join(DIST, relPath);
     mkdirSync(enDir, { recursive: true });
-    writeFileSync(join(enDir, "index.html"), minifyHtml(enHtml));
+    writeFileSync(join(enDir, "index.html"), withCsp(minifyHtml(enHtml)));
     const jaDir = join(DIST, "ja", relPath);
     mkdirSync(jaDir, { recursive: true });
     // Only index has the inline PAGE_BASE (for specs-link)
     const jaHtml = localizeToJa(enHtml, enHref, jaHref, { hasInlineBase: relPath === "" });
-    writeFileSync(join(jaDir, "index.html"), minifyHtml(jaHtml));
+    writeFileSync(join(jaDir, "index.html"), withCsp(minifyHtml(jaHtml)));
   };
 
   // 2. Index page (en + ja)
@@ -2190,7 +2210,7 @@ async function build() {
   console.log("Wrote robots.txt");
 
   // 9. 404.html (GitHub Pages' custom 404. No automatic redirect)
-  writeFileSync(join(DIST, "404.html"), minifyHtml(notFoundPage()));
+  writeFileSync(join(DIST, "404.html"), withCsp(minifyHtml(notFoundPage())));
   console.log("Wrote 404.html");
 
   console.timeEnd("build");
