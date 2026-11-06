@@ -590,6 +590,7 @@ function htmlHead(title, extra = "", ogp = null, alternates = null) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 ${alternates ? langRedirectSnippet() : ""}
 <title>${escapeHtml(title)}</title>
 <meta name="google-site-verification" content="O6oFrJyEg-Om0e19Q1QZpGG3DeKfy0ggL_tQWnAaWgI" />${ogpTags}${hreflangTags}
@@ -815,16 +816,62 @@ route();
 
 const CSS = `
 :root {
+  color-scheme: light dark;
   --bg: #f8f9fa;
   --surface: #ffffff;
   --border: #e2e8f0;
   --text: #1a202c;
   --text-secondary: #64748b;
+  --text-muted: #475569;
+  --field-text: #000000;
   --accent: #2563eb;
   --accent-light: #eff6ff;
+  --accent-fill: #2563eb;
+  --accent-fill-hover: #1d4ed8;
+  --on-accent: #ffffff;
+  --on-accent-muted: rgba(255,255,255,0.92);
+  --disabled-fill: #64748b;
+  --focus-ring: rgba(37,99,235,0.4);
   --green: #16a34a;
   --red: #dc2626;
   --group-header-bg: #f1f5f9;
+  --thead-bg: #f8fafc;
+  --sep: #cbd5e1;
+  --warn-bg: #fef3c7;
+  --warn-border: #fbbf24;
+  --warn-text: #92400e;
+  --shadow: rgba(0,0,0,0.06);
+  --scroll-shadow: rgba(0,0,0,0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --text-secondary: #a3b1c6;
+    --text-muted: #cbd5e1;
+    --field-text: #e2e8f0;
+    --accent: #93c5fd;
+    --accent-light: #1e3a5f;
+    --accent-fill: #2563eb;
+    --accent-fill-hover: #1d4ed8;
+    --on-accent: #ffffff;
+    --on-accent-muted: rgba(255,255,255,0.92);
+    --disabled-fill: #475569;
+    --focus-ring: rgba(147,197,253,0.4);
+    --green: #4ade80;
+    --red: #f87171;
+    --group-header-bg: #273549;
+    --thead-bg: #172033;
+    --sep: #475569;
+    --warn-bg: #422006;
+    --warn-border: #a16207;
+    --warn-text: #fde68a;
+    --shadow: rgba(0,0,0,0.3);
+    --scroll-shadow: rgba(0,0,0,0.45);
+  }
+  .search-input::placeholder { color: var(--text-secondary); }
 }
 *, *::before, *::after { box-sizing: border-box; }
 body {
@@ -853,7 +900,7 @@ body {
 .skip-link:focus {
   left: 8px;
   top: 8px;
-  background: #fff;
+  background: var(--surface);
   padding: 8px 12px;
   z-index: 100;
   border: 2px solid var(--accent);
@@ -862,8 +909,8 @@ body {
 }
 .noscript-warning {
   padding: 16px;
-  background: #fef3c7;
-  border: 1px solid #fbbf24;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
   border-radius: 8px;
   margin-bottom: 16px;
 }
@@ -909,8 +956,8 @@ header .subtitle {
 main { padding: 32px 0 64px; }
 
 .ai-disclaimer {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warn-bg);
+  color: var(--warn-text);
   text-align: center;
   padding: 8px 16px;
   font-size: 0.85rem;
@@ -922,7 +969,7 @@ main { padding: 32px 0 64px; }
   background: var(--surface);
   border-radius: 12px;
   padding: 32px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 .selector-grid {
   display: grid;
@@ -954,14 +1001,18 @@ main { padding: 32px 0 64px; }
   font-size: 1rem;
   outline: none;
   font-family: inherit;
+  background: var(--surface);
+  color: var(--field-text);
 }
-.search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.4); }
+.search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring); }
 .compare-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.product-item:focus-visible { outline: 3px solid var(--accent); outline-offset: -2px; }
+.product-item:focus-visible,
+.product-item.active { outline: 3px solid var(--accent); outline-offset: -2px; }
 /* The selected item has an accent background, so a white inner ring makes the focus ring visible */
-.product-item.selected:focus-visible {
+.product-item.selected:focus-visible,
+.product-item.selected.active {
   outline: none;
-  box-shadow: inset 0 0 0 2px #fff, 0 0 0 3px var(--accent);
+  box-shadow: inset 0 0 0 2px var(--on-accent), 0 0 0 3px var(--accent);
 }
 .product-list {
   border: 1px solid var(--border);
@@ -1000,17 +1051,20 @@ main { padding: 32px 0 64px; }
   padding: 2px 6px;
   border-radius: 4px;
   white-space: nowrap;
-  opacity: 0.6;
-  transition: opacity 0.1s, background 0.1s;
+  transition: background 0.1s;
 }
-.product-item-wrap:hover .specs-link,
-.product-item.selected ~ .specs-link { opacity: 1; }
-.product-item.selected ~ .specs-link { color: #fff; }
-.specs-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; opacity: 1; }
+.product-item.selected ~ .specs-link { color: var(--on-accent); }
+.specs-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .product-item:hover:not(:disabled) { background: var(--accent-light); }
 .product-item.selected {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
+}
+.product-item.selected:hover:not(:disabled) { background: var(--accent-fill-hover); }
+.no-results {
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 .product-item:disabled {
   opacity: 0.5;
@@ -1019,18 +1073,17 @@ main { padding: 32px 0 64px; }
 .product-item .brand { font-weight: 600; }
 .product-item .meta {
   font-size: 0.8rem;
-  /* Keeps a contrast of 5.6:1 on the accent-light hover background (#eff6ff) / 6.53:1 on white */
-  color: #475569;
+  color: var(--text-muted);
   margin-top: 2px;
 }
-.product-item.selected .meta { color: rgba(255,255,255,0.85); }
+.product-item.selected .meta { color: var(--on-accent-muted); }
 .compare-btn-wrap { text-align: center; margin-top: 24px; }
 .compare-btn {
   display: inline-block;
   padding: 14px 40px;
   min-height: 44px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--on-accent);
   border: none;
   border-radius: 8px;
   font-size: 1rem;
@@ -1040,8 +1093,8 @@ main { padding: 32px 0 64px; }
   font-family: inherit;
   transition: background 0.15s;
 }
-.compare-btn:hover { background: #1d4ed8; }
-.compare-btn:disabled { background: #64748b; cursor: not-allowed; }
+.compare-btn:hover { background: var(--accent-fill-hover); }
+.compare-btn:disabled { background: var(--disabled-fill); cursor: not-allowed; }
 .compare-hint {
   margin-top: 8px;
   font-size: 0.85rem;
@@ -1068,7 +1121,7 @@ main { padding: 32px 0 64px; }
   background: var(--surface);
   border-radius: 12px;
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 .product-card h2 {
   font-size: 1.1rem;
@@ -1099,7 +1152,7 @@ main { padding: 32px 0 64px; }
   border-radius: 12px;
   overflow: hidden;
   -webkit-overflow-scrolling: touch;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px var(--shadow);
 }
 .spec-table { width: 100%; border-collapse: collapse; }
 .spec-table .group-header td {
@@ -1139,9 +1192,8 @@ main { padding: 32px 0 64px; }
   white-space: nowrap;
 }
 .spec-table .val-col { width: 36%; }
-.spec-table thead th { background: #f8fafc; }
-/* #94a3b8 is 3.03:1 against white — readable enough for decorative use */
-.spec-table .na { color: #94a3b8; }
+.spec-table thead th { background: var(--thead-bg); }
+.spec-table .na { color: var(--text-secondary); }
 .spec-table .highlight { background: var(--accent-light); font-weight: 600; }
 .spec-table .highlight .hl-mark {
   margin-left: 6px;
@@ -1152,7 +1204,7 @@ main { padding: 32px 0 64px; }
 .spec-table .measure-links a { color: var(--accent); text-decoration: none; white-space: nowrap; }
 .spec-table .measure-links .ext-arrow { font-size: 0.85em; }
 .spec-table .measure-links a:hover { text-decoration: underline; }
-.spec-table .measure-links .sep { color: #cbd5e1; }
+.spec-table .measure-links .sep { color: var(--sep); }
 
 .back-link {
   display: inline-block;
@@ -1167,10 +1219,9 @@ footer {
   text-align: center;
   padding: 32px 0;
   font-size: 0.8rem;
-  /* 6.16:1 contrast on the body bg (#f8f9fa) (meets WCAG AA) */
-  color: #475569;
+  color: var(--text-muted);
 }
-footer a { color: #475569; }
+footer a { color: var(--text-muted); }
 footer a:hover { color: var(--accent); }
 
 @media (max-width: 768px) {
@@ -1181,7 +1232,7 @@ footer a:hover { color: var(--accent); }
   .spec-table .val-col { width: auto; }
   .spec-table-wrap {
     overflow-x: auto;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06), inset -12px 0 8px -8px rgba(0,0,0,0.12);
+    box-shadow: 0 1px 3px var(--shadow), inset -12px 0 8px -8px var(--scroll-shadow);
   }
   .spec-table th.label-col,
   .spec-table thead th:first-child {
@@ -1198,7 +1249,7 @@ footer a:hover { color: var(--accent); }
   padding: 16px 20px;
   background: var(--surface);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px var(--shadow);
   font-size: 0.95rem;
   color: var(--text);
   line-height: 1.7;
@@ -1275,7 +1326,7 @@ footer a:hover { color: var(--accent); }
 }
 .notfound h2 { font-size: 1.4rem; margin: 16px 0 8px; }
 .notfound p { color: var(--text-secondary); }
-.notfound .compare-btn { color: #fff; margin: 16px 0 8px; }
+.notfound .compare-btn { color: var(--on-accent); margin: 16px 0 8px; }
 
 /* Minimizes transitions / animations for users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
@@ -1410,7 +1461,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     lastResults[side] = results;
     if (results.length === 0) {
       // role="presentation" excludes it from the listbox's option count (aria-live announces 0 results separately)
-      el.innerHTML = '<div role="presentation" style="padding:16px;color:#64748b;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
+      el.innerHTML = '<div role="presentation" class="no-results">' + (isJa ? '該当なし' : 'No results') + '</div>';
       activeIdx[side] = -1;
       syncActiveDescendant(side);
       return;
@@ -1457,8 +1508,12 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     const inputEl = document.getElementById('search-' + side);
     const idx = activeIdx[side];
     const results = lastResults[side];
+    const previous = document.querySelector('#list-' + side + ' .product-item.active');
+    if (previous) previous.classList.remove('active');
     if (idx >= 0 && idx < results.length) {
       inputEl.setAttribute('aria-activedescendant', optionId(side, results[idx].slug));
+      const option = document.getElementById(optionId(side, results[idx].slug));
+      if (option) option.classList.add('active');
     } else {
       inputEl.removeAttribute('aria-activedescendant');
     }
@@ -2226,3 +2281,4 @@ export { COLUMNS, diffClass as _diffClass, parseNumeric as _parseNumeric, saniti
 export { safeJsonForScript as _safeJsonForScript, safeJsonForScriptLD as _safeJsonForScriptLD, checkHeaders as _checkHeaders, readXlsx as _readXlsx };
 
 export function _renderMeasurements(val) { return renderMeasurements(val); }
+export { CSS as _CSS };
