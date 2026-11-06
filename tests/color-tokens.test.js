@@ -97,7 +97,8 @@ describe("colour tokens", () => {
   });
 
   test("no colour literal stands outside the token blocks", () => {
-    const rest = CSS.slice(0, lightBlock.start) + CSS.slice(darkMedia.end);
+    const darkBodyStart = darkMedia.start + 1;
+    const rest = CSS.slice(0, lightBlock.start) + CSS.slice(lightBlock.end, darkBodyStart + darkBlock.start) + CSS.slice(darkBodyStart + darkBlock.end);
     const literals = rest.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? [];
     assert.deepEqual(literals, []);
   });
