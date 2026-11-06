@@ -994,6 +994,11 @@ main { padding: 32px 0 64px; }
   background: var(--accent);
   color: #fff;
 }
+.no-results {
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
 .product-item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -1392,7 +1397,7 @@ function indexPage(products, brandGroups, categoryGroups, buildDate) {
     lastResults[side] = results;
     if (results.length === 0) {
       // role="presentation" excludes it from the listbox's option count (aria-live announces 0 results separately)
-      el.innerHTML = '<div role="presentation" style="padding:16px;color:#64748b;font-size:0.9rem">' + (isJa ? '該当なし' : 'No results') + '</div>';
+      el.innerHTML = '<div role="presentation" class="no-results">' + (isJa ? '該当なし' : 'No results') + '</div>';
       activeIdx[side] = -1;
       syncActiveDescendant(side);
       return;
