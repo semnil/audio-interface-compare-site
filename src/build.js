@@ -1173,6 +1173,7 @@ main { padding: 32px 0 64px; }
 .product-card .ext-link:hover { text-decoration: underline; }
 
 .spec-table-wrap {
+  position: relative;
   background: var(--surface);
   border-radius: 12px;
   overflow: hidden;
