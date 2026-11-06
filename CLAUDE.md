@@ -91,6 +91,7 @@ flowchart LR
 
 ### Build invariants
 - A slug collision fails fast at build time with `Error('Slug collision: ...')` (a guard before generating product pages)
+- A header row that does not match `COLUMNS` fails fast at build time with `Error('xlsx header mismatch: ...')` (see "Data source")
 - `BASE_PATH` is normalized by trimming + collapsing consecutive slashes
 - `diffClass` suppresses highlighting unless both sides are numeric (prevents showing a false winner when one side is missing). It is embedded in compare.js and runs on the client
 - Highlighting in the comparison view applies only to items where "the larger number wins" (I/O counts, DR, etc.). Price depends on the buyer's values, so it is not highlighted
@@ -185,7 +186,7 @@ npm run build && npm run preview
 
 `data/audio_interfaces.xlsx` — `build.js` reads the first worksheet (`wb.worksheets[0]`, by index, not by sheet name), header in row 1, data from row 2. The workbook also holds a "Category Summary" sheet the build does not read, so the data sheet must stay first.
 The headers are English names, and columns are identified by matching `COLUMNS[].label` in `build.js` (not the Japanese names).
-A column whose header does not exactly match a `COLUMNS[].label` is skipped, and without an error that column becomes empty for every product (for the Brand / Model columns, every row is skipped).
+The build fails when a header matches no `COLUMNS[].label`, when a label has no header, when a header is repeated, and when the sheet gives no product row (`checkHeaders` and `readXlsx` in `build.js`, `tests/xlsx-header-check.test.js`). Adding a column means adding it to the sheet and to `COLUMNS` together.
 Main columns: Brand, Model, Category, Reference Price (USD), Mic Preamps, Combo Inputs,
 Line Inputs, RCA Input, Hi-Z Inputs, ADAT Input, Optical Ports/S/PDIF (Coax / Optical)/AES Input, Analog Main Output, Analog Line Output,
 RCA Output, Headphone Output, ADAT Output, Optical Ports/S/PDIF (Coax / Optical)/AES Output, Phantom Power, Max Sample Rate,
