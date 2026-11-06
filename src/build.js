@@ -643,6 +643,8 @@ function localizeToJa(enHtml, enHref, jaHref, { hasInlineBase = false } = {}) {
 // not navigator.language. So /ja/ pages are always shown in Japanese even to Googlebot (en locale),
 // and / always stays English (hreflang + the language toggle lead between them).
 // Exposes window.__i18n.apply(root) and also applies the translation to DOM subtrees inserted by compare.js.
+// window.__i18n.syncLangLinks() updates the language links after a URL change that fires no hashchange (history.pushState in compare.js).
+// A language link saves its language when clicked and points at the current query and fragment at all times.
 const I18N_JS = `(function(){
 var isJa=document.documentElement.lang==='ja';
 var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告',extSite:' (外部サイト)'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
@@ -656,9 +658,19 @@ root.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){var k=el.g
 }
 window.__i18n={isJa:isJa,ja:ja,apply:apply};
 apply(document);
-document.querySelectorAll('.lang-toggle').forEach(function(el){
-el.addEventListener('click',function(){try{localStorage.setItem('${LANG_PREF_KEY}',el.getAttribute('hreflang')||'en');}catch(e){}});
-});
+function savePref(lang){try{localStorage.setItem('${LANG_PREF_KEY}',lang);}catch(e){}}
+var langLinkSyncs=[];
+function syncLangLinks(){langLinkSyncs.forEach(function(sync){sync();});}
+function wireLangLink(el){
+var base=el.getAttribute('href');
+function sync(){el.href=base+location.search+location.hash;}
+langLinkSyncs.push(sync);
+sync();
+el.addEventListener('click',function(){savePref(el.getAttribute('hreflang')||'en');sync();});
+}
+window.__i18n.syncLangLinks=syncLangLinks;
+window.addEventListener('hashchange',syncLangLinks);
+document.querySelectorAll('.lang-toggle').forEach(wireLangLink);
 })();`;
 
 // ─── Client-side compare renderer (dist/compare.js) ─────────────────────
@@ -784,6 +796,7 @@ document.addEventListener('click',function(e){
   if(t&&compareView()&&!compareView().hidden){
     e.preventDefault();
     history.pushState(null,'',PAGE_BASE);
+    if(window.__i18n)window.__i18n.syncLangLinks();
     showSelector();
     var first=document.getElementById('search-a');if(first)first.focus();
   }
