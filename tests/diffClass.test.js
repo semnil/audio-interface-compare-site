@@ -47,32 +47,48 @@ describe("diffClass: higherBetter keys", () => {
   });
 });
 
-describe("diffClass: THD+N / EIN are excluded from highlighting", () => {
-  // THD+N / EIN have no fixed string format, so they are excluded from highlighting
-  test("thdnMic is excluded from highlighting", () => {
+describe("diffClass: THD+N / EIN highlight the lower number", () => {
+  test("thdnMic: the more negative dB figure wins (side A)", () => {
     assert.deepEqual(
       diffClass("thdnMic", "-103.1dB (0.00070%)", "-92.0dB (0.0025%)"),
-      ["", ""]
+      [" highlight", ""]
     );
   });
 
-  test("thdnOut is excluded from highlighting", () => {
+  test("thdnOut: the more negative dB figure wins (side B)", () => {
     assert.deepEqual(
       diffClass("thdnOut", "-88.0dB (0.0040%)", "-95.0dB (0.0018%)"),
-      ["", ""]
+      ["", " highlight"]
     );
   });
 
-  test("einA is excluded from highlighting", () => {
-    assert.deepEqual(diffClass("einA", -130, -128), ["", ""]);
+  test("thdnUnknown: the more negative dB figure wins (side A)", () => {
+    assert.deepEqual(diffClass("thdnUnknown", "-95.0dB (0.0018%)", "-88.0dB (0.0040%)"), [" highlight", ""]);
   });
 
-  test("einUnknown is excluded from highlighting", () => {
-    assert.deepEqual(diffClass("einUnknown", -125, -130), ["", ""]);
+  test("THD+N: the same dB figure written differently is a tie", () => {
+    assert.deepEqual(diffClass("thdnMic", "-94.0dB (0.00200%)", "-94dB (0.002%)"), ["", ""]);
   });
 
-  test("thdnUnknown is excluded from highlighting", () => {
-    assert.deepEqual(diffClass("thdnUnknown", "-95.0dB (0.0018%)", "-88.0dB (0.0040%)"), ["", ""]);
+  test("einA: the more negative number wins (side A)", () => {
+    assert.deepEqual(diffClass("einA", -130, -128), [" highlight", ""]);
+  });
+
+  test("einUnknown: the more negative number wins (side B)", () => {
+    assert.deepEqual(diffClass("einUnknown", -125, -130), ["", " highlight"]);
+  });
+
+  test("EIN: a number and the same number as text are a tie", () => {
+    assert.deepEqual(diffClass("einA", -128, "-128"), ["", ""]);
+  });
+
+  test("EIN: a text cell compares with a number cell", () => {
+    assert.deepEqual(diffClass("einA", "-127.5", -129), ["", " highlight"]);
+  });
+
+  test("a missing side is never the better one", () => {
+    assert.deepEqual(diffClass("thdnMic", "", "-92.0dB (0.0025%)"), ["", ""]);
+    assert.deepEqual(diffClass("einA", -128, null), ["", ""]);
   });
 });
 
