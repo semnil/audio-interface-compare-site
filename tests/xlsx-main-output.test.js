@@ -34,7 +34,7 @@ describe("xlsx: Analog Main Output counts only the main L/R pair", () => {
 
   // Rows whose two or more analog line outputs are not a main L/R pair: Brand + Model -> what the outputs are
   const NOT_A_MAIN_PAIR = new Map([
-    ["Maono\tMaonocaster E2", "a 3.5mm line out and a 3.5mm TRRS stream out to a phone, two separate stereo jacks"],
+    ["Maono\tMaonocaster E2", "a 3.5mm monitor out and two 3.5mm TRRS stream outs to a phone, three separate stereo jacks"],
     ["Roland\tBridge Cast", "one stereo line jack and a smartphone TRRS jack"],
     ["Roland\tBridge Cast One", "one stereo line jack and a smartphone TRRS jack"],
     ["Roland\tBridge Cast X", "one stereo line jack and a smartphone TRRS jack"],
