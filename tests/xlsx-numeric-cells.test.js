@@ -49,4 +49,34 @@ describe("xlsx: type contract for columns that should always be numeric", () => 
     });
     assert.equal(offenders.length, 0, `cells that are text instead of numbers:\n  ${offenders.join("\n  ")}`);
   });
+
+  test("the THD+N and EIN cells have the form the lower-is-better highlight reads", async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(DATA);
+    const ws = wb.worksheets[0];
+    const hdr = [];
+    ws.getRow(1).eachCell((c, n) => { hdr[n] = String(c.value).trim(); });
+    const forms = {
+      "THD+N Mic Input (dB(%), 1kHz)": /^-\d+(\.\d+)?dB \(\d+(\.\d+)?%\)$/,
+      "THD+N Output (dB(%), 1kHz)": /^-\d+(\.\d+)?dB \(\d+(\.\d+)?%\)$/,
+      "THD+N (dB(%), Unknown)": /^-\d+(\.\d+)?dB \(\d+(\.\d+)?%\)$/,
+      "EIN (dBu, A-weighted)": /^-\d+(\.\d+)?$/,
+      "EIN (dBu, Unknown)": /^-\d+(\.\d+)?$/,
+    };
+    const offenders = [];
+    let read = 0;
+    for (const [name, form] of Object.entries(forms)) {
+      const col = hdr.indexOf(name);
+      assert.ok(col > 0, `column not found: ${name}`);
+      ws.eachRow((row, i) => {
+        if (i === 1) return;
+        const v = row.getCell(col).value;
+        if (v === null || v === undefined || v === "") return;
+        read++;
+        if (!form.test(String(v))) offenders.push(`${row.getCell(1).value} ${row.getCell(2).value} | ${name} = ${JSON.stringify(v)}`);
+      });
+    }
+    assert.ok(read > 0, "no THD+N or EIN cell was read");
+    assert.equal(offenders.length, 0, `cells in another form:\n  ${offenders.join("\n  ")}`);
+  });
 });

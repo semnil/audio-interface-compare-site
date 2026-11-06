@@ -75,6 +75,9 @@ describe("compare.js: client comparison renderer", { skip: !distExists ? "dist/ 
       ["gainRange", "0 to +60", "-5 to +60"],
       ["price", 100, 200],
       ["drIn", "116", "120"],
+      ["thdnMic", "-103.1dB (0.00070%)", "-92.0dB (0.0025%)"],
+      ["thdnUnknown", "-89dB (0.0005%)", "-94.0dB (0.00200%)"],
+      ["einA", -125, -130],
     ];
     for (const [key, a, b] of diffCases) {
       assert.deepEqual(embedded.diffClass(key, a, b), _diffClass(key, a, b), `diffClass(${key}, ${a}, ${b}) does not match`);

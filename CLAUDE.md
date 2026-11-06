@@ -94,7 +94,7 @@ flowchart LR
 - A header row that does not match `COLUMNS` fails fast at build time with `Error('xlsx header mismatch: ...')` (see "Data source")
 - `BASE_PATH` is normalized by trimming + collapsing consecutive slashes
 - `diffClass` suppresses highlighting unless both sides are numeric (prevents showing a false winner when one side is missing). It is embedded in compare.js and runs on the client
-- Highlighting in the comparison view applies only to items where "the larger number wins" (I/O counts, DR, etc.). Price depends on the buyer's values, so it is not highlighted
+- Highlighting in the comparison view applies where a number wins: the larger one for I/O counts, sample rate, bit depth, gain range and DR, and the lower one for THD+N (its dB figure) and EIN. Two THD+N cells whose dB and percent figures rank them in opposite orders mark neither side. `tests/xlsx-numeric-cells.test.js` checks that the THD+N and EIN cells have the form this reads. Price depends on the buyer's values, so it is not highlighted
 - Numeric range strings are compared by the average of both ends. The canonical form is the signed `"x to y"` (`"-18 to +70"` / `"+10 to +65"` / `"0 to +60"`); the parser also accepts the old forms (`"0-65"` / `"-18-65"`)
 - The spec summary sentence on product pages (`specSummary`) is generated only from existing xlsx data (never filled in by guessing)
 - og images keep the order "draw every canvas → `encode("jpeg")` all at once" per batch (8 items), and must not be rewritten into sequential awaits (a constraint of @napi-rs/canvas on darwin arm64. The global conventions' 「開発環境」)

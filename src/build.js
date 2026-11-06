@@ -699,12 +699,14 @@ var PAGE_BASE=(location.pathname.indexOf(ROOT_BASE+'ja/')===0)?ROOT_BASE+'ja/':R
 var GROUPS=${safeJsonForScript(SPEC_GROUPS)};
 var LABELS=${safeJsonForScript(KEY_LABELS)};
 var HIGHER_BETTER=new Set(${safeJsonForScript([...HIGHER_BETTER])});
+var LOWER_BETTER=new Set(${safeJsonForScript([...LOWER_BETTER])});
 var RANGE_RE=${RANGE_RE.toString()};
 ${escapeHtml.toString()}
 ${sanitizeUrl.toString()}
 ${displayValue.toString()}
 ${renderMeasurements.toString()}
 ${parseNumeric.toString()}
+${percentFigure.toString()}
 ${diffClass.toString()}
 ${fmtPrice.toString()}
 ${cellFor.toString()}
@@ -1686,18 +1688,28 @@ function parseNumeric(val) {
   return parseFloat(s);
 }
 
-// THD+N and EIN are lower-is-better but use string formats; skip highlighting
 // Price: not highlighted (preference depends on buyer)
 const HIGHER_BETTER = new Set(["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
   "mainOut", "lineOut", "rcaOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
   "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"]);
+// The more negative number wins. A THD+N cell reads "-94.0dB (0.00200%)", and parseNumeric takes its dB figure
+const LOWER_BETTER = new Set(["thdnMic", "thdnOut", "thdnUnknown", "einA", "einUnknown"]);
+// The percent figure of a THD+N cell, or NaN for a cell without one
+function percentFigure(val) {
+  const m = String(val).match(/\(([\d.]+)%\)/);
+  return m ? parseFloat(m[1]) : NaN;
+}
 function diffClass(key, valA, valB) {
-  if (!HIGHER_BETTER.has(key)) return ["", ""];
+  const higherWins = HIGHER_BETTER.has(key);
+  if (!higherWins && !LOWER_BETTER.has(key)) return ["", ""];
   const nA = parseNumeric(valA), nB = parseNumeric(valB);
   // If either side is NaN it is not compared (a missing value is never treated as "better")
   if (isNaN(nA) || isNaN(nB)) return ["", ""];
   if (nA === nB) return ["", ""];
-  return nA > nB ? [" highlight", ""] : ["", " highlight"];
+  // Two cells whose dB and percent figures rank them in opposite orders mark neither side
+  const pA = percentFigure(valA), pB = percentFigure(valB);
+  if (pA !== pB && !isNaN(pA) && !isNaN(pB) && (nA < nB) !== (pA < pB)) return ["", ""];
+  return (nA > nB) === higherWins ? [" highlight", ""] : ["", " highlight"];
 }
 
 // ─── Spec summary (machine-generated, data-driven) ─────────────────────────
