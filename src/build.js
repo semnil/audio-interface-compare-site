@@ -559,6 +559,9 @@ async function readXlsx(file = DATA_FILE) {
 // Storage key for the language choice. semnil.github.io shares one origin between projects, so it is namespaced
 const LANG_PREF_KEY = "aicmp-lang";
 
+// The browser language test shared by the first-visit redirect and the notice on /ja/ pages
+const NAVIGATOR_IS_JA = "/^ja\\b/.test(navigator.language)";
+
 // Language redirect on the first visit (English pages only, asymmetric).
 // When there is no saved choice and navigator.language is ja, location.replace to the same path under /ja/.
 // It does not fire on the /ja/ side: sending Googlebot (en locale) to / when it renders /ja/
@@ -571,7 +574,7 @@ if(document.documentElement.lang==='ja')return;
 var BP = ${JSON.stringify(BASE_PATH)};
 if(location.pathname.indexOf(BP+'ja/')===0)return;
 var pref=null;try{pref=localStorage.getItem(${JSON.stringify(LANG_PREF_KEY)});}catch(e){}
-if(pref==='ja'||(!pref&&/^ja\\b/.test(navigator.language)))
+if(pref==='ja'||(!pref&&${NAVIGATOR_IS_JA}))
 location.replace(BP+'ja/'+location.pathname.slice(BP.length)+location.search+location.hash);
 })();</script>`;
 }
@@ -680,6 +683,10 @@ function localizeToJa(enHtml, enHref, jaHref, { hasInlineBase = false } = {}) {
 // not navigator.language. So /ja/ pages are always shown in Japanese even to Googlebot (en locale),
 // and / always stays English (hreflang + the language toggle lead between them).
 // Exposes window.__i18n.apply(root) and also applies the translation to DOM subtrees inserted by compare.js.
+// window.__i18n.syncLangLinks() updates the language links after a URL change that fires no hashchange (history.pushState in compare.js).
+// A language link saves its language when clicked and points at the current query and fragment at all times.
+// On a /ja/ page with no saved choice and a browser language other than ja, a notice above the header links to
+// the English page. It never moves the visitor by itself. "Keep Japanese" saves ja and removes the notice.
 const I18N_JS = `(function(){
 var isJa=document.documentElement.lang==='ja';
 var ja=Object.assign({aiDisclaimer:'スペック情報は AI を活用して収集しており、誤りが含まれる可能性があります。正確な情報は各メーカー公式サイトをご確認ください。',backLink:'← 製品選択に戻る',noPrice:'価格情報なし',productPage:'公式製品ページ →',specLabel:'スペック項目',reportIssue:'問題を報告',extSite:' (外部サイト)'},typeof PAGE_JA!=='undefined'?PAGE_JA:{});
@@ -693,9 +700,49 @@ root.querySelectorAll('[data-i18n-placeholder]').forEach(function(el){var k=el.g
 }
 window.__i18n={isJa:isJa,ja:ja,apply:apply};
 apply(document);
-document.querySelectorAll('.lang-toggle').forEach(function(el){
-el.addEventListener('click',function(){try{localStorage.setItem('${LANG_PREF_KEY}',el.getAttribute('hreflang')||'en');}catch(e){}});
-});
+function savePref(lang){try{localStorage.setItem('${LANG_PREF_KEY}',lang);}catch(e){}}
+var langLinkSyncs=[];
+function syncLangLinks(){langLinkSyncs.forEach(function(sync){sync();});}
+function wireLangLink(el){
+var base=el.getAttribute('href');
+function sync(){el.href=base+location.search+location.hash;}
+langLinkSyncs.push(sync);
+sync();
+el.addEventListener('click',function(){savePref(el.getAttribute('hreflang')||'en');sync();});
+}
+window.__i18n.syncLangLinks=syncLangLinks;
+window.addEventListener('hashchange',syncLangLinks);
+var pref=null;try{pref=localStorage.getItem('${LANG_PREF_KEY}');}catch(e){}
+var toggle=document.querySelector('.lang-toggle');
+var header=document.querySelector('header');
+if(isJa&&!pref&&!${NAVIGATOR_IS_JA}&&toggle&&header){
+var bar=document.createElement('section');
+bar.className='lang-notice';
+bar.lang='en';
+bar.setAttribute('aria-label','Language');
+bar.setAttribute('data-nosnippet','');
+var msg=document.createElement('span');
+msg.textContent='This page is in Japanese.';
+var link=document.createElement('a');
+link.className='lang-notice-action';
+link.setAttribute('href',toggle.getAttribute('href'));
+link.setAttribute('hreflang','en');
+link.textContent='View in English';
+wireLangLink(link);
+var keep=document.createElement('button');
+keep.type='button';
+keep.className='lang-notice-action';
+keep.textContent='Keep Japanese';
+keep.addEventListener('click',function(){savePref('ja');bar.remove();toggle.focus();});
+var actions=document.createElement('div');
+actions.className='lang-notice-actions';
+actions.appendChild(link);
+actions.appendChild(keep);
+bar.appendChild(msg);
+bar.appendChild(actions);
+header.parentNode.insertBefore(bar,header);
+}
+document.querySelectorAll('.lang-toggle').forEach(wireLangLink);
 })();`;
 
 // ─── Client-side compare renderer (dist/compare.js) ─────────────────────
@@ -823,6 +870,7 @@ document.addEventListener('click',function(e){
   if(t&&compareView()&&!compareView().hidden){
     e.preventDefault();
     history.pushState(null,'',PAGE_BASE);
+    if(window.__i18n&&window.__i18n.syncLangLinks)window.__i18n.syncLangLinks();
     showSelector();
     var first=document.getElementById('search-a');if(first)first.focus();
   }
@@ -968,6 +1016,39 @@ header h1 a {
 }
 .lang-toggle:hover { border-color: var(--accent); background: var(--accent-light); }
 .lang-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.lang-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  padding: 8px 20px;
+  background: var(--accent-light);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.88rem;
+}
+.lang-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 12px;
+}
+.lang-notice-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.lang-notice-action:hover { background: var(--accent-light); }
+.lang-notice-action:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 header .subtitle {
   font-size: 0.85rem;
   color: var(--text-secondary);
