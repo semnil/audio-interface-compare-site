@@ -85,6 +85,34 @@ function runPage({ lang = "ja", language = "en-US", pref = null, storageThrows =
   return { body, header, toggle, bar, store, moves, location, window, changeHash, link: inBar("a"), keep: inBar("button"), message: inBar("span") };
 }
 
+// Runs dist/compare.js with an open comparison and clicks its back link
+function clickBackLink(i18n, events = []) {
+  const listeners = {};
+  const views = {
+    "selector-view": { hidden: true },
+    "compare-view": { hidden: false, innerHTML: "" },
+    "search-a": { focused: false, focus() { this.focused = true; } },
+  };
+  const pushed = [];
+  vm.runInNewContext(readFileSync(join(DIST, "compare.js"), "utf8"), {
+    location: { hash: "", pathname: "/", search: "" },
+    history: { pushState(state, title, url) { pushed.push(url); events.push("pushState"); } },
+    fetch: () => Promise.reject(new Error("not needed")),
+    window: { addEventListener() {}, scrollTo() {}, __i18n: i18n },
+    document: {
+      addEventListener(type, fn) { listeners[type] = fn; },
+      getElementById: (id) => views[id] || null,
+      documentElement: { lang: "en" },
+      title: "",
+    },
+    URLSearchParams,
+  });
+  views["compare-view"].hidden = false;
+  views["selector-view"].hidden = true;
+  listeners.click({ target: { closest: (selector) => (selector === ".back-link" ? {} : null) }, preventDefault() {} });
+  return { views, pushed };
+}
+
 describe("language links", { skip: !distExists ? "dist/ not built" : false }, () => {
   test("the toggle in both directions saves its language and carries the query and fragment", () => {
     const ja = runPage({ pref: "ja", search: "?q=1", hash: "#a=x&b=y" });
@@ -106,13 +134,29 @@ describe("language links", { skip: !distExists ? "dist/ not built" : false }, ()
     assert.equal(page.toggle.href, "/products/x/");
   });
 
-  test("syncLangLinks updates the toggle after a URL change that fires no hashchange, and compare.js calls it after pushState", () => {
+  test("syncLangLinks updates the toggle after a URL change that fires no hashchange", () => {
     const page = runPage({ pref: "ja", hash: "#a=x&b=y" });
     page.location.hash = "";
     page.window.__i18n.syncLangLinks();
     assert.equal(page.toggle.href, "/products/x/");
-    const compare = readFileSync(join(DIST, "compare.js"), "utf8");
-    assert.match(compare, /history\.pushState\(null,'',PAGE_BASE\);\s*if\(window\.__i18n\)window\.__i18n\.syncLangLinks\(\);/);
+  });
+
+  test("the back link of a comparison syncs the language links after its pushState", () => {
+    const events = [];
+    const { views, pushed } = clickBackLink({ isJa: false, apply() {}, syncLangLinks() { events.push("sync"); } }, events);
+    assert.deepEqual(pushed, ["/"]);
+    assert.deepEqual(events, ["pushState", "sync"]);
+    assert.equal(views["compare-view"].hidden, true);
+    assert.equal(views["selector-view"].hidden, false);
+    assert.equal(views["search-a"].focused, true);
+  });
+
+  test("the back link still closes the comparison when a cached i18n.js has no syncLangLinks", () => {
+    const { views, pushed } = clickBackLink({ isJa: false, apply() {} });
+    assert.deepEqual(pushed, ["/"]);
+    assert.equal(views["compare-view"].hidden, true);
+    assert.equal(views["selector-view"].hidden, false);
+    assert.equal(views["search-a"].focused, true);
   });
 
   test("a click uses the current fragment even when no hashchange reported it, and does not stack it", () => {

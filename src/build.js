@@ -831,7 +831,7 @@ document.addEventListener('click',function(e){
   if(t&&compareView()&&!compareView().hidden){
     e.preventDefault();
     history.pushState(null,'',PAGE_BASE);
-    if(window.__i18n)window.__i18n.syncLangLinks();
+    if(window.__i18n&&window.__i18n.syncLangLinks)window.__i18n.syncLangLinks();
     showSelector();
     var first=document.getElementById('search-a');if(first)first.focus();
   }
