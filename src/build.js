@@ -721,9 +721,9 @@ function renderCompare(a,b){
     +'<div class="compare-header">'+card(a)+card(b)+'</div>'
     +'<div class="spec-table-wrap"><table class="spec-table">'
     +'<caption class="sr-only">Audio interface spec comparison: '+escapeHtml(a.displayName)+' vs '+escapeHtml(b.displayName)+'</caption>'
-    +'<thead><tr><th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>'
-    +'<th scope="col" class="val-col" style="font-weight:700">'+escapeHtml(a.displayName)+'</th>'
-    +'<th scope="col" class="val-col" style="font-weight:700">'+escapeHtml(b.displayName)+'</th></tr></thead>'
+    +'<thead><tr><th scope="col" class="label-col" data-i18n="specLabel">Spec</th>'
+    +'<th scope="col" class="val-col">'+escapeHtml(a.displayName)+'</th>'
+    +'<th scope="col" class="val-col">'+escapeHtml(b.displayName)+'</th></tr></thead>'
     +'<tbody>'+buildRows(a,b)+'</tbody></table></div>';
 }
 var DATA=null,loading=null;
@@ -887,6 +887,10 @@ header .subtitle {
   font-size: 0.85rem;
   color: var(--text-secondary);
   margin-top: 2px;
+}
+header .subtitle a {
+  color: inherit;
+  text-decoration: none;
 }
 main { padding: 32px 0 64px; }
 
@@ -1057,6 +1061,7 @@ main { padding: 32px 0 64px; }
   padding: 24px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
+.product-card-single { margin-bottom: 32px; }
 .product-card h2 {
   font-size: 1.1rem;
   margin: 0 0 4px;
@@ -1125,6 +1130,8 @@ main { padding: 32px 0 64px; }
   text-align: left;
   white-space: nowrap;
 }
+.spec-table thead th.label-col,
+.spec-table thead th.val-col { font-weight: 700; }
 .spec-table .val-col { width: 36%; }
 .spec-table thead th { background: #f8fafc; }
 /* #94a3b8 is 3.03:1 against white — readable enough for decorative use */
@@ -1823,7 +1830,7 @@ function productPage(product, allProducts, buildDate) {
   <div class="container header-bar">
     <div>
       <h1>${escapeHtml(product.displayName)} Specs</h1>
-      <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
+      <div class="subtitle"><a href="${BASE_PATH}">Audio Interface Comparator</a> — <span data-i18n="subtitleProduct">${allProducts.length} products covered</span></div>
     </div>
     ${langToggle(`${BASE_PATH}ja/products/${product.slug}/`, "ja")}
   </div>
@@ -1832,7 +1839,7 @@ function productPage(product, allProducts, buildDate) {
   <div class="container">
     <a class="back-link" href="${BASE_PATH}" data-i18n="backLink">← Back to product selection</a>
 
-    <div class="product-card" style="margin-bottom:32px">
+    <div class="product-card product-card-single">
       <div class="cat">${escapeHtml(product.category || "")}</div>
       ${priceStr ? `<div class="price">${escapeHtml(priceStr)}</div>` : '<div class="price no-price" data-i18n="noPrice">No price info</div>'}
       ${extUrl ? `<a class="ext-link" href="${escapeHtml(extUrl)}" target="_blank" rel="noopener noreferrer" data-i18n="productPage">Official product page →</a>` : ""}
@@ -1845,8 +1852,8 @@ function productPage(product, allProducts, buildDate) {
         <caption class="sr-only">Audio interface specs: ${escapeHtml(product.displayName)}</caption>
         <thead>
           <tr>
-            <th scope="col" class="label-col" style="font-weight:700" data-i18n="specLabel">Spec</th>
-            <th scope="col" class="val-col" style="font-weight:700">${escapeHtml(product.displayName)}</th>
+            <th scope="col" class="label-col" data-i18n="specLabel">Spec</th>
+            <th scope="col" class="val-col">${escapeHtml(product.displayName)}</th>
           </tr>
         </thead>
         <tbody>
@@ -1924,7 +1931,7 @@ function hubPage(kind, name, slug, items, totalProducts, buildDate) {
   <div class="container header-bar">
     <div>
       <h1 data-i18n="hubTitle">${escapeHtml(titleEn)}</h1>
-      <div class="subtitle"><a href="${BASE_PATH}" style="color:inherit;text-decoration:none">Audio Interface Comparator</a> — <span data-i18n="hubCount">${items.length} of ${totalProducts} products</span></div>
+      <div class="subtitle"><a href="${BASE_PATH}">Audio Interface Comparator</a> — <span data-i18n="hubCount">${items.length} of ${totalProducts} products</span></div>
     </div>
     ${langToggle(`${BASE_PATH}ja/${dir}/${slug}/`, "ja")}
   </div>
