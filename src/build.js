@@ -1040,6 +1040,7 @@ main { padding: 32px 0 64px; }
   background: var(--accent-fill);
   color: var(--on-accent);
 }
+.product-item.selected:hover:not(:disabled) { background: var(--accent-fill-hover); }
 .no-results {
   padding: 16px;
   color: var(--text-secondary);

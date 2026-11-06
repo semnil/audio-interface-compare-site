@@ -82,6 +82,7 @@ const PAIRS = [
   ["--on-accent", "--accent-fill-hover", 4.5],
   ["--on-accent", "--disabled-fill", 4.5],
   ["--on-accent-muted", "--accent-fill", 4.5],
+  ["--on-accent-muted", "--accent-fill-hover", 4.5],
   ["--warn-text", "--warn-bg", 4.5],
   ["--green", "--accent-light", 3],
 ];
@@ -101,6 +102,10 @@ describe("colour tokens", () => {
     const rest = CSS.slice(0, lightBlock.start) + CSS.slice(lightBlock.end, darkBodyStart + darkBlock.start) + CSS.slice(darkBodyStart + darkBlock.end);
     const literals = rest.match(/#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)/g) ?? [];
     assert.deepEqual(literals, []);
+  });
+
+  test("a selected row keeps an accent fill under the pointer, where its text stays light", () => {
+    assert.match(CSS, /\.product-item\.selected:hover:not\(:disabled\)\s*\{\s*background:\s*var\(--accent-fill-hover\);/);
   });
 
   test("every var() names a defined token", () => {
