@@ -982,13 +982,10 @@ main { padding: 32px 0 64px; }
   padding: 2px 6px;
   border-radius: 4px;
   white-space: nowrap;
-  opacity: 0.6;
-  transition: opacity 0.1s, background 0.1s;
+  transition: background 0.1s;
 }
-.product-item-wrap:hover .specs-link,
-.product-item.selected ~ .specs-link { opacity: 1; }
 .product-item.selected ~ .specs-link { color: #fff; }
-.specs-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; opacity: 1; }
+.specs-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .product-item:hover:not(:disabled) { background: var(--accent-light); }
 .product-item.selected {
   background: var(--accent);
@@ -1010,7 +1007,7 @@ main { padding: 32px 0 64px; }
   color: #475569;
   margin-top: 2px;
 }
-.product-item.selected .meta { color: rgba(255,255,255,0.85); }
+.product-item.selected .meta { color: rgba(255,255,255,0.92); }
 .compare-btn-wrap { text-align: center; margin-top: 24px; }
 .compare-btn {
   display: inline-block;
@@ -1127,8 +1124,7 @@ main { padding: 32px 0 64px; }
 }
 .spec-table .val-col { width: 36%; }
 .spec-table thead th { background: #f8fafc; }
-/* #94a3b8 is 3.03:1 against white — readable enough for decorative use */
-.spec-table .na { color: #94a3b8; }
+.spec-table .na { color: var(--text-secondary); }
 .spec-table .highlight { background: var(--accent-light); font-weight: 600; }
 .spec-table .highlight .hl-mark {
   margin-left: 6px;
