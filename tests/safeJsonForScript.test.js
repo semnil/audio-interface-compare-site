@@ -1,16 +1,9 @@
 // tests/safeJsonForScript.test.js
-// Contract tests for build.js safeJsonForScript (src/build.js:149-154)
+// Contract tests for build.js safeJsonForScript
 // Guards against script escape / U+2028/U+2029 when embedding JSON in an inline script
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as build.js:149-154
-function safeJsonForScript(obj) {
-  return JSON.stringify(obj)
-    .replace(/</g, "\\u003c")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
+import { _safeJsonForScript as safeJsonForScript } from "../src/build.js";
 
 describe("safeJsonForScript: round trip of ordinary values", () => {
   test("an ordinary alphanumeric object can be passed to JSON.parse", () => {
@@ -109,7 +102,7 @@ describe("safeJsonForScript: coverage of the escape order", () => {
 
 describe("safeJsonForScript: real-use scenario inside an inline script", () => {
   test("no escape occurs with the <script>const PRODUCTS = {JSON};</script> pattern", () => {
-    // Reproduces the inline expansion pattern of build.js:767-768
+    // Reproduces the inline expansion pattern of indexPage in build.js
     const products = [
       { slug: "x", brand: "</script><script>alert(1)</script>", model: "y" },
     ];

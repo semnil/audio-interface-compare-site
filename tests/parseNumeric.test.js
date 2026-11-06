@@ -1,30 +1,8 @@
 // tests/parseNumeric.test.js
 // Boundary tests for range-string parsing in build.js parseNumeric / diffClass
-// Importing src/build.js would run build(), so
-// this file redefines the parseNumeric / diffClass logic inline
-// (diffClass.test.js uses import, but this file focuses on boundary coverage and avoids side effects)
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as build.js parseNumeric (a range string returns the mean of both ends)
-function parseNumeric(val) {
-  const s = String(val).trim();
-  const rangeMatch = s.match(/^([+-]?\d+(?:\.\d+)?)\s*(?:[-\u2013]|to\s)\s*([+-]?\d+(?:\.\d+)?)$/i);
-  if (rangeMatch) return (parseFloat(rangeMatch[1]) + parseFloat(rangeMatch[2])) / 2;
-  return parseFloat(s);
-}
-
-// Same logic as build.js diffClass (no comparison if either side is NaN)
-function diffClass(key, valA, valB) {
-  const higherBetter = ["micPre", "comboIn", "lineIn", "rcaIn", "hiZ", "adatIn", "opticalIn", "spdifCoaxIn", "spdifOptIn", "aesIn",
-    "mainOut", "lineOut", "rcaOut", "hpOut", "adatOut", "opticalOut", "spdifCoaxOut", "spdifOptOut", "aesOut",
-    "sampleRate", "bitDepth", "gainRange", "drIn", "drOut", "drUnknown"];
-  if (!higherBetter.includes(key)) return ["", ""];
-  const nA = parseNumeric(valA), nB = parseNumeric(valB);
-  if (isNaN(nA) || isNaN(nB)) return ["", ""];
-  if (nA === nB) return ["", ""];
-  return nA > nB ? [" highlight", ""] : ["", " highlight"];
-}
+import { _diffClass as diffClass } from "../src/build.js";
 
 describe("parseNumeric: range string boundaries (via diffClass:gainRange)", () => {
   test("range string '0-65' is treated as its mean 32.5", () => {

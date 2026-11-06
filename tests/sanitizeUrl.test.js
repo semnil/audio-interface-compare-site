@@ -1,22 +1,8 @@
 // tests/sanitizeUrl.test.js
-// Boundary and contract tests for build.js sanitizeUrl (src/build.js:157-160)
-// src/ must not be changed, so equivalent logic is reproduced inline
+// Boundary and contract tests for build.js sanitizeUrl
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same logic as build.js sanitizeUrl (built on new URL(), allows only http/https)
-function sanitizeUrl(u) {
-  if (u == null) return "";
-  const s = String(u).trim();
-  if (!s) return "";
-  try {
-    const parsed = new URL(s);
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.href;
-    return "";
-  } catch (_) {
-    return "";
-  }
-}
+import { _sanitizeUrl as sanitizeUrl } from "../src/build.js";
 
 describe("sanitizeUrl: normal cases (http/https schemes)", () => {
   test("a URL starting with https:// is returned normalized", () => {

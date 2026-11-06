@@ -49,7 +49,7 @@ describe("WAI-ARIA combobox contract of index.html (Rounds 4-6 regression)", { s
 
   test("the option template of renderList adds tabindex=\"-1\" (the listbox is not focusable)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // The innerHTML template at build.js line 847
+    // The innerHTML template of renderList in build.js
     assert.ok(
       /role="option" class="product-item[^"]*" id="' \+ optionId\(side, p\.slug\) \+ '" tabindex="-1"/.test(html),
       "the product-item template has no tabindex=\"-1\""
@@ -75,7 +75,7 @@ describe("WAI-ARIA combobox contract of index.html (Rounds 4-6 regression)", { s
 
   test("the 'No results'/'該当なし' placeholder for 0 results has role=\"presentation\" (excluded from the listbox option count)", () => {
     html = readFileSync(INDEX_PATH, "utf8");
-    // build.js line 835
+    // The empty-result branch of renderList in build.js
     assert.ok(
       /role="presentation"[^>]*>' \+ \(isJa \? '該当なし' : 'No results'\)/.test(html),
       "the placeholder for 0 results has no role=\"presentation\""

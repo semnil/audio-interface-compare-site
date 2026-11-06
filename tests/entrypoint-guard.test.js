@@ -1,5 +1,5 @@
 // tests/entrypoint-guard.test.js
-// Checks the entrypoint guard added by the L1 fix of build.js (src/build.js:1104)
+// Checks the entrypoint guard of build.js
 // Confirms that build() does not run automatically when imported from tests,
 // and states the known compatibility constraint on Windows.
 import { test, describe } from "node:test";

@@ -1,18 +1,8 @@
 // tests/basePath.test.js
 // Boundary-value checks for the BASE_PATH normalization logic of build.js
-// Importing src/build.js runs build(), so the logic is redefined inline
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-
-// Same as the BASE_PATH computation logic of build.js (src/build.js:32-39)
-function normalizeBasePath(envValue) {
-  let bp = (envValue || "/").trim();
-  if (bp === "") bp = "/";
-  if (!bp.endsWith("/")) bp += "/";
-  if (!bp.startsWith("/")) bp = "/" + bp;
-  bp = bp.replace(/\/+/g, "/");
-  return bp;
-}
+import { _normalizeBasePath as normalizeBasePath } from "../src/build.js";
 
 describe("BASE_PATH normalization: normal cases", () => {
   test("unset (undefined) -> '/'", () => {

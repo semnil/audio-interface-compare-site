@@ -91,6 +91,7 @@ flowchart LR
 
 ### Build invariants
 - A slug collision fails fast at build time with `Error('Slug collision: ...')` (a guard before generating product pages)
+- A header row that does not match `COLUMNS` fails fast at build time with `Error('xlsx header mismatch: ...')` (see "Data source")
 - `BASE_PATH` is normalized by trimming + collapsing consecutive slashes
 - `diffClass` suppresses highlighting unless both sides are numeric (prevents showing a false winner when one side is missing). It is embedded in compare.js and runs on the client
 - Highlighting in the comparison view applies only to items where "the larger number wins" (I/O counts, DR, etc.). Price depends on the buyer's values, so it is not highlighted
@@ -141,8 +142,7 @@ flowchart LR
 ### Test infrastructure
 - `tests/*.test.js` run with `node:test` + `node:assert`
 - The test script in `package.json` runs serially with `--test-concurrency=1` (together with the build.js import-time side-effect guard)
-- `src/build.js` exports only `_slugify` / `_escapeHtml` / `_diffClass` / `_renderMeasurements` / `COLUMNS` at its end. The tests that import them are `diffClass.test.js` / `renderMeasurements.test.js` / `compare-js.test.js`
-- `parseNumeric` / `sanitizeUrl` / `safeJsonForScript*` / `normalizeBasePath` are **not exported**. To avoid build()'s side effects, their tests reproduce the same logic inline on the test side (the comment at the top of each test states the build.js line numbers it refers to)
+- `src/build.js` exports the helpers its tests use at its end, with a leading underscore (`_slugify`, `_sanitizeUrl`, `_parseNumeric`, etc.). Importing it does not run the build (the entrypoint guard), so tests import these functions and keep no copies of them
 - Many tests come from audits: the a11y contract, JSON-LD escaping, the canonical URL contract, script load order (PAGE_JA → i18n.js → compare.js), slug collisions, the sanitize URL probe, etc.
 - `.github/tests/workflow-checks-test.sh` (bash + yq) runs the fetch step of `workflow-checks-main.yml` against fixture git trees returned by a fake `gh`, and checks the verdicts and failure reasons for references that should pass (ordinary `$/` references, job-level `./` / `$/` reusable workflows, the state with unrelated symbolic links and submodules present) and references that should fail (a step's `./`, `./` into another repository checked out into the workspace, submodules, symbolic links, case-changed references, `..`, characters outside the allowed set), for both workflow steps and composite Action steps. It is not part of `npm test`; `.github/workflows/workflow-checks-test.yml` runs it on PRs that change these files and on pushes to main. The pinning check lives in `tests/workflow-pins.test.js`, so the workflow declares `WORKFLOW_CHECK_STEP=absent` to skip the unpinned-reference cases (workflow steps, composite Action steps) (in a run without the declaration, the test fails if the check step is not found)
 - `.github/tests/dependabot-auto-merge-test.sh` (bash + yq + jq) checks that `dependabot-auto-merge.yml` reports on every PR (only `pull_request`, with no filter; no condition on the job; its two steps limited to `dependabot[bot]`; a failure of the metadata step lets the job go on to the deciding step; the runs for one PR share a concurrency group), then runs its deciding step against a fake `gh` that answers the PR's commit list, head and schedule from fixtures, for each metadata outcome: auto-merge is scheduled only for a patch or minor fetch-metadata classified that is one verified commit at the head, written by `dependabot[bot]` and committed by GitHub, every other case cancels an earlier schedule, except a run whose head is no longer the PR's head, which changes nothing, and a failure to read the commits, the head or the schedule fails the step. `.github/workflows/workflow-checks-test.yml` runs it on PRs that change those files and on pushes to main
@@ -185,7 +185,7 @@ npm run build && npm run preview
 
 `data/audio_interfaces.xlsx` — `build.js` reads the first worksheet (`wb.worksheets[0]`, by index, not by sheet name), header in row 1, data from row 2. The workbook also holds a "Category Summary" sheet the build does not read, so the data sheet must stay first.
 The headers are English names, and columns are identified by matching `COLUMNS[].label` in `build.js` (not the Japanese names).
-A column whose header does not exactly match a `COLUMNS[].label` is skipped, and without an error that column becomes empty for every product (for the Brand / Model columns, every row is skipped).
+The build fails when a header matches no `COLUMNS[].label`, when a label has no header, when a header is repeated, and when the sheet gives no product row (`checkHeaders` and `readXlsx` in `build.js`, `tests/xlsx-header-check.test.js`). Adding a column means adding it to the sheet and to `COLUMNS` together.
 Main columns: Brand, Model, Category, Reference Price (USD), Mic Preamps, Combo Inputs,
 Line Inputs, RCA Input, Hi-Z Inputs, ADAT Input, Optical Ports/S/PDIF (Coax / Optical)/AES Input, Analog Main Output, Analog Line Output,
 RCA Output, Headphone Output, ADAT Output, Optical Ports/S/PDIF (Coax / Optical)/AES Output, Phantom Power, Max Sample Rate,

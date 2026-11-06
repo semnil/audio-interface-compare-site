@@ -34,14 +34,15 @@ const DIST = process.env.DIST_DIR
 // Base path: supports GitHub Pages subdirectories
 // custom domain → "/", repo pages → "/repo-name/"
 // Guarantees a trailing slash + trims surrounding whitespace + collapses consecutive slashes
-const BASE_PATH = (() => {
-  let bp = (process.env.BASE_PATH || "/").trim();
+function normalizeBasePath(raw) {
+  let bp = (raw || "/").trim();
   if (bp === "") bp = "/";
   if (!bp.endsWith("/")) bp += "/";
   if (!bp.startsWith("/")) bp = "/" + bp;
   bp = bp.replace(/\/+/g, "/");
   return bp;
-})();
+}
+const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
 console.log(`BASE_PATH = "${BASE_PATH}"`);
 
 // Site URL: the absolute URL base for OGP / canonical
@@ -487,19 +488,33 @@ function drawOgCard({ title, subtitle = "", specLine = "" }) {
 }
 
 // ─── Read xlsx ──────────────────────────────────────────────────────────
-async function readXlsx() {
+// Throws unless the header row names each column of COLUMNS exactly once and nothing else
+function checkHeaders(headers) {
+  const labels = COLUMNS.map((c) => c.label);
+  const unknown = headers.filter((h) => !labels.includes(h));
+  const missing = labels.filter((l) => !headers.includes(l));
+  const repeated = headers.filter((h, i) => headers.indexOf(h) !== i);
+  if (unknown.length || missing.length || repeated.length) {
+    throw new Error(`xlsx header mismatch: not in COLUMNS ${JSON.stringify(unknown)}, missing from the sheet ${JSON.stringify(missing)}, repeated ${JSON.stringify(repeated)}`);
+  }
+}
+
+async function readXlsx(file = DATA_FILE) {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.readFile(DATA_FILE);
+  await wb.xlsx.readFile(file);
   const ws = wb.worksheets[0];
 
   // Read row 1 as the header
   const headerRow = ws.getRow(1);
   const headerMap = {}; // colNumber → internal key
+  const headers = [];
   headerRow.eachCell((cell, colNumber) => {
     const label = String(cell.value).trim();
+    headers.push(label);
     const col = COLUMNS.find((c) => c.label === label);
     if (col) headerMap[colNumber] = col.key;
   });
+  checkHeaders(headers);
 
   // Read rows from row 2 on as data
   const products = [];
@@ -515,6 +530,7 @@ async function readXlsx() {
     obj.displayName = `${obj.brand} ${obj.model}`;
     products.push(obj);
   });
+  if (products.length === 0) throw new Error("xlsx has no product rows");
   return products;
 }
 
@@ -2194,6 +2210,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
 // Exports for tests (no effect on the production build)
 export function _slugify(brand, model) { return slugify(brand, model); }
 export function _escapeHtml(str) { return escapeHtml(str); }
-export { COLUMNS, diffClass as _diffClass };
+export { COLUMNS, diffClass as _diffClass, parseNumeric as _parseNumeric, sanitizeUrl as _sanitizeUrl, normalizeBasePath as _normalizeBasePath };
+export { safeJsonForScript as _safeJsonForScript, safeJsonForScriptLD as _safeJsonForScriptLD, checkHeaders as _checkHeaders, readXlsx as _readXlsx };
 
 export function _renderMeasurements(val) { return renderMeasurements(val); }
