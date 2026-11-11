@@ -153,6 +153,23 @@ node tools/verify/export-products.js         # old verification results of chang
 Merges that involve deleting rows (resolving duplicate rows, etc.) are done in the order: corrections --apply → row deletion with `tools/apply-product-changes.js` → export. Deleting first shifts the idx of the following rows and invalidates the idx in the corrections.
 When some corrections use new columns (RCA Input/Output, etc.), add the columns before that (`node tools/add-rca-columns.js --apply`). Without the columns, apply-corrections stops with "column not found".
 
+A correction can reach further than its own cell:
+
+- A price taken from the official page: confirm which generation of the product the page covers before using it
+- When a value is corrected, also correct the other cells of the row that state the same fact (the number of optical ports, Notes)
+- Rows of one family use the same wording (e.g. Bundled Software)
+- When a jack count was wrong on one row, check the rows that share its manual and the rows of other brands written the same way
+- When a row is switched to another generation of the product, remove the Measurement Reports links that measured the old generation, and remove or re-key the known holds that assumed it (holds are keyed by Brand + Model)
+- A DR figure whose official source states A-weighted goes in the A-weighted column, not in DR (Unknown Conditions)
+
+## Running a cycle in a git worktree
+
+`tools/verify/work/` is outside git, so a worktree has its own, and removing the worktree deletes it.
+
+- The Workflow tool reads `scriptPath` only inside the session's working directory. To run the worktree's `workflow.js` or `recheck-workflow.js`, copy it under `tools/discover/work/` of the checkout the session runs in, and pass the worktree's `tools/verify/work` as `workDir`
+- Before stage 2, move the files an earlier cycle left in `work/rechecks/` to a dated archive folder. The restart rule (the ids in contested-index.json minus those already in rechecks/) counts a leftover as done
+- After the pull request is merged and before the worktree is removed: move what the main checkout has in `tools/verify/work/` to `tools/verify/work/archive-main-<date>/`, copy the worktree's `tools/verify/work/` in its place, and run validate-results.js, export-products.js (it must retire nothing) and export-contested.js in the main checkout
+
 ## Prohibitions (preventing past incidents from recurring)
 
 - Do not put verification inputs or results in /tmp or a per-session scratchpad (they disappear when the session restarts, which caused a data-contamination incident)
