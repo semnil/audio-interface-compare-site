@@ -6,6 +6,9 @@ name: Workflow checks (default branch)
 # the PR's code is neither checked out nor executed. Fails when this check's files (PROTECTED_PATTERN) do not match the default branch
 # Each gh api call is made up to three times, ten seconds apart, and the fetch step fails on a call whose third
 # attempt failed.
+# A path with a control character, and a workflow or action file that uses a YAML anchor, fail the
+# check: an alias is read where its anchor is, which is not where a uses is checked. A path that starts with - is
+# read as a path, and the uses values the check prints are JSON-encoded, so no value starts a line of the log.
 on:
   pull_request_target:
 
@@ -58,6 +61,12 @@ jobs:
             echo "::error::git tree listing of ${HEAD_SHA} is truncated (truncated=${truncated})"
             exit 1
           fi
+          yq -p=json -o=tsv '.tree[] | select(.path | test("[\x00-\x1f\x7f]")) | (.path | @json)' "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/control-paths.tsv"
+          if [ -s "$RUNNER_TEMP/control-paths.tsv" ]; then
+            echo "::error::paths with a control character are rejected (a line break in a path would start a line of its own in this log)"
+            cat "$RUNNER_TEMP/control-paths.tsv"
+            exit 1
+          fi
           fetch "$RUNNER_TEMP/base-tree.json" "repos/${GITHUB_REPOSITORY}/git/trees/${GITHUB_SHA}?recursive=1"
           base_truncated=$(yq -p=json '.truncated' "$RUNNER_TEMP/base-tree.json")
           if [ "$base_truncated" != "false" ]; then
@@ -91,9 +100,18 @@ jobs:
           fi
           yq -p=json -o=tsv "${targets} | [.path, .sha]" "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/files.tsv"
           while IFS=$'\t' read -r path blob; do
-            mkdir -p "$src/$(dirname "$path")"
+            mkdir -p "$src/$(dirname -- "$path")"
             fetch "$src/$path" -H "Accept: application/vnd.github.raw" "repos/${GITHUB_REPOSITORY}/git/blobs/${blob}"
           done < "$RUNNER_TEMP/files.tsv"
+          : > "$RUNNER_TEMP/anchors.txt"
+          while IFS=$'\t' read -r path _; do
+            (cd "$src" && yq '.. | select(anchor != "") | filename + ":" + (line | tostring)' -- "$path") >> "$RUNNER_TEMP/anchors.txt"
+          done < "$RUNNER_TEMP/files.tsv"
+          if [ -s "$RUNNER_TEMP/anchors.txt" ]; then
+            echo "::error::workflow and action files must not use YAML anchors (each uses is checked where it is written, and an alias is read where its anchor is)"
+            cat "$RUNNER_TEMP/anchors.txt"
+            exit 1
+          fi
           yq -p=json -o=tsv '.tree[] | select(.mode == "160000" or .mode == "120000") | [(.path | split("/") | map((select(test("^[\x00-\x7f]*$")) | downcase) // "*") | join("/")), .path, .mode]' "$RUNNER_TEMP/tree.json" > "$RUNNER_TEMP/links.tsv"
           : > "$RUNNER_TEMP/local-refs.tsv"
           while IFS=$'\t' read -r path _; do
@@ -102,7 +120,7 @@ jobs:
               (cd "$src" && yq '(.jobs[].steps[]? | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	step	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
             fi
             if [[ "$path" =~ (^|/)action\.ya?ml$ ]]; then
-              (cd "$src" && yq '(.runs.steps[]? | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	step	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' "$path") >> "$RUNNER_TEMP/local-refs.tsv"
+              (cd "$src" && yq '(.runs.steps[]? | select(has("uses")) | .uses) | select(test("^[.$]/")) | filename + "	" + (line | tostring) + "	step	" + (test("^[.$]/[A-Za-z0-9._/-]*$") | tostring) + "	" + (. | @json)' -- "$path") >> "$RUNNER_TEMP/local-refs.tsv"
             fi
           done < "$RUNNER_TEMP/files.tsv"
           : > "$RUNNER_TEMP/bad-local.txt"
