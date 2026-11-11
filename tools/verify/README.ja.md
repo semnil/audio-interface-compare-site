@@ -44,7 +44,7 @@ flowchart TD
 2. `curl -sL --compressed` + ブラウザ User-Agent
 3. headless Chrome (`--headless=new --dump-dom --virtual-time-budget=15000` + UA 指定) — Cloudflare 等の JS チャレンジ対策
 4. 3 まで 403 / チャレンジで失敗したら r.jina.ai リーダープロキシ (`https://r.jina.ai/<記載 URL>` を curl で取得し、`x-no-cache: true` と `x-with-shadow-dom: true` を付ける) — 返るのは公式ページを変換した本文で、iframe の中身は含まれない (`x-with-iframe` は API キーが必要で、キー無しでは 401)。出力にある記載値は照合に使えるが、出力に見当たらないことを「記載なし」「新製品なし」「掲載終了」の根拠にしない。欠けた部分は 5 (スクリーンショット)・同一公式サイトの別表示・個別の製品ページで補完し、補完できなければ未確認として記録する (小売・レビューサイトは引き続き禁止)
-5. 次のどちらかのときは headless Chrome のスクリーンショット取得 (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + UA 指定): `--dump-dom` も 403 になり 4 でも本文が取れない / 取得できた本文 (4 のプロキシ出力を含む) に照合対象の項目が欠け、7 の PDF や同一公式サイトの別ページでも確認できない — レンダリング結果は画像でしか得られないため、Read ツールで画像を視認して製品名・価格・購入ボタン・記載値等を読み取る。テキストとしては抽出できないが、読み取れた値は照合に使い、読めない項目は未確認 (照合では not_stated) として記録する。ページの実在確認・現行性判定にも有効 (実績: fender.com は curl/WebFetch/`--dump-dom` 全て 403 だが `--screenshot` は製品ページを描画した。2026-07-18)
+5. 次のどちらかのときは headless Chrome のスクリーンショット取得 (`--headless=new --screenshot=<path> --window-size=1280,2000 --virtual-time-budget=20000` + UA 指定): `--dump-dom` も 403 になり 4 でも本文が取れない / 取得できた本文 (4 のプロキシ出力を含む) に照合対象の項目が欠け、7 の PDF や同一公式サイトの別ページでも確認できない — レンダリング結果は画像でしか得られないため、Read ツールで画像を視認して製品名・価格・購入ボタン・記載値等を読み取る。テキストとしては抽出できないが、読み取れた値は照合に使い、読めない項目は未確認 (照合では not_stated) として記録する。ページの実在確認・現行性判定にも有効 (curl / WebFetch / `--dump-dom` のどれにも 403 を返すサイトでも、スクリーンショットは描画できることがある)
 6. 404/転送時は同一公式ドメインの sitemap.xml・404 ページ内リンクから正ページを探索 (`wrong_page` として正 URL を記録)
 7. 同一公式サイトの Specifications ページ・データシート/マニュアル PDF (`pdftotext -layout` で解析)
 8. 記載 URL のドメイン廃止時に限り、同一ブランド所有の公式ドメイン (例: focusritepro.com → focusrite.com)。小売・レビューサイトは禁止
@@ -92,7 +92,7 @@ node tools/verify/export-contested.js             # mismatch を work/contested/
 #                         ids: <work/contested-index.json の配列>,
 #                         concurrency: 2, model: "<第 1 段と別モデル>", effort: "high" } })
 #    第 2 段の並列度は 2 が上限 (スクリプト側で固定)。マニュアル PDF 解析 + headless Chrome の
-#    メモリ負荷が高く、並列 8 で Claude Code プロセスごと落ち、並列 4 でも高負荷だった (2026-07-12)
+#    メモリ負荷が高く、並列度を上げると Claude Code のプロセスごと落ちることがある
 #    エージェントはマニュアル/データシート PDF の参照が必須で、争点列ごとに
 #    verdict (xlsx_correct / page_correct / judgement_required) + 原文引用 + 修正候補を返す
 

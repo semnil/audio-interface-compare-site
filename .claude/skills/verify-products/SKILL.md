@@ -53,7 +53,7 @@ Workflow({
 ```
 
 - Use a **different model** from stage 1 to break the correlation of misreadings (if stage 1 is sonnet, stage 2 inherits from the session, etc.). Examination agents must consult the manual/datasheet PDF
-- Parallelism is **capped at 2** (fixed in the script). PDF parsing + headless Chrome is memory-heavy: parallelism 8 crashed the whole process, and even 4 was a heavy load (2026-07-12)
+- Parallelism is **capped at 2** (fixed in the script). PDF parsing + headless Chrome is memory-heavy, and a higher parallelism can bring down the whole process
 - Recovery: results are checkpoints in `work/rechecks/product-NNN.json`. After an interruption, restart with the ids in contested-index.json minus those already in rechecks/
 
 ```bash

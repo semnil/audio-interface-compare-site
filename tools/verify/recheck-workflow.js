@@ -7,9 +7,8 @@
  *                      concurrency: 2, model: "...", effort: "high" } })
  *
  * Parallelism is fixed at default 2, maximum 2. Stage 2 combines manual PDF parsing + headless Chrome
- * per agent and is memory-heavy: at parallelism 8 the whole Claude Code process crashed,
- * and even 4 was a heavy load (2026-07-12. Completed items were kept by the checkpoints
- * and it can recover by restarting the incomplete ids).
+ * per agent and is memory-heavy, and a higher parallelism can bring down the whole Claude Code process
+ * (completed items are kept by the checkpoints, and it recovers by restarting the incomplete ids).
  *
  * Purpose: re-verify only the discrepancies (contested columns) found by stage 1, going down to the manual/datasheet original text,
  * and eliminate false positives (omissions on the page, simplified marketing notation, unit differences, counting convention differences) with a verdict.
