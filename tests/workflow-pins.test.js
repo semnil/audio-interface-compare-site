@@ -6,6 +6,8 @@
 // and when unset, the action.yml / action.yaml from git ls-files. A name that matches when case is ignored but is not lowercase
 // (Action.yml, etc.) fails.
 // YAML is parsed with yq (overridable with the environment variable YQ). yq is required in CI; skipped when yq is not available locally
+// A failed assertion prints the values it compared, and the runner reads ##[ anywhere in a line of the log as a workflow command,
+// so the entries of a failure are printed with every ##[ broken apart.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
@@ -25,6 +27,7 @@ const VERSION_COMMENT = /^v\d+\.\d+\.\d+$/;
 const ACTION_FILE = /(^|\/)action\.ya?ml$/;
 const ACTION_FILE_ANY_CASE = /(^|\/)action\.ya?ml$/i;
 const SAME_REPOSITORY = /^[.$]\//;
+const inert = text => text.replaceAll("##[", "## [");
 
 const yqAvailable = spawnSync(YQ, ["--version"], { encoding: "utf8" }).status === 0;
 const skip = !yqAvailable && !process.env.CI ? `yq not available (${YQ})` : false;
@@ -71,6 +74,6 @@ describe("workflow-pins: SHA pins of third-party Actions", () => {
 
   test("every uses value ends in a 40-character SHA and the comment on the same line is vX.Y.Z", { skip }, () => {
     const bad = usesEntries().filter(e => !(typeof e.value === "string" && (SAME_REPOSITORY.test(e.value) || (PINNED_VALUE.test(e.value) && VERSION_COMMENT.test(e.comment)))));
-    assert.deepEqual(bad.map(e => `${e.file}:${e.line} ${JSON.stringify(e.value)} # ${e.comment}`), []);
+    assert.deepEqual(bad.map(e => inert(`${e.file}:${e.line} ${JSON.stringify(e.value)} # ${e.comment}`)), []);
   });
 });
