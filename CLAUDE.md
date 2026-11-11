@@ -4,7 +4,7 @@
 
 A spec comparison site for audio interfaces. Product pages and hub pages are statically generated from an xlsx spreadsheet, and comparisons are rendered dynamically on the client side through fragment URLs. Served for free on GitHub Pages.
 
-In 2026-07 the static generation of comparison pages (every pair, 67,340 pages, dist 1.0GB) was abolished entirely. This responds to Google's indexing assessment (41 indexed / 21,900 discovered), the crawl budget and GitHub Pages' 1GB limit; SEO for comparison queries is deliberately given up (the history comes from the GSC analysis).
+In 2026-07 the static generation of comparison pages (every pair, 67,340 pages, dist 1.0GB) was abolished entirely. This responds to Google's indexing assessment of those pages, the crawl budget and GitHub Pages' 1GB limit; SEO for comparison queries is deliberately given up (the history comes from the GSC analysis).
 
 - **Override of the global CLAUDE.md's 「ドキュメント」 language rule**: this file is written entirely in English, and human-facing documents are written in English, each with a Japanese counterpart beside it (`<name>.ja.md`, e.g. `README.md` / `README.ja.md`, `tools/verify/README.md` / `tools/verify/README.ja.md`). The skills under `.claude/skills/` are agent instructions and are written in English only, with no Japanese counterpart; the Japanese phrases in their `description` and the `prompt` of their evals stay in Japanese, because they are what the operator types. Commit messages and PR titles/bodies are in English, keeping the existing conventional-commit prefixes (`fix:` / `feat:` / `docs:` / `ci:` / `chore(deps):`). The site's own Japanese (the `/ja/` mirror and `i18n.js`) is product UI, not documentation — see "Multilingual (/ja/ + hreflang)"
 
@@ -21,6 +21,7 @@ flowchart LR
   root --> testSh[".github/tests/workflow-checks-test.sh<br>Fixture test itself (bash + yq)"]
   root --> testAm[".github/tests/dependabot-auto-merge-test.sh<br>Test of the auto-merge decision against a fake gh (bash + yq + jq)"]
   root --> readme["README.md / README.ja.md<br>Overview of the site, building, tests and data maintenance (English / Japanese)"]
+  root --> decisions["docs/decisions/<br>Closed decisions and the alternatives turned down (site.md: the site and its documents, catalog.md: the catalog and its verification. English / Japanese)"]
   root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ tracked, skills/*-workspace/ excluded), tools/{verify,discover,measurements}/work/, work/, product-page-verification-report.md"]
   root --> pkg["package.json<br>Node >=18, dependencies: exceljs, @napi-rs/canvas (og:image generation)"]
   root --> xlsx["data/audio_interfaces.xlsx<br>Spec data (the source. Final column = Measurement Reports)"]
@@ -156,7 +157,7 @@ flowchart LR
 
 ## SEO policy (making the comparison pages dynamic, 2026-07)
 
-- **SEO for comparison queries ("A vs B") is given up**. The static comparison pages for every pair (67,340 pages) were damaging the quality assessment, judging from the record of more than 20,000 "Crawled - currently not indexed" and 41 indexed, so they were abolished entirely
+- **SEO for comparison queries ("A vs B") is given up**. The static comparison pages for every pair (67,340 pages) were damaging the quality assessment — Search Console reported far more of them as "Crawled - currently not indexed" than as indexed — so they were abolished entirely
 - Indexed: index + products + brand hubs + category hubs (× en/ja)
 - Implemented: meta description on every page / OGP + og:image (1200×630 share cards, summary_large_image) / self-referencing canonical / hreflang (en/ja/x-default) / sitemap.xml (every indexed URL) / robots.txt (Sitemap line only) / custom 404.html (noindex, static guidance links only, automatic redirects forbidden) / JSON-LD (Product + ItemList) / spec summary sentences on product pages (machine-generated, more unique text)
 - The social share card of the comparison view is the site-wide og:image (`og/site.jpg`) (per-pair OGP disappeared with the static pages, which the policy accepts)

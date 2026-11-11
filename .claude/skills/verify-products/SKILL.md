@@ -53,7 +53,7 @@ Workflow({
 ```
 
 - Use a **different model** from stage 1 to break the correlation of misreadings (if stage 1 is sonnet, stage 2 inherits from the session, etc.). Examination agents must consult the manual/datasheet PDF
-- Parallelism is **capped at 2** (fixed in the script). PDF parsing + headless Chrome is memory-heavy: parallelism 8 crashed the whole process, and even 4 was a heavy load (2026-07-12)
+- Parallelism is **capped at 2** (fixed in the script). PDF parsing + headless Chrome is memory-heavy, and a higher parallelism can bring down the whole process
 - Recovery: results are checkpoints in `work/rechecks/product-NNN.json`. After an interruption, restart with the ids in contested-index.json minus those already in rechecks/
 
 ```bash
@@ -152,6 +152,24 @@ node tools/verify/export-products.js         # old verification results of chang
 
 Merges that involve deleting rows (resolving duplicate rows, etc.) are done in the order: corrections --apply → row deletion with `tools/apply-product-changes.js` → export. Deleting first shifts the idx of the following rows and invalidates the idx in the corrections.
 When some corrections use new columns (RCA Input/Output, etc.), add the columns before that (`node tools/add-rca-columns.js --apply`). Without the columns, apply-corrections stops with "column not found".
+
+A correction can reach further than its own cell:
+
+- A price taken from the official page: confirm which generation of the product the page covers before using it
+- When a value is corrected, also correct the other cells of the row that state the same fact (the number of optical ports, Notes)
+- Rows of one family use the same wording (e.g. Bundled Software)
+- When a jack count was wrong on one row, check the rows that share its manual and the rows of other brands written the same way
+- When a row is switched to another generation of the product, remove the Measurement Reports links that measured the old generation, and remove or re-key the known holds that assumed it (holds are keyed by Brand + Model)
+- A DR figure whose official source states A-weighted goes in the A-weighted column, not in DR (Unknown Conditions)
+
+## Running a cycle in a git worktree
+
+`tools/verify/work/` is outside git, so a worktree has its own, and removing the worktree deletes it.
+
+- At the start, copy the main checkout's `tools/verify/work/` into the worktree with the file times kept (`cp -Rp`). The results, the known holds (`known-holds.json`) and `corrections-gen.py` exist only there: a cycle started from an empty folder verifies every row again, and every discrepancy that was settled as a hold comes back as contested
+- The Workflow tool reads `scriptPath` only inside the session's working directory. To run the worktree's `workflow.js` or `recheck-workflow.js`, copy it under `tools/discover/work/` of the checkout the session runs in, and pass the worktree's `tools/verify/work` as `workDir`
+- Before stage 2, move the files an earlier cycle left in `work/rechecks/` to a dated archive folder. The restart rule (the ids in contested-index.json minus those already in rechecks/) counts a leftover as done
+- After the pull request is merged and before the worktree is removed: move what the main checkout has in `tools/verify/work/` to `tools/verify/work/archive-main-<date>/`, copy the worktree's `tools/verify/work/` in its place with the file times kept (`cp -Rp`), and run validate-results.js and export-products.js (it must retire nothing) in the main checkout. Run export-contested.js there only when stage 3 is finished, to confirm that nothing is contested: it rewrites `contested-index.json`, and partition-rechecks.js then skips the results in `work/rechecks/` that were written before it
 
 ## Prohibitions (preventing past incidents from recurring)
 
