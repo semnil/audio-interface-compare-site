@@ -166,9 +166,10 @@ A correction can reach further than its own cell:
 
 `tools/verify/work/` is outside git, so a worktree has its own, and removing the worktree deletes it.
 
+- At the start, copy the main checkout's `tools/verify/work/` into the worktree with the file times kept (`cp -Rp`). The results, the known holds (`known-holds.json`) and `corrections-gen.py` exist only there: a cycle started from an empty folder verifies every row again, and every discrepancy that was settled as a hold comes back as contested
 - The Workflow tool reads `scriptPath` only inside the session's working directory. To run the worktree's `workflow.js` or `recheck-workflow.js`, copy it under `tools/discover/work/` of the checkout the session runs in, and pass the worktree's `tools/verify/work` as `workDir`
 - Before stage 2, move the files an earlier cycle left in `work/rechecks/` to a dated archive folder. The restart rule (the ids in contested-index.json minus those already in rechecks/) counts a leftover as done
-- After the pull request is merged and before the worktree is removed: move what the main checkout has in `tools/verify/work/` to `tools/verify/work/archive-main-<date>/`, copy the worktree's `tools/verify/work/` in its place, and run validate-results.js, export-products.js (it must retire nothing) and export-contested.js in the main checkout
+- After the pull request is merged and before the worktree is removed: move what the main checkout has in `tools/verify/work/` to `tools/verify/work/archive-main-<date>/`, copy the worktree's `tools/verify/work/` in its place with the file times kept (`cp -Rp`), and run validate-results.js and export-products.js (it must retire nothing) in the main checkout. Run export-contested.js there only when stage 3 is finished, to confirm that nothing is contested: it rewrites `contested-index.json`, and partition-rechecks.js then skips the results in `work/rechecks/` that were written before it
 
 ## Prohibitions (preventing past incidents from recurring)
 
