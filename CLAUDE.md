@@ -21,6 +21,7 @@ flowchart LR
   root --> testSh[".github/tests/workflow-checks-test.sh<br>Fixture test itself (bash + yq)"]
   root --> testAm[".github/tests/dependabot-auto-merge-test.sh<br>Test of the auto-merge decision against a fake gh (bash + yq + jq)"]
   root --> readme["README.md / README.ja.md<br>Overview of the site, building, tests and data maintenance (English / Japanese)"]
+  root --> decisions["docs/decisions/<br>Closed decisions and the alternatives turned down (site.md: the site and its documents, catalog.md: the catalog and its verification. English / Japanese)"]
   root --> gitignore[".gitignore<br>node_modules/, dist/, .claude/* (skills/ tracked, skills/*-workspace/ excluded), tools/{verify,discover,measurements}/work/, work/, product-page-verification-report.md"]
   root --> pkg["package.json<br>Node >=18, dependencies: exceljs, @napi-rs/canvas (og:image generation)"]
   root --> xlsx["data/audio_interfaces.xlsx<br>Spec data (the source. Final column = Measurement Reports)"]
