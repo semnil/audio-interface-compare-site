@@ -10,7 +10,7 @@ Detect current products not yet listed in the xlsx from the brands' official sit
 ## Scope (premises of the listing decision)
 
 - What is listed: current audio interfaces + USB/streaming mixers + streaming devices
-- **Pro Dante/MADI/AVB/converter/PCIe-class gear is deliberately kept to a minimum** (the curation policy in CLAUDE.md). Even when found, it is not listed by default; report it as a candidate and ask for the operator's decision
+- **Pro Dante/MADI/AVB/converter/PCIe-class gear is deliberately kept to a minimum** (the curation policy in AGENTS.md). Even when found, it is not listed by default; report it as a candidate and ask for the operator's decision
 - Products that are only announced, on pre-order or "coming soon" are not listed (operator decision). Listing needs shipping evidence (the `status` / `evidence` of step 1, settled in step 2c)
 - Listed models that disappeared from the official list are **only reported** as removal candidates (for the evidence rules of removal and recording in REMOVALS, see the verify-products skill)
 

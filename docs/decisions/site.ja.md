@@ -2,7 +2,7 @@
 
 > For the English version, see [site.md](site.md).
 
-サイトとその文書について閉じた判断と、却下した案を持つ。サイトの今の動きは [CLAUDE.md](../../CLAUDE.md) にある。この文書は、その形にした理由を持つ。比較をブラウザで描き、比較クエリの検索流入を捨てる決定は、CLAUDE.md の「SEO policy (making the comparison pages dynamic, 2026-07)」にある。
+サイトとその文書について閉じた判断と、却下した案を持つ。サイトの今の動きは [AGENTS.md](../../AGENTS.md) にある。この文書は、その形にした理由を持つ。比較をブラウザで描き、比較クエリの検索流入を捨てる決定は、AGENTS.md の「SEO policy (making the comparison pages dynamic, 2026-07)」にある。
 
 ## og の共有カードは JPEG で書く
 

@@ -2,7 +2,7 @@
 
 > 日本語版は [site.ja.md](site.ja.md) を参照してください.
 
-Closed decisions about the site and its documents, with the alternatives that were turned down. What the site does today is in [CLAUDE.md](../../CLAUDE.md); this document holds why it has that shape. The decision to render comparisons in the browser and to give up search traffic for comparison queries is in CLAUDE.md "SEO policy (making the comparison pages dynamic, 2026-07)".
+Closed decisions about the site and its documents, with the alternatives that were turned down. What the site does today is in [AGENTS.md](../../AGENTS.md); this document holds why it has that shape. The decision to render comparisons in the browser and to give up search traffic for comparison queries is in AGENTS.md "SEO policy (making the comparison pages dynamic, 2026-07)".
 
 ## The og share cards are written as JPEG
 
