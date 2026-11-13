@@ -2,11 +2,11 @@
 
 > 日本語版は [catalog.ja.md](catalog.ja.md) を参照してください.
 
-Closed decisions about what the catalog lists and how its rows are verified. The rules in force are in [CLAUDE.md](../../CLAUDE.md) "Product catalog / data updates", the skills under `.claude/skills/` and [tools/verify/README.md](../../tools/verify/README.md); this document holds the decisions behind them and points to the pull requests that record them.
+Closed decisions about what the catalog lists and how its rows are verified. The rules in force are in [AGENTS.md](../../AGENTS.md) "Product catalog / data updates", the skills under `.claude/skills/` and [tools/verify/README.md](../../tools/verify/README.md); this document holds the decisions behind them and points to the pull requests that record them.
 
 ## What the catalog lists
 
-The scope is in CLAUDE.md "Product catalog / data updates" and in "Scope" of the discover-products skill. The decisions on particular product groups, brands and models are recorded in the pull requests of the catalog audits:
+The scope is in AGENTS.md "Product catalog / data updates" and in "Scope" of the discover-products skill. The decisions on particular product groups, brands and models are recorded in the pull requests of the catalog audits:
 
 - [#7](https://github.com/semnil/audio-interface-compare-site/pull/7) (2026-07) — "Catalog policy decisions"
 - [#56](https://github.com/semnil/audio-interface-compare-site/pull/56) (2026-10) — the products deferred or left out

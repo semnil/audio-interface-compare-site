@@ -2,11 +2,11 @@
 
 > For the English version, see [catalog.md](catalog.md).
 
-カタログに何を載せるか、その行をどう照合するかについて閉じた判断を持つ。今の規則は [CLAUDE.md](../../CLAUDE.md) の「Product catalog / data updates」、`.claude/skills/` のスキル、[tools/verify/README.ja.md](../../tools/verify/README.ja.md) にある。この文書は、その裏にある決定を持ち、決定を記録した pull request を指す。
+カタログに何を載せるか、その行をどう照合するかについて閉じた判断を持つ。今の規則は [AGENTS.md](../../AGENTS.md) の「Product catalog / data updates」、`.claude/skills/` のスキル、[tools/verify/README.ja.md](../../tools/verify/README.ja.md) にある。この文書は、その裏にある決定を持ち、決定を記録した pull request を指す。
 
 ## カタログに載せるもの
 
-範囲は、CLAUDE.md の「Product catalog / data updates」と、discover-products スキルの「Scope」にある。個々の製品の種類・ブランド・機種についての決定は、カタログ監査の pull request に記録してある。
+範囲は、AGENTS.md の「Product catalog / data updates」と、discover-products スキルの「Scope」にある。個々の製品の種類・ブランド・機種についての決定は、カタログ監査の pull request に記録してある。
 
 - [#7](https://github.com/semnil/audio-interface-compare-site/pull/7) (2026-07) — 「Catalog policy decisions」
 - [#56](https://github.com/semnil/audio-interface-compare-site/pull/56) (2026-10) — 見送った製品と、載せなかった製品
