@@ -17,6 +17,8 @@ flowchart LR
   root --> wfMain[".github/workflows/workflow-checks-main.yml<br>Required check workflow-tests-main on every PR (action pinning check. Uses the default branch's definition via pull_request_target)"]
   root --> wfTest[".github/workflows/workflow-checks-test.yml<br>Runs the fixture tests of the check's fetch step and the auto-merge workflow test"]
   root --> wfCi[".github/workflows/ci.yml<br>npm ci, npm run build, npm test on every PR (no deploy). Required check test on main"]
+  root --> wfIssue[".github/workflows/issue-auto-assign.yml<br>Adds semnil to new issues; pull requests run the assignment tests"]
+  root --> testIssue[".github/tests/issue-auto-assign.test.cjs<br>Exercises the assignment shell with a fake gh, including exclusions and API errors"]
   root --> wfAuto[".github/workflows/dependabot-auto-merge.yml<br>Schedules auto-merge on Dependabot PRs whose update is a semver patch or minor and that are one verified Dependabot commit at the head. Required check auto-merge on main"]
   root --> testSh[".github/tests/workflow-checks-test.sh<br>Fixture test itself (bash + yq)"]
   root --> testAm[".github/tests/dependabot-auto-merge-test.sh<br>Test of the auto-merge decision against a fake gh (bash + yq + jq)"]
